@@ -358,7 +358,8 @@ jobs:
           (out/"UI_COMPONENT_INDEX.md").write_text("\n".join(report)+"\n",encoding="utf-8")
           print(f"components={len(fn_rows)} markers={len(markers)}")
           PY
-\n      - name: Commit generated analysis
+
+      - name: Commit generated analysis
         shell: bash
         run: |
           set -euo pipefail
