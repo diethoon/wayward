@@ -67,8 +67,9 @@ jobs:
   .mobile-movement-surface{position:sticky;top:0;z-index:20;margin:0 0 .5rem!important;padding:.35rem 0 .5rem!important;background:rgb(28 25 23 / 96%)!important;border-bottom:1px solid rgb(68 64 60)!important}
 }
 </style>"""
-              if s.count("</head>") != 1:
-                  raise SystemExit(f"PORTRAIT_MOVEMENT_HEAD_GUARD_FAILED count={s.count("</head>")}")
+              head_count = s.count("</head>")
+              if head_count != 1:
+                  raise SystemExit(f"PORTRAIT_MOVEMENT_HEAD_GUARD_FAILED count={head_count}")
               s = s.replace("</head>",portrait_css+"</head>",1)
               print("PORTRAIT_MOVEMENT_PATCH=applied")
           map_marker = "mobile-redesign-v1-mobile-map-surface"
