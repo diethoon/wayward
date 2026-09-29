@@ -67,3 +67,5 @@ jobs:
           git add analysis_parts/mobile_targets/MOVEMENT_OWNER_CONTEXTS.md
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'docs: refresh movement owner context'
           git push
+
+# trigger: movement owner context refresh
