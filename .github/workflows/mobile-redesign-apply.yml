@@ -1,0 +1,167 @@
+name: Apply Wayward mobile redesign
+
+on:
+  push:
+    branches:
+      - mobile-redesign-v1-work
+    paths:
+      - ".github/workflows/mobile-redesign-apply.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply UI-only mobile patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, subprocess, re
+
+          src = Path("Wayward_MOD_v2.107.html")
+          raw = src.read_text(encoding="utf-8")
+          EXPECTED_BLOB = "343c1b01668008a9c9a9be895bc48b5c23c19d7e"
+          blob = subprocess.check_output(["git","rev-parse","HEAD:"+str(src)], text=True).strip()
+          if blob != EXPECTED_BLOB:
+              raise SystemExit(f"BASE_SOURCE_BLOB_MISMATCH: expected {EXPECTED_BLOB}, got {blob}")
+
+          original = raw
+          changes = []
+
+          def replace_once(old, new, label):
+              global raw
+              count = raw.count(old)
+              if count != 1:
+                  raise SystemExit(f"PATCH_ANCHOR_{label}: expected 1 match, got {count}")
+              raw = raw.replace(old, new, 1)
+              changes.append(label)
+
+          # 1) Mobile touch must never rearrange or resize desktop panes.
+          replace_once(
+              'f=w=>k=>{if(k.button!==0||!O5(k.target))return;',
+              'f=w=>k=>{if(window.matchMedia("(max-width:1023px)").matches||k.button!==0||!O5(k.target))return;',
+              "mobile-block-pane-drag"
+          )
+          replace_once(
+              'y=(w,k)=>v=>{if(v.button!==0)return;',
+              'y=(w,k)=>v=>{if(window.matchMedia("(max-width:1023px)").matches||v.button!==0)return;',
+              "mobile-block-pane-resize"
+          )
+
+          # 2) Portrait mobile tab gets an explicit status label.
+          replace_once(
+              'children:(A==="focus"?u.name:m.koLabel("pane",A))',
+              'children:(A==="focus"?"상태":m.koLabel("pane",A))',
+              "mobile-status-tab-label"
+          )
+
+          # 3) Add an explicit mobile movement sheet backed by the existing room/action UI.
+          sheet = '''function koMobileTravelSheet20260930({onClose:e}){const t=ue(I=>I.state),o=ue(I=>I.dispatch),n=g(t),s=Oe(t),r=((t.player==null?void 0:t.player.stats)==null?void 0:t.player.stats.energy)??100,a=B(t);return m.jsx("div",{className:"fixed inset-0 z-[70] bg-black/70 flex items-end",onClick:e,children:m.jsxs("div",{className:"w-full max-h-[82dvh] overflow-y-auto overscroll-contain bg-stone-900 border-t border-stone-700 rounded-t-2xl pb-[max(0.75rem,env(safe-area-inset-bottom))]",onClick:I=>I.stopPropagation(),children:[m.jsxs("div",{className:"sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-stone-900/95 border-b border-stone-800 backdrop-blur",children:[m.jsx("div",{className:"font-semibold text-amber-300",children:"이동"}),m.jsx("button",{onClick:e,className:"min-w-[44px] min-h-[44px] flex items-center justify-center text-stone-400 text-xl","aria-label":"이동 닫기",children:"×"})]}),m.jsx("div",{className:"p-3",children:m.jsx(jre,{dispatch:o,wifeLoc:s,wife:n,playerEnergy:r,activePatronInteraction:a})})]})})}'''
+          replace_once('function Ihe(){The();', sheet + 'function Ihe(){The();', "mobile-movement-sheet")
+
+          # 4) Add mobile movement state, header button, and sheet rendering.
+          replace_once(
+              'function Ihe(){The();const[e,t]=X.useState(!1);',
+              'function Ihe(){The();const[e,t]=X.useState(!1),[z,q]=X.useState(!1);',
+              "mobile-movement-state"
+          )
+          replace_once(
+              'm.jsx(V5,{label:"↶",title:"되돌리기",onClick:s,disabled:!r}),m.jsx(z5,{variant:"mobile"})',
+              'm.jsx(V5,{label:"↶",title:"되돌리기",onClick:s,disabled:!r}),m.jsx(V5,{label:"↕",title:"이동",onClick:()=>q(!0)}),m.jsx(z5,{variant:"mobile"})',
+              "mobile-movement-header-button"
+          )
+          replace_once(
+              'e&&m.jsx(whe,{onClose:()=>t(!1)}),m.jsx(She,{})',
+              'e&&m.jsx(whe,{onClose:()=>t(!1)}),q&&m.jsx(koMobileTravelSheet20260930,{onClose:()=>q(!1)}),m.jsx(She,{})',
+              "mobile-movement-render"
+          )
+
+          # 5) Make the existing MOD debug toggle compact and low-opacity.
+          replace_once(
+              '#wc2-toggle{position:fixed;left:16px;bottom:16px;z-index:99998;background:#7c2d12;color:#fff;border:1px solid #f59e0b;border-radius:999px;padding:10px 14px;font:700 14px/1.2 "Malgun Gothic","Apple SD Gothic Neo",sans-serif;box-shadow:0 10px 26px rgba(0,0,0,.4);cursor:pointer}',
+              '#wc2-toggle{position:fixed;right:8px;left:auto;bottom:max(8px,env(safe-area-inset-bottom));z-index:99998;background:rgba(92,41,15,.55);color:#fff;border:1px solid rgba(245,158,11,.55);border-radius:999px;padding:6px 9px;font:700 10px/1.2 "Malgun Gothic","Apple SD Gothic Neo",sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.32);cursor:pointer;opacity:.18;transition:opacity .15s ease,transform .15s ease;touch-action:manipulation}',
+              "mod-toggle-mobile-safe-base"
+          )
+
+          mobile_css = '''<style id="mobile-redesign-v1-css">
+@media(max-width:1023px){
+  html,body,#root{overscroll-behavior:none}
+  button,[role="button"],a,input,select,textarea{touch-action:manipulation}
+  #wc2-toggle:active,#wc2-toggle:focus-visible{opacity:.95;transform:scale(1.03)}
+  #wc2-toggle{max-width:34vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
+</style>'''
+          raw = raw.replace('</style>', mobile_css + '</style>', 1)
+          changes.append("mobile-redesign-css")
+
+          if raw == original:
+              raise SystemExit("PATCH_NOOP")
+
+          src.write_text(raw, encoding="utf-8")
+
+          report = [
+              "# Mobile redesign phase 1",
+              "",
+              f"- base_blob_sha: {blob}",
+              f"- source_sha256_before: {hashlib.sha256(original.encode('utf-8')).hexdigest()}",
+              f"- source_sha256_after: {hashlib.sha256(raw.encode('utf-8')).hexdigest()}",
+              f"- applied_changes: {', '.join(changes)}",
+              "",
+              "## Scope",
+              "- Mobile pane drag disabled.",
+              "- Mobile pane resize disabled.",
+              "- Portrait status tab explicitly labeled as 상태.",
+              "- Portrait movement is available through a dedicated bottom sheet using existing room/action components.",
+              "- Existing MOD debug toggle is smaller and substantially more transparent on mobile.",
+              "",
+              "No save/load, RNG, ID, undo or event-resolution logic is intentionally modified."
+          ]
+          Path("docs").mkdir(exist_ok=True)
+          Path("docs/MOBILE_REDESIGN_PATCH_01.md").write_text("\n".join(report)+"\n",encoding="utf-8")
+          PY
+
+      - name: JavaScript syntax check
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          raw=Path("Wayward_MOD_v2.107.html").read_text(encoding="utf-8")
+          scripts=re.findall(r"<script\b[^>]*>(.*?)</script\s*>",raw,re.I|re.S)
+          Path("/tmp/wayward-inline.js").write_text("\n\n".join(scripts),encoding="utf-8")
+          print("script_blocks=",len(scripts))
+          print("inline_script_chars=",sum(map(len,scripts)))
+          PY
+          node --check /tmp/wayward-inline.js
+
+      - name: Diff guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff -- Wayward_MOD_v2.107.html docs/MOBILE_REDESIGN_PATCH_01.md > /tmp/mobile.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("/tmp/mobile.patch").read_text(encoding="utf-8")
+          for bad in ("saveToSlot","loadFromSlot","Math.random()"):
+              if bad in p:
+                  raise SystemExit("DIFF_GUARD_FAILED: " + bad)
+          print("diff_guard_ok")
+          PY
+
+      - name: Commit validated mobile patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Wayward_MOD_v2.107.html docs/MOBILE_REDESIGN_PATCH_01.md
+          git commit -m "feat: mobile redesign phase 1 [skip ci]"
+          git push
