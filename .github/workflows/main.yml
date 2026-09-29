@@ -755,6 +755,85 @@ jobs:
           (out/"MOBILE_OWNER_INDEX.md").write_text("\n".join(out_rows),encoding="utf-8")
           PY
 
+      - name: Generate focused portrait and movement contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          raw = Path("Wayward_MOD_v2.107.html").read_text(encoding="utf-8")
+          out = Path("analysis_parts/mobile_targets")
+          out.mkdir(parents=True, exist_ok=True)
+
+          def function_range(name):
+              m = re.search(r"\bfunction\s+" + re.escape(name) + r"\s*\([^)]*\)\s*\{", raw)
+              if not m: return None
+              i = raw.find("{", m.start(), m.end())
+              depth, state, esc = 0, "code", False
+              while i < len(raw):
+                  ch = raw[i]
+                  nx = raw[i+1] if i + 1 < len(raw) else ""
+                  if state == "line":
+                      if ch == "\n": state = "code"
+                  elif state == "block":
+                      if ch == "*" and nx == "/": state = "code"; i += 1
+                  elif state in ("single","double","template"):
+                      if esc: esc = False
+                      elif ch == "\\": esc = True
+                      elif (state=="single" and ch=="'") or (state=="double" and ch=='"') or (state=="template" and ch==chr(96)): state="code"
+                  else:
+                      if ch=="/" and nx=="/": state="line"; i+=1
+                      elif ch=="/" and nx=="*": state="block"; i+=1
+                      elif ch=="'": state="single"
+                      elif ch=='"': state="double"
+                      elif ch==chr(96): state="template"
+                      elif ch=="{": depth += 1
+                      elif ch=="}":
+                          depth -= 1
+                          if depth == 0: return raw[m.start():i+1]
+                  i += 1
+              return None
+
+          rows = ["# Focused portrait and movement contexts", ""]
+          targets = ["Pie","a5","P5","rle","wle","zse"]
+          patterns = [
+              ("portrait-status", r"portrait|상태|상세|detail|stats"),
+              ("interactive", r"onClick|onPointerDown|aria-label|title:"),
+              ("movement-map", r"map-pinned|movement|지도|이동|목적지|위치"),
+          ]
+
+          for name in targets:
+              text = function_range(name)
+              if not text:
+                  continue
+              for label, pat in patterns:
+                  matches = list(re.finditer(pat, text, re.I))
+                  for idx, m in enumerate(matches[:6], 1):
+                      lo = max(0, m.start()-1000)
+                      hi = min(len(text), m.end()+1800)
+                      ctx = re.sub(r"\s+", " ", text[lo:hi]).strip()
+                      rows += [f"## {label} | {name} | {idx}", ctx, ""]
+
+          global_patterns = [
+              ("map-label", r"지도|이동|목적지|위치"),
+              ("portrait-label", r"초상화|상태 상세|자세한 상태|상태"),
+          ]
+          for label, pat in global_patterns:
+              count = 0
+              for m in re.finditer(pat, raw, re.I):
+                  lo = max(0, m.start()-900)
+                  hi = min(len(raw), m.end()+1500)
+                  ctx = re.sub(r"\s+", " ", raw[lo:hi]).strip()
+                  rows += [f"## {label} | global {count+1} | source_line {raw.count(chr(10),0,m.start())+1}", ctx, ""]
+                  count += 1
+                  if count >= 8:
+                      break
+
+          (out / "PORTRAIT_MAP_CONTEXTS.md").write_text("\n".join(rows), encoding="utf-8")
+          PY
+
       - name: Commit generated analysis and mobile patch
         shell: bash
         run: |
