@@ -834,6 +834,106 @@ jobs:
           (out / "PORTRAIT_MAP_CONTEXTS.md").write_text("\n".join(rows), encoding="utf-8")
           PY
 
+      - name: Generate destructured mobile component contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          raw = Path("Wayward_MOD_v2.107.html").read_text(encoding="utf-8")
+          out = Path("analysis_parts/mobile_targets")
+          out.mkdir(parents=True, exist_ok=True)
+
+          def function_range(name):
+              m = re.search(r"\bfunction\s+" + re.escape(name) + r"\s*\(", raw)
+              if not m:
+                  return None
+              i = m.end() - 1
+              depth = 0
+              state = "code"
+              esc = False
+              while i < len(raw):
+                  ch = raw[i]
+                  nx = raw[i+1] if i + 1 < len(raw) else ""
+                  if state == "line":
+                      if ch == "\n": state = "code"
+                  elif state == "block":
+                      if ch == "*" and nx == "/": state = "code"; i += 1
+                  elif state in ("single","double","template"):
+                      if esc: esc = False
+                      elif ch == "\\": esc = True
+                      elif (state=="single" and ch=="'") or (state=="double" and ch=='"') or (state=="template" and ch==chr(96)): state="code"
+                  else:
+                      if ch=="/" and nx=="/": state="line"; i+=1
+                      elif ch=="/" and nx=="*": state="block"; i+=1
+                      elif ch=="'": state="single"
+                      elif ch=='"': state="double"
+                      elif ch==chr(96): state="template"
+                      elif ch=="(": depth += 1
+                      elif ch==")":
+                          depth -= 1
+                          if depth == 0:
+                              j = i + 1
+                              while j < len(raw) and raw[j].isspace(): j += 1
+                              if j >= len(raw) or raw[j] != "{":
+                                  return None
+                              # scan function body
+                              i = j
+                              break
+                  i += 1
+              else:
+                  return None
+
+              depth = 0
+              state = "code"
+              esc = False
+              while i < len(raw):
+                  ch = raw[i]
+                  nx = raw[i+1] if i + 1 < len(raw) else ""
+                  if state == "line":
+                      if ch == "\n": state = "code"
+                  elif state == "block":
+                      if ch == "*" and nx == "/": state = "code"; i += 1
+                  elif state in ("single","double","template"):
+                      if esc: esc = False
+                      elif ch == "\\": esc = True
+                      elif (state=="single" and ch=="'") or (state=="double" and ch=='"') or (state=="template" and ch==chr(96)): state="code"
+                  else:
+                      if ch=="/" and nx=="/": state="line"; i+=1
+                      elif ch=="/" and nx=="*": state="block"; i+=1
+                      elif ch=="'": state="single"
+                      elif ch=='"': state="double"
+                      elif ch==chr(96): state="template"
+                      elif ch=="{": depth += 1
+                      elif ch=="}":
+                          depth -= 1
+                          if depth == 0: return raw[m.start():i+1]
+                  i += 1
+              return None
+
+          targets = ["Pie","a5","P5","M0","rle","wle","zse"]
+          patterns = [
+              ("portrait-status", r"portrait|상태|상세|detail|stats"),
+              ("interactive", r"onClick|onPointerDown|aria-label|title:"),
+              ("movement-map", r"map-pinned|movement|지도|이동|목적지|위치"),
+          ]
+          rows = ["# Robust mobile component contexts", ""]
+          for name in targets:
+              text = function_range(name)
+              if not text:
+                  rows += [f"## MISSING | {name}", ""]
+                  continue
+              rows += [f"## FUNCTION | {name} | chars={len(text)}", ""]
+              for label, pat in patterns:
+                  for idx, m in enumerate(list(re.finditer(pat, text, re.I))[:8], 1):
+                      lo = max(0, m.start()-1100)
+                      hi = min(len(text), m.end()+1900)
+                      rows += [f"### {label} | {idx}", re.sub(r"\s+", " ", text[lo:hi]).strip(), ""]
+          (out/"ROBUST_MOBILE_COMPONENT_CONTEXTS.md").write_text("\n".join(rows),encoding="utf-8")
+          PY
+
       - name: Commit generated analysis and mobile patch
         shell: bash
         run: |
