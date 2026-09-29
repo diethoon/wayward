@@ -50,8 +50,8 @@ jobs:
           if portrait_movement_marker not in s:
               old_shell = 'm.jsxs("div",{className:"lg:hidden flex-1 flex min-h-0",children:['
               new_shell = 'm.jsxs("div",{className:"lg:hidden mobile-game-shell flex-1 flex min-h-0",children:['
-              old_panel = 'className:\`w-[37%] max-w-[13rem] desk:w-[16rem] desk:max-w-none shrink-0 flex flex-col min-h-0 \${n?"pl-[env(safe-area-inset-left)]":"pr-[env(safe-area-inset-right)]"}\`'
-              new_panel = 'className:\`mobile-action-panel w-[37%] max-w-[13rem] desk:w-[16rem] desk:max-w-none shrink-0 flex flex-col min-h-0 \${n?"pl-[env(safe-area-inset-left)]":"pr-[env(safe-area-inset-right)]"}\`'
+              old_panel = 'w-[37%] max-w-[13rem] desk:w-[16rem] desk:max-w-none shrink-0 flex flex-col min-h-0'
+              new_panel = 'mobile-action-panel w-[37%] max-w-[13rem] desk:w-[16rem] desk:max-w-none shrink-0 flex flex-col min-h-0'
               old_movement = 'm.jsx("div",{className:"grid grid-cols-1 gap-2",children:m.jsx(jre,{dispatch:e,phase:n,playerLoc:A,wifeLoc:C,wife:o,customers:a,supplies:s,readyFood:r,tavernCleanliness:j,slot:y,playerEnergy:N,player:v,locations:S,tavern:$,outreachDone:E,activePatronInteraction:M,collectorCrewUnlocked:t.collectorCrewUnlocked})})'
               new_movement = 'm.jsx("div",{className:"mobile-movement-surface",children:m.jsx("div",{className:"grid grid-cols-1 gap-2",children:m.jsx(jre,{dispatch:e,phase:n,playerLoc:A,wifeLoc:C,wife:o,customers:a,supplies:s,readyFood:r,tavernCleanliness:j,slot:y,playerEnergy:N,player:v,locations:S,tavern:$,outreachDone:E,activePatronInteraction:M,collectorCrewUnlocked:t.collectorCrewUnlocked})})})'
               if s.count(old_shell) != 1 or s.count(old_panel) != 1 or s.count(old_movement) != 1:
@@ -70,7 +70,6 @@ jobs:
               if s.count("</head>") != 1:
                   raise SystemExit(f"PORTRAIT_MOVEMENT_HEAD_GUARD_FAILED count={s.count("</head>")}")
               s = s.replace("</head>",portrait_css+"</head>",1)
-              s = s.replace('mobile-game-shell className', 'mobile-game-shell className')
               print("PORTRAIT_MOVEMENT_PATCH=applied")
           map_marker = "mobile-redesign-v1-mobile-map-surface"
           map_anchor = ".map-pinned>div{margin:0!important;border:0!important;background:transparent!important}"
