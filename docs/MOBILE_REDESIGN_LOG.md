@@ -20,7 +20,35 @@
 6. 구문 오류를 절대 허용하지 않을 것
 7. 향후 원본 HTML 업데이트 시 동일 작업을 반복할 수 있도록 작업 방법/내용을 문서화할 것
 
+## 2026-09-30 — Phase 1 분석/워크플로 강화
+- `main`의 workflow에 compact mobile patch context 추출 단계를 추가했다.
+- 작업 브랜치 `mobile-redesign-v1`에서도 동일 분석 workflow가 실행되도록 branch trigger를 확장했다.
+- 같은 브랜치의 workflow가 겹쳐 source/analysis push가 경합하지 않도록 concurrency를 추가했다.
+- 자동 patch 단계는 정확한 기존 `#wc2-toggle` CSS target이 없으면 즉시 실패하도록 guard를 둔다.
+- patch는 idempotent marker `data-mobile-redesign="v1-debug-toggle"`를 사용한다.
+- patch 후 inline script 1개를 임시 JS로 추출해 `node --check`로 검증한다.
+
+### 1차 모바일 수정
+작업 브랜치 `mobile-redesign-v1`에서 다음만 수정했다.
+- 모바일 breakpoint `max-width:1023px`에서 `#wc2-toggle`을 우측 safe-area 기준으로 이동
+- 기본 opacity `0.28`, scale `0.82`
+- 일반 컨텐츠보다 낮은 z-index를 사용해 본문/메뉴를 가릴 가능성을 줄임
+- active/focus 시 opacity `0.92`, scale `1`로 피드백 제공
+- 게임 상태, 저장, RNG, ID, undo, 턴 처리 코드는 변경하지 않음
+
+### 검증
+- GitHub Actions run `36617553179`: success
+- `PHASE1_PATCH=applied`
+- `INLINE_SCRIPTS=1`
+- `SYNTAX_CHECK=PASS`
+- workflow가 수정된 HTML까지 포함해 commit/push 성공
+- 작업 브랜치 head는 새 커밋으로 갱신됨
+
+### 작업 중 발생한 실패와 수정
+- 최초 Phase 1 실행에서는 `git add analysis_parts/`만 수행해 HTML 변경분이 stage되지 않았고 push가 rejected 됐다.
+- 원인을 확인한 뒤 HTML과 analysis를 함께 stage하도록 수정하고, remote fetch/rebase 후 push하도록 workflow를 보강했다.
+- 이후 재실행은 성공했다.
+
 ## 다음 단계
-- target UI function 및 interaction context를 추출해 정확한 patch 지점을 확정한다.
-- 이후 작업 브랜치에서 단계별 구현한다.
-- 각 단계의 결과와 검증을 이 로그에 append한다.
+- drag/resize 실제 핸들 컴포넌트와 portrait status/map의 실제 interaction owner를 추가로 좁힌다.
+- 이후 각 항목을 한 단계씩 수정하고 매 단계마다 syntax/diff 검증한다.
