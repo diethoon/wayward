@@ -76,6 +76,134 @@ jobs:
           print(f"TOTAL PARTS: {len(manifest)}")
           PY
 
+
+      - name: Generate full-source analysis report
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          from collections import Counter
+
+          src = Path("Wayward_MOD_v2.107.html")
+          text = src.read_text(encoding="utf-8")
+          lines = text.splitlines()
+          out = Path("analysis_parts/ANALYSIS_REPORT.md")
+
+          def find(pattern, flags=re.I):
+              return re.findall(pattern, text, flags)
+
+          def n(pattern, flags=re.I):
+              return len(re.findall(pattern, text, flags))
+
+          max_line_len = max((len(s) for s in lines), default=0)
+          max_line_no = next((i for i,s in enumerate(lines,1) if len(s)==max_line_len), 0)
+
+          tags = Counter(re.findall(r"<\\s*([A-Za-z][\\w:-]*)\\b", text))
+          ids = find(r'\\bid\\s*=\\s*["\\\']([^"\\\']+)["\\\']')
+          classes = []
+          for s in find(r'\\bclass\\s*=\\s*["\\\']([^"\\\']+)["\\\']'):
+              classes += s.split()
+
+          scripts = re.findall(r"<script\\b([^>]*)>", text, re.I)
+          script_srcs = find(r'<script[^>]+\\bsrc\\s*=\\s*["\\\']([^"\\\']+)["\\\']')
+          styles = re.findall(r"<style\\b[^>]*>(.*?)</style\\s*>", text, re.I|re.S)
+          css = "\\n".join(styles)
+          media = find(r"@media\\s*([^\\{]+)\\{", re.I)
+          breakpoints = find(r'(?:min-width|max-width|min-height|max-height)\\s*:\\s*([0-9.]+(?:px|rem|em|vw|vh))', re.I)
+
+          functions = find(r'\\bfunction\\s+([A-Za-z_$][\\w$]*)\\s*\\(')
+          arrow = find(r'\\b(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*(?:async\\s*)?(?:\\([^)]*\\)|[A-Za-z_$][\\w$]*)\\s*=>')
+          classes_js = find(r'\\bclass\\s+([A-Za-z_$][\\w$]*)')
+          events = find(r'addEventListener\\s*\\(\\s*["\\\']([^"\\\']+)', re.I)
+          selectors = find(r'\\b(?:querySelector|querySelectorAll|getElementById|getElementsByClassName|getElementsByTagName)\\s*\\(\\s*["\\\']([^"\\\']+)', re.I)
+          storage = Counter(re.findall(r'\\b(localStorage|sessionStorage|indexedDB)\\b', text, re.I))
+          network = Counter(re.findall(r'\\b(fetch|XMLHttpRequest|WebSocket|EventSource)\\b', text, re.I))
+          nav = Counter(re.findall(r'\\b(pushState|replaceState|history\\.|location\\.|URLSearchParams)\\b', text, re.I))
+          timers = Counter(re.findall(r'\\b(setTimeout|setInterval|requestAnimationFrame|requestIdleCallback)\\b', text))
+
+          buttons = find(r'<button\\b[^>]*>(.*?)</button\\s*>', re.I|re.S)
+          headings = find(r'<h([1-6])\\b[^>]*>(.*?)</h[1-6]\\s*>', re.I|re.S)
+
+          def clean(s):
+              s = re.sub(r"<[^>]+>", " ", s)
+              return re.sub(r"\\s+", " ", s).strip()
+
+          fn_locs = []
+          for m in re.finditer(r'\\bfunction\\s+([A-Za-z_$][\\w$]*)\\s*\\(', text):
+              fn_locs.append((m.group(1), text.count("\\n",0,m.start())+1))
+
+          report = []
+          report.append("# Wayward_MOD_v2.107 전체 소스 정적 분석")
+          report.append("")
+          report.append("## 원본 규모")
+          report.append(f"- 전체 줄: {len(lines):,}")
+          report.append(f"- 전체 문자: {len(text):,}")
+          report.append(f"- UTF-8 바이트: {src.stat().st_size:,}")
+          report.append(f"- 최대 단일 줄: {max_line_len:,}자 (line {max_line_no})")
+          report.append("")
+          report.append("## HTML")
+          report.append(f"- 태그 매치: {sum(tags.values()):,}")
+          report.append(f"- 고유 tag: {len(tags):,}")
+          report.append(f"- id 속성: {len(ids):,}")
+          report.append(f"- class 토큰: {len(classes):,}, 고유 {len(set(classes)):,}")
+          report.append(f"- button: {len(buttons):,}")
+          report.append(f"- form: {n(r'<form\\b'):,}")
+          report.append("")
+          report.append("### 주요 태그")
+          report += [f"- {k}: {v}" for k,v in tags.most_common(50)]
+          report.append("")
+          report.append("## 모바일 / CSS")
+          report.append(f"- viewport meta: {find(r'<meta[^>]+name=[\"\\\']viewport[\"\\\'][^>]+content=[\"\\\']([^\"\\\']+)', re.I)[:1]}")
+          report.append(f"- @media: {len(media):,}")
+          report.append(f"- breakpoints: {sorted(set(breakpoints))[:100]}")
+          report.append(f"- display:flex: {n(r'display\\s*:\\s*flex', re.I):,}")
+          report.append(f"- display:grid: {n(r'display\\s*:\\s*grid', re.I):,}")
+          report.append(f"- position:fixed: {n(r'position\\s*:\\s*fixed', re.I):,}")
+          report.append(f"- overflow declarations: {n(r'overflow(?:-x|-y)?\\s*:', re.I):,}")
+          report.append("")
+          report.append("### media query 조건")
+          report += [f"- {x.strip()}" for x in media[:100]]
+          report.append("")
+          report.append("## JavaScript")
+          report.append(f"- script tag: {len(scripts):,}")
+          report.append(f"- external script src: {len(script_srcs):,}")
+          report.append(f"- named function: {len(functions):,}")
+          report.append(f"- arrow function 후보: {len(arrow):,}")
+          report.append(f"- class 선언: {len(classes_js):,}")
+          report.append(f"- addEventListener: {len(events):,}")
+          report.append(f"- DOM selector API: {len(selectors):,}")
+          report.append("")
+          report.append("### 함수 인덱스 (최대 600개)")
+          report += [f"- line {ln}: {name}()" for name,ln in fn_locs[:600]]
+          report.append("")
+          report.append("## 저장 / 네트워크 / 내비게이션")
+          report.append(f"- storage: {dict(storage)}")
+          report.append(f"- network: {dict(network)}")
+          report.append(f"- navigation: {dict(nav)}")
+          report.append(f"- timers: {dict(timers)}")
+          report.append("")
+          report.append("## UI 텍스트 샘플")
+          report.append("### buttons")
+          report += [f"- {clean(x)}" for x in buttons[:150] if clean(x)]
+          report.append("")
+          report.append("### headings")
+          report += [f"- H{a}: {clean(b)}" for a,b in headings[:100] if clean(b)]
+          report.append("")
+          report.append("## 결론")
+          report.append("- 원본 전체 텍스트를 대상으로 생성되었으며 원본 HTML은 수정하지 않았다.")
+          report.append("- 모바일 리디자인 시 화면 레이어와 게임 상태/저장/이벤트 결합부를 분리해서 다뤄야 한다.")
+          out.write_text("\\n".join(report)+"\\n", encoding="utf-8")
+          print(f"created {out} {out.stat().st_size:,} bytes")
+          PY
+
+      - name: Commit analysis report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+users.noreply.github.com"
+          git add analysis_parts/ANALYSIS_REPORT.md
+          git commit -m "chore: add full-source analysis report" || echo "No changes"
+          git push
+
       - name: Commit analysis parts
         run: |
           git config user.name "github-actions[bot]"
