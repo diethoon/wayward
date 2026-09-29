@@ -266,7 +266,99 @@ jobs:
           print(f"JS FUNCTIONS: {len(fn_rows):,}")
           PY
 
-      - name: Commit generated analysis
+
+      - name: Generate UI component index
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          from collections import Counter
+
+          src=Path("Wayward_MOD_v2.107.html")
+          out=Path("analysis_parts")
+          raw=src.read_text(encoding="utf-8")
+
+          # React/runtime markers
+          markers=[]
+          for pat,label in [
+              (r"createRoot","createRoot"),
+              (r"\.render\s*\(","render-call"),
+              (r"hydrateRoot","hydrateRoot"),
+              (r"createElement","createElement"),
+              (r"m\.jsx\s*\(","jsx-runtime"),
+              (r"m\.jsxs\s*\(","jsxs-runtime"),
+          ]:
+              for m in re.finditer(pat,raw):
+                  markers.append((label,raw.count("\n",0,m.start())+1,m.start()))
+
+          # Named functions that contain JSX runtime calls nearby.
+          fn_rows=[]
+          for m in re.finditer(r"\bfunction\s+([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{",raw):
+              name=m.group(1)
+              start=m.start()
+              line=raw.count("\n",0,start)+1
+              sample=raw[start:min(len(raw),start+12000)]
+              if re.search(r"m\.jsx\s*\(|m\.jsxs\s*\(",sample):
+                  classes=re.findall(r'className\s*:\s*"([^"]*)"',sample)
+                  layout_tokens=Counter(
+                      tok for c in classes for tok in c.split()
+                      if tok in {
+                          "flex","flex-col","flex-row","grid","grid-cols-1","grid-cols-2",
+                          "grid-cols-3","grid-cols-4","flex-1","w-full","h-full","h-screen",
+                          "fixed","sticky","absolute","overflow-hidden","overflow-y-auto",
+                          "overflow-x-auto","min-h-0","min-w-0","items-center","justify-center"
+                      } or tok.startswith(("grid-cols-","max-h-","max-w-","min-h-","min-w-"))
+                  )
+                  fn_rows.append({
+                      "name":name,
+                      "line":line,
+                      "sample_chars":len(sample),
+                      "class_count":len(classes),
+                      "classes":list(dict.fromkeys(classes))[:30],
+                      "layout_tokens":dict(layout_tokens.most_common()),
+                  })
+
+          # JSX className literals across whole source.
+          class_literals=re.findall(r'className\s*:\s*"([^"]*)"',raw)
+          cls=Counter(tok for c in class_literals for tok in c.split())
+
+          report=[]
+          report.append("# UI component / runtime index")
+          report.append("")
+          report.append("## Runtime markers")
+          for label,line,pos in markers[:300]:
+              report.append(f"- line {line}: {label}")
+          report.append("")
+          report.append(f"## JSX component/function candidates: {len(fn_rows)}")
+          report.append("")
+          for x in fn_rows:
+              report.append(f"### {x['name']} (line {x['line']})")
+              report.append(f"- sample chars: {x['sample_chars']}")
+              report.append(f"- class literals: {x['class_count']}")
+              report.append(f"- layout tokens: {x['layout_tokens']}")
+              for c in x["classes"]:
+                  if any(k in c for k in ("fixed","sticky","grid","flex","overflow","h-screen","100dvh","max-h","max-w","min-h","min-w","w-full")):
+                      report.append(f"  - {c}")
+              report.append("")
+          report.append("## Global JSX layout token frequency")
+          for k,v in cls.most_common(160):
+              if any(s in k for s in ("flex","grid","overflow","fixed","sticky","screen","dvh","max-h","min-h","w-full","max-w","min-w")):
+                  report.append(f"- {k}: {v}")
+          report.append("")
+          report.append("## Raw root/render context")
+          for label,line,pos in markers:
+              if label in {"createRoot","render-call","hydrateRoot"}:
+                  lo=max(0,pos-700); hi=min(len(raw),pos+1800)
+                  ctx=re.sub(r"\s+"," ",raw[lo:hi]).strip()
+                  report.append(f"- {label} line {line}: {ctx}")
+                  report.append("")
+
+          (out/"UI_COMPONENT_INDEX.md").write_text("\n".join(report)+"\n",encoding="utf-8")
+          print(f"components={len(fn_rows)} markers={len(markers)}")
+          PY
+\n      - name: Commit generated analysis
         shell: bash
         run: |
           set -euo pipefail
