@@ -1,0 +1,35 @@
+name: Generate role-based source map
+
+on:
+  push:
+    branches: [main, mobile-redesign-v1]
+    paths:
+      - "Wayward_MOD_v2.107.html"
+      - "tools/build_role_map.py"
+      - ".github/workflows/role-map.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  role-map:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build semantic role map
+        run: |
+          set -euo pipefail
+          python3 tools/build_role_map.py
+
+      - name: Commit role map
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add analysis_parts/role_map
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: refresh semantic source role map"
+          git push
