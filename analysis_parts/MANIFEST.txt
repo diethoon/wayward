@@ -1,0 +1,17 @@
+source=Wayward_MOD_v2.107.html
+total_lines=6808
+total_chars=5630327
+parts=12
+
+Wayward_MOD_v2.107.part001.txt	lines through 4548	chars 397,278
+Wayward_MOD_v2.107.part002.txt	lines through 5043	chars 55,180
+Wayward_MOD_v2.107.part003.txt	lines through 5044	chars 2,468,307
+Wayward_MOD_v2.107.part004.txt	lines through 5263	chars 231,574
+Wayward_MOD_v2.107.part005.txt	lines through 5502	chars 399,979
+Wayward_MOD_v2.107.part006.txt	lines through 5680	chars 334,829
+Wayward_MOD_v2.107.part007.txt	lines through 5740	chars 250,508
+Wayward_MOD_v2.107.part008.txt	lines through 5843	chars 396,970
+Wayward_MOD_v2.107.part009.txt	lines through 5876	chars 168,592
+Wayward_MOD_v2.107.part010.txt	lines through 5910	chars 378,158
+Wayward_MOD_v2.107.part011.txt	lines through 6259	chars 399,756
+Wayward_MOD_v2.107.part012.txt	lines through 6808	chars 149,196
