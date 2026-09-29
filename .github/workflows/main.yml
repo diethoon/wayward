@@ -1,3 +1,23 @@
+name: Split Wayward HTML for analysis
+
+on:
+  push:
+    paths:
+      - 'Wayward_MOD_v2.107.html'
+      - '.github/workflows/main.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  split:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Split HTML by lines
         run: |
           python3 - <<'PY'
@@ -7,38 +27,59 @@
           out = Path("analysis_parts")
           out.mkdir(exist_ok=True)
 
+          # Remove old generated parts so reruns cannot leave stale chunks.
+          for p in out.glob("Wayward_MOD_v2.107.part*.txt"):
+              p.unlink()
+
           lines = src.read_text(encoding="utf-8").splitlines(keepends=True)
 
           max_chars = 400_000
           part = []
           size = 0
           index = 1
+          total_chars = 0
 
-          for line in lines:
+          manifest = []
+
+          for line_no, line in enumerate(lines, 1):
               if part and size + len(line) > max_chars:
-                  path = out / f"Wayward_MOD_v2.107.part{index:03d}.txt"
+                  name = f"Wayward_MOD_v2.107.part{index:03d}.txt"
+                  path = out / name
                   path.write_text("".join(part), encoding="utf-8")
-
-                  print(
-                      f"{path}: "
-                      f"{len(part)} lines / {size:,} chars"
-                  )
-
+                  manifest.append(f"{name}\tlines through {line_no - 1}\tchars {size:,}")
                   index += 1
                   part = []
                   size = 0
 
               part.append(line)
               size += len(line)
+              total_chars += len(line)
 
           if part:
-              path = out / f"Wayward_MOD_v2.107.part{index:03d}.txt"
+              name = f"Wayward_MOD_v2.107.part{index:03d}.txt"
+              path = out / name
               path.write_text("".join(part), encoding="utf-8")
-              print(
-                  f"{path}: "
-                  f"{len(part)} lines / {size:,} chars"
-              )
+              manifest.append(f"{name}\tlines through {len(lines)}\tchars {size:,}")
 
-          print("TOTAL LINES:", len(lines))
-          print("TOTAL PARTS:", index)
+          (out / "MANIFEST.txt").write_text(
+              f"source=Wayward_MOD_v2.107.html\n"
+              f"total_lines={len(lines)}\n"
+              f"total_chars={total_chars}\n"
+              f"parts={len(manifest)}\n\n"
+              + "\n".join(manifest)
+              + "\n",
+              encoding="utf-8"
+          )
+
+          print(f"TOTAL LINES: {len(lines)}")
+          print(f"TOTAL CHARS: {total_chars}")
+          print(f"TOTAL PARTS: {len(manifest)}")
           PY
+
+      - name: Commit analysis parts
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add analysis_parts/
+          git commit -m "chore: generate Wayward analysis parts" || echo "No changes"
+          git push
