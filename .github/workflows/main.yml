@@ -548,6 +548,65 @@ jobs:
           print("SYNTAX_CHECK=PASS")
           PY
 
+      - name: Generate compact interaction owner index
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          raw = Path("Wayward_MOD_v2.107.html").read_text(encoding="utf-8")
+          out = Path("analysis_parts/mobile_targets")
+
+          def function_range(name):
+              m = re.search(r"\bfunction\s+" + re.escape(name) + r"\s*\([^)]*\)\s*\{", raw)
+              if not m: return None
+              brace = raw.find("{", m.start(), m.end())
+              i, depth, state, esc = brace, 0, "code", False
+              while i < len(raw):
+                  ch = raw[i]; nx = raw[i+1] if i + 1 < len(raw) else ""
+                  if state == "line":
+                      if ch == "\n": state = "code"
+                  elif state == "block":
+                      if ch == "*" and nx == "/": state = "code"; i += 1
+                  elif state in ("single","double","template"):
+                      if esc: esc = False
+                      elif ch == "\\": esc = True
+                      elif (state=="single" and ch=="'") or (state=="double" and ch=='"') or (state=="template" and ch==chr(96)): state="code"
+                  else:
+                      if ch=="/" and nx=="/": state="line"; i+=1
+                      elif ch=="/" and nx=="*": state="block"; i+=1
+                      elif ch=="'": state="single"
+                      elif ch=='"': state="double"
+                      elif ch==chr(96): state="template"
+                      elif ch=="{": depth+=1
+                      elif ch=="}":
+                          depth-=1
+                          if depth==0: return raw[m.start():i+1]
+                  i+=1
+              return None
+
+          names=["vle","rle","wle","Pie","P5","M0","a5","lre","Ihe","zse","z5","koHeaderButtons299"]
+          patterns=[
+              ("drag-resize",r"pointer(down|move|up)|touch(start|move|end)|drag|resize|divider|column"),
+              ("status",r"status|detailed|상태|상세|portrait|초상"),
+              ("map",r"map-pinned|movement|map|지도|이동"),
+          ]
+          out_rows=["# Compact interaction owner index",""]
+          for name in names:
+              fn=function_range(name)
+              if not fn: continue
+              for label,pat in patterns:
+                  ms=list(re.finditer(pat,fn,re.I))
+                  for idx,m in enumerate(ms[:3],1):
+                      lo=max(0,m.start()-650); hi=min(len(fn),m.end()+1000)
+                      ctx=re.sub(r"\s+"," ",fn[lo:hi]).strip()
+                      out_rows.append(f"## {label} | {name} | match {idx}")
+                      out_rows.append(ctx)
+                      out_rows.append("")
+          (out/"MOBILE_OWNER_INDEX.md").write_text("\n".join(out_rows),encoding="utf-8")
+          PY
+
       - name: Commit generated analysis and mobile patch
         shell: bash
         run: |
