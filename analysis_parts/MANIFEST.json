@@ -1,8 +1,8 @@
 {
   "source": "Wayward_MOD_v2.107.html",
-  "sha256": "c03d60f6814909000eb27bfce23db3467f749cfb2c6cdd083cd2a40e80854d76",
-  "bytes_utf8": 7399245,
-  "chars": 5630327,
+  "sha256": "b796c459b2a6088ce9ea9c9aab0d9c02389685d9b20efb72707bcc1f12bf7a6f",
+  "bytes_utf8": 7399633,
+  "chars": 5630715,
   "lines": 6808,
   "chunk_chars": 80000,
   "parts": [
@@ -429,8 +429,8 @@
     {
       "name": "Wayward_MOD_v2.107.part071.txt",
       "char_start": 5600001,
-      "char_end": 5630327,
-      "chars": 30327
+      "char_end": 5630715,
+      "chars": 30715
     }
   ],
   "max_line_chars": 2468306,
@@ -447,9 +447,9 @@
     "unique_class_count": 0
   },
   "css": {
-    "style_blocks": 5,
-    "css_chars": 96537,
-    "rule_count": 1259,
+    "style_blocks": 6,
+    "css_chars": 96893,
+    "rule_count": 1261,
     "media_queries": [
       "(min-width:640px)",
       "(min-width:768px)",
@@ -465,7 +465,8 @@
       "(min-width:1600px)",
       "(min-width:1920px)",
       "(min-width:640px)",
-      "(min-width:640px)"
+      "(min-width:640px)",
+      "(max-width:1023px)"
     ],
     "property_frequency": {
       "background-color": 281,
@@ -481,13 +482,13 @@
       "padding-left": 27,
       "padding-top": 27,
       "display": 25,
+      "max-width": 25,
       "margin-top": 25,
       "padding-bottom": 25,
       "height": 24,
-      "max-width": 24,
+      "opacity": 23,
       "margin-bottom": 23,
       "padding": 22,
-      "opacity": 21,
       "line-height": 20,
       "--tw-shadow": 19,
       "min-width": 19,
@@ -502,20 +503,20 @@
       "top": 11,
       "max-height": 11,
       "min-height": 11,
+      "transform": 11,
       "--tw-ring-color": 10,
       "--tw-shadow-color": 10,
       "--tw-shadow-colored": 9,
-      "transform": 9,
+      "bottom": 9,
+      "right": 9,
       "position": 8,
-      "bottom": 8,
       "cursor": 8,
-      "right": 8,
+      "z-index": 8,
       "--tw-space-y-reverse": 8,
       "transition-duration": 8,
       "--tw-ring-offset-shadow": 7,
       "--tw-ring-shadow": 7,
       "font-weight": 7,
-      "z-index": 7,
       "-moz-column-gap": 7,
       "column-gap": 7,
       "--tw-ring-opacity": 7,
@@ -523,6 +524,7 @@
       "border-width": 6,
       "font-family": 6,
       "margin": 6,
+      "left": 6,
       "align-items": 6,
       "transition-timing-function": 6,
       "--tw-scale-x": 5,
@@ -532,7 +534,6 @@
       "letter-spacing": 5,
       "text-transform": 5,
       "input": 5,
-      "left": 5,
       "justify-content": 5,
       "border-bottom-width": 5,
       "transition-property": 5,

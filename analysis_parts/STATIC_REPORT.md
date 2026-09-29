@@ -1,9 +1,9 @@
 # Wayward_MOD_v2.107 전체 소스 구조 분석
 
 ## 원본
-- SHA-256: c03d60f6814909000eb27bfce23db3467f749cfb2c6cdd083cd2a40e80854d76
-- UTF-8 bytes: 7,399,245
-- characters: 5,630,327
+- SHA-256: b796c459b2a6088ce9ea9c9aab0d9c02389685d9b20efb72707bcc1f12bf7a6f
+- UTF-8 bytes: 7,399,633
+- characters: 5,630,715
 - lines: 6,808
 - max single line: 2,468,306 chars (line 5044)
 
@@ -19,9 +19,9 @@
 - div: 1
 
 ## CSS
-- style blocks: 5
-- CSS chars: 96,537
-- CSS rule candidates: 1,259
+- style blocks: 6
+- CSS chars: 96,893
+- CSS rule candidates: 1,261
 
 ### media queries
 - (min-width:640px)
@@ -39,6 +39,7 @@
 - (min-width:1920px)
 - (min-width:640px)
 - (min-width:640px)
+- (max-width:1023px)
 
 ### common properties
 - background-color: 281
@@ -54,13 +55,13 @@
 - padding-left: 27
 - padding-top: 27
 - display: 25
+- max-width: 25
 - margin-top: 25
 - padding-bottom: 25
 - height: 24
-- max-width: 24
+- opacity: 23
 - margin-bottom: 23
 - padding: 22
-- opacity: 21
 - line-height: 20
 - --tw-shadow: 19
 - min-width: 19
@@ -75,20 +76,20 @@
 - top: 11
 - max-height: 11
 - min-height: 11
+- transform: 11
 - --tw-ring-color: 10
 - --tw-shadow-color: 10
 - --tw-shadow-colored: 9
-- transform: 9
+- bottom: 9
+- right: 9
 - position: 8
-- bottom: 8
 - cursor: 8
-- right: 8
+- z-index: 8
 - --tw-space-y-reverse: 8
 - transition-duration: 8
 - --tw-ring-offset-shadow: 7
 - --tw-ring-shadow: 7
 - font-weight: 7
-- z-index: 7
 - -moz-column-gap: 7
 - column-gap: 7
 - --tw-ring-opacity: 7
@@ -96,6 +97,7 @@
 - border-width: 6
 - font-family: 6
 - margin: 6
+- left: 6
 - align-items: 6
 - transition-timing-function: 6
 - --tw-scale-x: 5
@@ -105,7 +107,6 @@
 - letter-spacing: 5
 - text-transform: 5
 - input: 5
-- left: 5
 - justify-content: 5
 - border-bottom-width: 5
 - transition-property: 5
@@ -175,6 +176,7 @@
 - [style 1] .card => border-radius:.5rem;border-width:1px;--tw-border-opacity: 1;border-color:rgb(64 64 64 / var(--tw-border-opacity, 1));--tw-bg-opacity: 1;background-color:rgb(42 42 42 / var(--tw-bg-opacity, 1));padding:1rem
 - [style 1] .invert => --tw-invert: invert(100%);filter:var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow)
 - [style 1] .from-black\/80 => --tw-gradient-from: rgb(0 0 0 / .8) var(--tw-gradient-from-position);--tw-gradient-to: rgb(0 0 0 / 0) var(--tw-gradient-to-position);--tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to)
+- [style 6] #wc2-toggle => left:auto!important;right:max(8px,env(safe-area-inset-right))!important;bottom:max(8px,env(safe-area-inset-bottom))!important;opacity:.28!important;transform:scale(.82)!important;z-index:30!important
 - [style 1] .blur => --tw-blur: blur(8px);filter:var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow)
 - [style 1] .shadow-\[inset_0_2px_0_theme\(colors\.amber\.400\)\] => --tw-shadow: inset 0 2px 0 #fbbf24;--tw-shadow-colored: inset 0 2px 0 var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000),var(--tw-ring-shadow, 0 0 #0000),var(--tw-shadow)
 - [style 1] button,input,optgroup,select,textarea => font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0
@@ -262,7 +264,6 @@
 - [style 1] .border-l-amber-600 => --tw-border-opacity: 1;border-left-color:rgb(217 119 6 / var(--tw-border-opacity, 1))
 - [style 1] .border-l-blue-700 => --tw-border-opacity: 1;border-left-color:rgb(29 78 216 / var(--tw-border-opacity, 1))
 - [style 1] .border-l-green-700 => --tw-border-opacity: 1;border-left-color:rgb(21 128 61 / var(--tw-border-opacity, 1))
-- [style 1] .border-l-green-800 => --tw-border-opacity: 1;border-left-color:rgb(22 101 52 / var(--tw-border-opacity, 1))
 
 ## JavaScript
 - script blocks: 1
