@@ -414,6 +414,131 @@ jobs:
           (out/"CSS_CONTEXTS.md").write_text("\n".join(parts)+"\n",encoding="utf-8")
           PY
 
+
+      - name: Extract mobile redesign target functions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, json
+
+          src = Path("Wayward_MOD_v2.107.html")
+          out = Path("analysis_parts")
+          raw = src.read_text(encoding="utf-8")
+
+          targets = ["nce","Ihe","vle","zse","The","She","whe","V5","z5","koHeaderButtons299","K5"]
+
+          def find_function(name):
+              m = re.search(r"\bfunction\s+" + re.escape(name) + r"\s*\([^)]*\)\s*\{", raw)
+              if not m:
+                  return None
+              start = m.start()
+              brace = raw.find("{", m.start(), m.end())
+              i = brace
+              depth = 0
+              state = "code"
+              esc = False
+              while i < len(raw):
+                  ch = raw[i]
+                  nx = raw[i+1] if i + 1 < len(raw) else ""
+                  if state == "line":
+                      if ch == "\n":
+                          state = "code"
+                  elif state == "block":
+                      if ch == "*" and nx == "/":
+                          state = "code"
+                          i += 1
+                  elif state == "single":
+                      if esc:
+                          esc = False
+                      elif ch == "\\":
+                          esc = True
+                      elif ch == "'":
+                          state = "code"
+                  elif state == "double":
+                      if esc:
+                          esc = False
+                      elif ch == "\\":
+                          esc = True
+                      elif ch == '"':
+                          state = "code"
+                  elif state == "template":
+                      if esc:
+                          esc = False
+                      elif ch == "\\":
+                          esc = True
+                      elif ch == chr(96):
+                          state = "code"
+                  else:
+                      if ch == "/" and nx == "/":
+                          state = "line"
+                          i += 1
+                      elif ch == "/" and nx == "*":
+                          state = "block"
+                          i += 1
+                      elif ch == "'":
+                          state = "single"
+                      elif ch == '"':
+                          state = "double"
+                      elif ch == chr(96):
+                          state = "template"
+                      elif ch == "{":
+                          depth += 1
+                      elif ch == "}":
+                          depth -= 1
+                          if depth == 0:
+                              end = i + 1
+                              text = raw[start:end]
+                              return {
+                                  "name": name,
+                                  "start_line": raw.count("\n",0,start)+1,
+                                  "end_line": raw.count("\n",0,end)+1,
+                                  "chars": len(text),
+                                  "text": text
+                              }
+                  i += 1
+              return None
+
+          rows = []
+          for name in targets:
+              r = find_function(name)
+              if r:
+                  (out / ("TARGET_" + name + ".js.txt")).write_text(r["text"] + "\n", encoding="utf-8")
+                  rows.append({k:r[k] for k in ("name","start_line","end_line","chars")})
+
+          keywords = [
+              "pointerdown","pointermove","pointerup","touchstart","touchmove","touchend",
+              "map-pinned","wc2-toggle","desk:","100dvh","safe-area","overflow-y-auto",
+              "orientation","innerWidth","matchMedia","resize"
+          ]
+          blocks = []
+          seen = set()
+          counts = {k:0 for k in keywords}
+          for kw in keywords:
+              for m in re.finditer(re.escape(kw), raw, re.I):
+                  line = raw.count("\n",0,m.start()) + 1
+                  key = (kw,line)
+                  if key in seen or counts[kw] >= 25:
+                      continue
+                  seen.add(key)
+                  lo = max(0,m.start()-1400)
+                  hi = min(len(raw),m.end()+2200)
+                  ctx = re.sub(r"\s+"," ",raw[lo:hi]).strip()
+                  blocks.append("## " + kw + " | line " + str(line) + "\n" + ctx + "\n")
+                  counts[kw] += 1
+
+          (out/"MOBILE_INTERACTION_CONTEXTS.md").write_text(
+              "# Mobile redesign interaction contexts\n\n" + "\n".join(blocks),
+              encoding="utf-8"
+          )
+          (out/"TARGET_FUNCTION_INDEX.json").write_text(
+              json.dumps(rows,ensure_ascii=False,indent=2),
+              encoding="utf-8"
+          )
+          print(json.dumps(rows,ensure_ascii=False))
+          PY
+
       - name: Commit generated analysis
         shell: bash
         run: |
