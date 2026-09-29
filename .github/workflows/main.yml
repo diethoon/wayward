@@ -359,6 +359,61 @@ jobs:
           print(f"components={len(fn_rows)} markers={len(markers)}")
           PY
 
+
+      - name: Extract mobile redesign targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p analysis_parts/mobile_targets
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          raw=Path("Wayward_MOD_v2.107.html").read_text(encoding="utf-8")
+          out=Path("analysis_parts/mobile_targets")
+          targets=["nce","Ihe","vle","zse","The","She","whe"]
+          for name in targets:
+              m=re.search(r"\bfunction\s+"+re.escape(name)+r"\s*\([^)]*\)\s*\{",raw)
+              if not m:
+                  (out/f"{name}_MISSING.txt").write_text("missing\n",encoding="utf-8")
+                  continue
+              start=m.start()
+              line=raw.count("\n",0,start)+1
+              lo=max(0,start-1200)
+              hi=min(len(raw),start+180000)
+              ctx=raw[lo:hi]
+              (out/f"{name}_CONTEXT.txt").write_text(f"source_line={line}\nstart_offset={start}\nchars={len(ctx)}\n\n"+ctx,encoding="utf-8")
+          terms=["pointerdown","pointermove","pointerup","touchstart","touchmove","touchend","resize","drag","column","divider","map-pinned","wc2-toggle","portrait","movement","map","orientation","safe-area"]
+          rows=[]
+          for term in terms:
+              count=0
+              for m in re.finditer(re.escape(term),raw,re.I):
+                  line=raw.count("\n",0,m.start())+1
+                  lo=max(0,m.start()-700)
+                  hi=min(len(raw),m.start()+1400)
+                  rows.append((line,term,re.sub(r"\s+"," ",raw[lo:hi]).strip()))
+                  count+=1
+                  if count>=18:
+                      break
+          rows.sort()
+          parts=["# Mobile interaction search contexts",""]
+          for line,term,ctx in rows:
+              parts += [f"## {term} | line {line}",ctx,""]
+          (out/"SEARCH_CONTEXTS.md").write_text("\n".join(parts)+"\n",encoding="utf-8")
+          styles=re.findall(r"<style\b[^>]*>(.*?)</style\s*>",raw,re.I|re.S)
+          css="\n\n".join(styles)
+          parts=["# Relevant CSS contexts",""]
+          for pat in ["@media","desk:","100dvh","safe-area","mobile-flat","map-pinned"]:
+              found=0
+              for m in re.finditer(re.escape(pat),css,re.I):
+                  lo=max(0,m.start()-500)
+                  hi=min(len(css),m.start()+1200)
+                  parts += [f"## {pat}",re.sub(r"\s+"," ",css[lo:hi]).strip(),""]
+                  found+=1
+                  if found>=20:
+                      break
+          (out/"CSS_CONTEXTS.md").write_text("\n".join(parts)+"\n",encoding="utf-8")
+          PY
+
       - name: Commit generated analysis
         shell: bash
         run: |
