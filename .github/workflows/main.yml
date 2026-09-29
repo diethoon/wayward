@@ -2,9 +2,10 @@ name: Split Wayward HTML for analysis
 
 on:
   push:
+    branches: [main]
     paths:
-      - 'Wayward_MOD_v2.107.html'
-      - '.github/workflows/main.yml'
+      - "Wayward_MOD_v2.107.html"
+      - ".github/workflows/main.yml"
   workflow_dispatch:
 
 permissions:
@@ -18,196 +19,177 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Split HTML by lines
+      - name: Generate character-safe analysis parts
+        shell: bash
         run: |
+          set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import hashlib
+          import json
+          import re
+          from collections import Counter
 
           src = Path("Wayward_MOD_v2.107.html")
           out = Path("analysis_parts")
           out.mkdir(exist_ok=True)
 
-          # Remove old generated parts so reruns cannot leave stale chunks.
           for p in out.glob("Wayward_MOD_v2.107.part*.txt"):
               p.unlink()
 
-          lines = src.read_text(encoding="utf-8").splitlines(keepends=True)
+          raw = src.read_text(encoding="utf-8")
+          total_chars = len(raw)
+          total_lines = raw.count("\n") + (1 if raw else 0)
+          sha256 = hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
-          max_chars = 400_000
-          part = []
-          size = 0
-          index = 1
-          total_chars = 0
+          # The previous splitter used line boundaries and produced one ~2.47M-char
+          # chunk because the source contains an enormous single line. Split by
+          # character count instead so every generated file remains connector-safe.
+          chunk_chars = 80_000
+          parts = []
 
-          manifest = []
-
-          for line_no, line in enumerate(lines, 1):
-              if part and size + len(line) > max_chars:
-                  name = f"Wayward_MOD_v2.107.part{index:03d}.txt"
-                  path = out / name
-                  path.write_text("".join(part), encoding="utf-8")
-                  manifest.append(f"{name}\tlines through {line_no - 1}\tchars {size:,}")
-                  index += 1
-                  part = []
-                  size = 0
-
-              part.append(line)
-              size += len(line)
-              total_chars += len(line)
-
-          if part:
+          for offset in range(0, total_chars, chunk_chars):
+              chunk = raw[offset:offset + chunk_chars]
+              index = len(parts) + 1
               name = f"Wayward_MOD_v2.107.part{index:03d}.txt"
-              path = out / name
-              path.write_text("".join(part), encoding="utf-8")
-              manifest.append(f"{name}\tlines through {len(lines)}\tchars {size:,}")
+              (out / name).write_text(chunk, encoding="utf-8")
+              parts.append({
+                  "name": name,
+                  "char_start": offset + 1,
+                  "char_end": offset + len(chunk),
+                  "chars": len(chunk),
+              })
 
-          (out / "MANIFEST.txt").write_text(
-              f"source=Wayward_MOD_v2.107.html\n"
-              f"total_lines={len(lines)}\n"
-              f"total_chars={total_chars}\n"
-              f"parts={len(manifest)}\n\n"
-              + "\n".join(manifest)
-              + "\n",
+          def n(pattern, flags=re.I):
+              return len(re.findall(pattern, raw, flags))
+
+          tags = Counter(re.findall(r"<\s*([A-Za-z][\w:-]*)\b", raw))
+          ids = re.findall(r'\bid\s*=\s*["\']([^"\']+)["\']', raw, re.I)
+          class_attrs = re.findall(r'\bclass\s*=\s*["\']([^"\']+)["\']', raw, re.I)
+          events = re.findall(r'addEventListener\s*\(\s*["\']([^"\']+)', raw, re.I)
+          functions = re.findall(r'\bfunction\s+([A-Za-z_$][\w$]*)\s*\(', raw)
+          script_srcs = re.findall(r'<script[^>]+\bsrc\s*=\s*["\']([^"\']+)', raw, re.I)
+
+          lines = raw.splitlines()
+          max_line_len = max((len(x) for x in lines), default=0)
+          max_line_no = next((i for i, x in enumerate(lines, 1) if len(x) == max_line_len), 0)
+
+          report = {
+              "source": str(src),
+              "sha256": sha256,
+              "bytes_utf8": len(raw.encode("utf-8")),
+              "chars": total_chars,
+              "lines": total_lines,
+              "max_line_chars": max_line_len,
+              "max_line_number": max_line_no,
+              "chunk_chars": chunk_chars,
+              "parts": parts,
+              "counts": {
+                  "script_tags": n(r"<\s*script\b"),
+                  "style_tags": n(r"<\s*style\b"),
+                  "button_tags": n(r"<\s*button\b"),
+                  "input_tags": n(r"<\s*input\b"),
+                  "img_tags": n(r"<\s*img\b"),
+                  "form_tags": n(r"<\s*form\b"),
+                  "event_attributes": n(r"\bon[a-z]+\s*="),
+                  "addEventListener": len(events),
+                  "named_functions": len(functions),
+                  "fetch_calls": n(r"\bfetch\s*\("),
+                  "localStorage_refs": n(r"\blocalStorage\b"),
+                  "sessionStorage_refs": n(r"\bsessionStorage\b"),
+                  "media_queries": n(r"@media\b"),
+                  "position_fixed": n(r"position\s*:\s*fixed\b"),
+                  "position_sticky": n(r"position\s*:\s*sticky\b"),
+                  "overflow_auto_scroll": n(r"overflow(?:-x|-y)?\s*:\s*(?:auto|scroll)\b"),
+                  "viewport_meta": n(r'<meta\b[^>]*\bname\s*=\s*["\']viewport["\']'),
+              },
+              "tag_counts": dict(tags.most_common(100)),
+              "script_srcs": script_srcs,
+              "unique_id_count": len(set(ids)),
+              "duplicate_id_count": len(ids) - len(set(ids)),
+              "class_attribute_count": len(class_attrs),
+              "event_types": dict(Counter(events)),
+              "function_names": functions[:1000],
+          }
+
+          (out / "MANIFEST.json").write_text(
+              json.dumps(report, ensure_ascii=False, indent=2),
               encoding="utf-8"
           )
 
-          print(f"TOTAL LINES: {len(lines)}")
-          print(f"TOTAL CHARS: {total_chars}")
-          print(f"TOTAL PARTS: {len(manifest)}")
+          manifest_lines = [
+              f"source={src}",
+              f"sha256={sha256}",
+              f"bytes_utf8={report['bytes_utf8']}",
+              f"chars={total_chars}",
+              f"lines={total_lines}",
+              f"max_line_chars={max_line_len}",
+              f"max_line_number={max_line_no}",
+              f"chunk_chars={chunk_chars}",
+              f"parts={len(parts)}",
+              "",
+          ]
+          manifest_lines += [
+              f"{p['name']}\tchars {p['char_start']}-{p['char_end']}\tcount {p['chars']}"
+              for p in parts
+          ]
+          (out / "MANIFEST.txt").write_text(
+              "\n".join(manifest_lines) + "\n",
+              encoding="utf-8"
+          )
+
+          # Concise text report for quick inspection without loading the source.
+          text_report = [
+              "# Wayward_MOD_v2.107 full-source static inventory",
+              f"- SHA-256: {sha256}",
+              f"- UTF-8 bytes: {report['bytes_utf8']:,}",
+              f"- characters: {total_chars:,}",
+              f"- lines: {total_lines:,}",
+              f"- maximum single line: {max_line_len:,} chars (line {max_line_no})",
+              f"- analysis parts: {len(parts)} × <= {chunk_chars:,} chars",
+              "",
+              "## Counts",
+          ]
+          text_report += [f"- {k}: {v:,}" for k, v in report["counts"].items()]
+          text_report += [
+              "",
+              "## Largest/most common HTML tags",
+          ]
+          text_report += [f"- {k}: {v:,}" for k, v in tags.most_common(60)]
+          text_report += [
+              "",
+              "## Media-query conditions",
+          ]
+          for m in re.findall(r"@media\s*([^\{]+)\{", raw, re.I)[:100]:
+              text_report.append(f"- {m.strip()}")
+          text_report += [
+              "",
+              "## Function index (first 600)",
+          ]
+          for m in re.finditer(r"\bfunction\s+([A-Za-z_$][\w$]*)\s*\(", raw):
+              line_no = raw.count("\n", 0, m.start()) + 1
+              text_report.append(f"- line {line_no}: {m.group(1)}()")
+              if len(text_report) > 700:
+                  break
+          (out / "ANALYSIS_REPORT.md").write_text(
+              "\n".join(text_report) + "\n",
+              encoding="utf-8"
+          )
+
+          print(f"TOTAL_LINES={total_lines}")
+          print(f"TOTAL_CHARS={total_chars}")
+          print(f"TOTAL_PARTS={len(parts)}")
+          print(f"MAX_LINE_CHARS={max_line_len}")
+          print(f"MAX_LINE_NUMBER={max_line_no}")
+          print(f"SHA256={sha256}")
           PY
 
-
-      - name: Generate full-source analysis report
+      - name: Commit generated analysis data
+        shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          from collections import Counter
-
-          src = Path("Wayward_MOD_v2.107.html")
-          text = src.read_text(encoding="utf-8")
-          lines = text.splitlines()
-          out = Path("analysis_parts/ANALYSIS_REPORT.md")
-
-          def find(pattern, flags=re.I):
-              return re.findall(pattern, text, flags)
-
-          def n(pattern, flags=re.I):
-              return len(re.findall(pattern, text, flags))
-
-          max_line_len = max((len(s) for s in lines), default=0)
-          max_line_no = next((i for i,s in enumerate(lines,1) if len(s)==max_line_len), 0)
-
-          tags = Counter(re.findall(r"<\\s*([A-Za-z][\\w:-]*)\\b", text))
-          ids = find(r'\\bid\\s*=\\s*["\\\']([^"\\\']+)["\\\']')
-          classes = []
-          for s in find(r'\\bclass\\s*=\\s*["\\\']([^"\\\']+)["\\\']'):
-              classes += s.split()
-
-          scripts = re.findall(r"<script\\b([^>]*)>", text, re.I)
-          script_srcs = find(r'<script[^>]+\\bsrc\\s*=\\s*["\\\']([^"\\\']+)["\\\']')
-          styles = re.findall(r"<style\\b[^>]*>(.*?)</style\\s*>", text, re.I|re.S)
-          css = "\\n".join(styles)
-          media = find(r"@media\\s*([^\\{]+)\\{", re.I)
-          breakpoints = find(r'(?:min-width|max-width|min-height|max-height)\\s*:\\s*([0-9.]+(?:px|rem|em|vw|vh))', re.I)
-
-          functions = find(r'\\bfunction\\s+([A-Za-z_$][\\w$]*)\\s*\\(')
-          arrow = find(r'\\b(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*(?:async\\s*)?(?:\\([^)]*\\)|[A-Za-z_$][\\w$]*)\\s*=>')
-          classes_js = find(r'\\bclass\\s+([A-Za-z_$][\\w$]*)')
-          events = find(r'addEventListener\\s*\\(\\s*["\\\']([^"\\\']+)', re.I)
-          selectors = find(r'\\b(?:querySelector|querySelectorAll|getElementById|getElementsByClassName|getElementsByTagName)\\s*\\(\\s*["\\\']([^"\\\']+)', re.I)
-          storage = Counter(re.findall(r'\\b(localStorage|sessionStorage|indexedDB)\\b', text, re.I))
-          network = Counter(re.findall(r'\\b(fetch|XMLHttpRequest|WebSocket|EventSource)\\b', text, re.I))
-          nav = Counter(re.findall(r'\\b(pushState|replaceState|history\\.|location\\.|URLSearchParams)\\b', text, re.I))
-          timers = Counter(re.findall(r'\\b(setTimeout|setInterval|requestAnimationFrame|requestIdleCallback)\\b', text))
-
-          buttons = find(r'<button\\b[^>]*>(.*?)</button\\s*>', re.I|re.S)
-          headings = find(r'<h([1-6])\\b[^>]*>(.*?)</h[1-6]\\s*>', re.I|re.S)
-
-          def clean(s):
-              s = re.sub(r"<[^>]+>", " ", s)
-              return re.sub(r"\\s+", " ", s).strip()
-
-          fn_locs = []
-          for m in re.finditer(r'\\bfunction\\s+([A-Za-z_$][\\w$]*)\\s*\\(', text):
-              fn_locs.append((m.group(1), text.count("\\n",0,m.start())+1))
-
-          report = []
-          report.append("# Wayward_MOD_v2.107 전체 소스 정적 분석")
-          report.append("")
-          report.append("## 원본 규모")
-          report.append(f"- 전체 줄: {len(lines):,}")
-          report.append(f"- 전체 문자: {len(text):,}")
-          report.append(f"- UTF-8 바이트: {src.stat().st_size:,}")
-          report.append(f"- 최대 단일 줄: {max_line_len:,}자 (line {max_line_no})")
-          report.append("")
-          report.append("## HTML")
-          report.append(f"- 태그 매치: {sum(tags.values()):,}")
-          report.append(f"- 고유 tag: {len(tags):,}")
-          report.append(f"- id 속성: {len(ids):,}")
-          report.append(f"- class 토큰: {len(classes):,}, 고유 {len(set(classes)):,}")
-          report.append(f"- button: {len(buttons):,}")
-          report.append(f"- form: {n(r'<form\\b'):,}")
-          report.append("")
-          report.append("### 주요 태그")
-          report += [f"- {k}: {v}" for k,v in tags.most_common(50)]
-          report.append("")
-          report.append("## 모바일 / CSS")
-          report.append(f"- viewport meta: {find(r'<meta[^>]+name=[\"\\\']viewport[\"\\\'][^>]+content=[\"\\\']([^\"\\\']+)', re.I)[:1]}")
-          report.append(f"- @media: {len(media):,}")
-          report.append(f"- breakpoints: {sorted(set(breakpoints))[:100]}")
-          report.append(f"- display:flex: {n(r'display\\s*:\\s*flex', re.I):,}")
-          report.append(f"- display:grid: {n(r'display\\s*:\\s*grid', re.I):,}")
-          report.append(f"- position:fixed: {n(r'position\\s*:\\s*fixed', re.I):,}")
-          report.append(f"- overflow declarations: {n(r'overflow(?:-x|-y)?\\s*:', re.I):,}")
-          report.append("")
-          report.append("### media query 조건")
-          report += [f"- {x.strip()}" for x in media[:100]]
-          report.append("")
-          report.append("## JavaScript")
-          report.append(f"- script tag: {len(scripts):,}")
-          report.append(f"- external script src: {len(script_srcs):,}")
-          report.append(f"- named function: {len(functions):,}")
-          report.append(f"- arrow function 후보: {len(arrow):,}")
-          report.append(f"- class 선언: {len(classes_js):,}")
-          report.append(f"- addEventListener: {len(events):,}")
-          report.append(f"- DOM selector API: {len(selectors):,}")
-          report.append("")
-          report.append("### 함수 인덱스 (최대 600개)")
-          report += [f"- line {ln}: {name}()" for name,ln in fn_locs[:600]]
-          report.append("")
-          report.append("## 저장 / 네트워크 / 내비게이션")
-          report.append(f"- storage: {dict(storage)}")
-          report.append(f"- network: {dict(network)}")
-          report.append(f"- navigation: {dict(nav)}")
-          report.append(f"- timers: {dict(timers)}")
-          report.append("")
-          report.append("## UI 텍스트 샘플")
-          report.append("### buttons")
-          report += [f"- {clean(x)}" for x in buttons[:150] if clean(x)]
-          report.append("")
-          report.append("### headings")
-          report += [f"- H{a}: {clean(b)}" for a,b in headings[:100] if clean(b)]
-          report.append("")
-          report.append("## 결론")
-          report.append("- 원본 전체 텍스트를 대상으로 생성되었으며 원본 HTML은 수정하지 않았다.")
-          report.append("- 모바일 리디자인 시 화면 레이어와 게임 상태/저장/이벤트 결합부를 분리해서 다뤄야 한다.")
-          out.write_text("\\n".join(report)+"\\n", encoding="utf-8")
-          print(f"created {out} {out.stat().st_size:,} bytes")
-          PY
-
-      - name: Commit analysis report
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+users.noreply.github.com"
-          git add analysis_parts/ANALYSIS_REPORT.md
-          git commit -m "chore: add full-source analysis report" || echo "No changes"
-          git push
-
-      - name: Commit analysis parts
-        run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add analysis_parts/
-          git commit -m "chore: generate Wayward analysis parts" || echo "No changes"
+          git commit -m "chore: regenerate Wayward analysis parts" || echo "No changes"
           git push
