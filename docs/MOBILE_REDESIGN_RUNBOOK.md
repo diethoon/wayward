@@ -24,9 +24,18 @@
 1. 원본 전체를 읽고 SHA-256/문자 수/byte 수/line 수를 기록한다.
 2. 80,000 characters 단위로 `analysis_parts/Wayward_MOD_v2.107.partNNN.txt`를 생성한다.
 3. `MANIFEST.json`, `STATIC_REPORT.md`, `UI_COMPONENT_INDEX.md`, `UI_SNIPPETS.md`, CSS/HTML 분석 자료를 생성한다.
-4. 결과를 저장소에 커밋한다.
+4. `nce/Ihe/vle/zse/The/She/whe` 및 관련 runtime/mobile interaction을 별도 target context로 추출한다.
+5. compact patch context를 생성해 실제 패치 시 대용량 원문 조회를 피한다.
+6. 결과를 저장소에 커밋한다.
 
-이 파이프라인을 통해 원본의 긴 한 줄 때문에 GitHub 파일 조회가 실패하는 문제를 피한다.
+## 브랜치 실행/안전 장치
+- push 대상에는 `main`과 `mobile-redesign-v1`을 사용한다.
+- workflow concurrency로 같은 ref의 중복 실행을 직렬화한다.
+- 모바일 patch 단계는 `mobile-redesign-v1`에서만 실행된다.
+- patch는 정확한 기존 target 문자열이 없어지면 `PATCH_GUARD_FAILED`로 중단한다.
+- patch marker가 이미 존재하면 다시 삽입하지 않는다.
+- source와 analysis를 함께 stage하고 remote를 fetch/rebase한 뒤 push한다.
+- 이렇게 하면 향후 원본 HTML이 갱신돼도 무조건 덮어쓰지 않고 target이 바뀌었을 때 실패시켜 수동 검토하게 할 수 있다.
 
 ## 모바일 문제/설계 요구사항
 - 터치 오작동으로 데스크톱용 column drag/resize가 발생하지 않게 한다.
