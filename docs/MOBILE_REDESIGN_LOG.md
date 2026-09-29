@@ -77,3 +77,19 @@
 - 원본을 수정하지 않고 semantic owner를 자동 분류하는 `tools/build_role_map.py` 및 `.github/workflows/role-map.yml`을 추가했다.
 - 현재 확인된 모바일 owner: status = `Pie -> R3`, movement/action surface = `jre` 계열.
 - 다음 실제 추출 순서는 status/map/debug/header 등 UI 경계가 명확한 부분부터 진행한다.
+
+### 2026-09-30 — Portrait status 적용 확인 / 이동 지도 단계
+- `mobile-redesign-v1`의 `mobile-status-focus.yml` 실행 `36619399888`을 확인했다.
+- 결과: `success`.
+- portrait focus에서 `Pie`가 `hideWifeColumn=false`로 렌더링되도록 mobile focus 경로만 분기했다.
+- 새 save/RNG/ID/undo/turn-state 로직은 추가하지 않았다.
+- 이동 지도는 기존 `.map-pinned` 표면을 재사용하는 방식으로 설계했다.
+- 작업 브랜치에는 `.github/workflows/main.yml`에 모바일 지도 전체 화면 CSS patch 단계가 추가되어 있으며, 다음 source/workflow push에서 `node --check` + `git diff --check`와 함께 실행되도록 guard를 두었다.
+- 현재 환경의 GitHub connector에는 workflow 수동 dispatch 기능이 노출되어 있지 않아, 위 지도 source patch의 실제 Actions 실행은 아직 확인되지 않았다.
+- 따라서 지도는 '패치 작성 완료 / 실행 검증 대기' 상태로 기록하며, 실행 전까지 완료로 표시하지 않는다.
+
+### 현재 안전 검증 기준
+- 모든 HTML 변경은 정확한 anchor count와 idempotent marker로 guard한다.
+- inline `<script>`를 추출해 `node --check`로 syntax 검증한다.
+- `git diff --check`를 통과하지 않으면 commit하지 않는다.
+- 모바일 UI 수정은 game state/save/RNG/ID/undo/turn 처리와 분리한다.
