@@ -1,0 +1,69 @@
+name: Generate movement owner context
+
+on:
+  push:
+    branches: [mobile-redesign-v1]
+    paths:
+      - "Wayward_MOD_v2.107.html"
+      - ".github/workflows/movement-owner-context.yml"
+  workflow_dispatch:
+
+jobs:
+  movement-context:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract movement and map owners
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          src = Path('Wayward_MOD_v2.107.html').read_text(encoding='utf-8')
+          terms = ['지도', '목적지', '현재 위치', '이동', 'map-pinned', 'location', 'map']
+          chunks = []
+          seen = set()
+
+          def nearest_owner(pos: int) -> str:
+              window = src[max(0, pos-6000):pos]
+              matches = list(re.finditer(r'(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?:=\s*)?\(', window))
+              return matches[-1].group(1) if matches else 'unknown'
+
+          for term in terms:
+              start = 0
+              count = 0
+              while count < 12:
+                  pos = src.find(term, start)
+                  if pos < 0:
+                      break
+                  owner = nearest_owner(pos)
+                  key = (term, owner, pos)
+                  if key not in seen:
+                      seen.add(key)
+                      left = max(0, pos-1800)
+                      right = min(len(src), pos+2600)
+                      chunks.append('## ' + term + ' | owner=' + owner + ' | char=' + str(pos) + '\n```text\n' + src[left:right] + '\n```\n')
+                  start = pos + max(1, len(term))
+                  count += 1
+
+          out = Path('analysis_parts/mobile_targets/MOVEMENT_OWNER_CONTEXTS.md')
+          out.parent.mkdir(parents=True, exist_ok=True)
+          header = '# Movement / map owner contexts\n\nGenerated from Wayward_MOD_v2.107.html. Analysis only; no runtime source mutation.\n\n'
+          out.write_text(header + '\n'.join(chunks)[:300000], encoding='utf-8')
+          PY
+
+      - name: Commit analysis
+        shell: bash
+        run: |
+          if git diff --quiet -- analysis_parts/mobile_targets/MOVEMENT_OWNER_CONTEXTS.md; then
+            echo 'No movement context changes.'
+            exit 0
+          fi
+          git add analysis_parts/mobile_targets/MOVEMENT_OWNER_CONTEXTS.md
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'docs: refresh movement owner context'
+          git push
