@@ -1,0 +1,90 @@
+name: Apply mobile portrait status access
+
+on:
+  push:
+    branches: [mobile-redesign-v1]
+    paths:
+      - "Wayward_MOD_v2.107.html"
+      - ".github/workflows/mobile-status-focus.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch mobile focus status owner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("Wayward_MOD_v2.107.html")
+          s = p.read_text(encoding="utf-8")
+
+          old1 = 'v=(A,C=!0)=>m.jsx(Pie,{hideWifeColumn:y,'
+          new1 = 'v=(A,C=!0,D=y)=>m.jsx(Pie,{hideWifeColumn:D,'
+          old2 = 'r==="focus"&&v(y?"inline":"external")'
+          new2 = 'r==="focus"&&v("inline",!0,!1)'
+
+          if s.count(old1) != 1:
+              raise SystemExit(f"PATCH_GUARD_FAILED old1 count={s.count(old1)}")
+          if s.count(old2) != 1:
+              raise SystemExit(f"PATCH_GUARD_FAILED old2 count={s.count(old2)}")
+
+          s = s.replace(old1, new1, 1).replace(old2, new2, 1)
+          if "mobile-redesign-v1-status-focus" in s:
+              raise SystemExit("PATCH_GUARD_FAILED marker already present")
+
+          s = s.replace(
+              'v=(A,C=!0,D=y)=>m.jsx(Pie,{hideWifeColumn:D,',
+              '/*mobile-redesign-v1-status-focus*/v=(A,C=!0,D=y)=>m.jsx(Pie,{hideWifeColumn:D,',
+              1,
+          )
+
+          p.write_text(s, encoding="utf-8")
+          print("PATCH_APPLIED")
+          PY
+
+      - name: Validate HTML script syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          raw = Path("Wayward_MOD_v2.107.html").read_text(encoding="utf-8")
+          blocks = re.findall(r"<script\b[^>]*>(.*?)</script\s*>", raw, flags=re.I | re.S)
+          if not blocks:
+              raise SystemExit("NO_INLINE_SCRIPT")
+          Path("/tmp/wayward-inline.js").write_text("\n".join(blocks), encoding="utf-8")
+          print("INLINE_SCRIPTS", len(blocks))
+          PY
+          node --check /tmp/wayward-inline.js
+          git diff --check
+
+      - name: Guard changed scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          files="$(git diff --name-only)"
+          test "$files" = "Wayward_MOD_v2.107.html"
+          git diff --numstat -- Wayward_MOD_v2.107.html
+          git diff --unified=0 -- Wayward_MOD_v2.107.html | grep -E 'mobile-redesign-v1-status-focus|hideWifeColumn:D|r==="focus"&&v("inline",!0,!1)'
+
+      - name: Commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Wayward_MOD_v2.107.html
+          git commit -m "fix: expose portrait status on mobile focus"
+          git push
