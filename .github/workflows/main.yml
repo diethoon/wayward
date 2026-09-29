@@ -8,6 +8,10 @@ on:
       - ".github/workflows/main.yml"
   workflow_dispatch:
 
+concurrency:
+  group: wayward-mobile-redesign-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -692,12 +696,19 @@ jobs:
           print("SYNTAX_CHECK=PASS")
           PY
 
-      - name: Commit generated analysis
+      - name: Commit generated analysis and mobile patch
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add analysis_parts/
-          git commit -m "chore: generate complete Wayward source analysis" || echo "No changes"
-          git push
+          git add analysis_parts/ Wayward_MOD_v2.107.html
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "chore: generate analysis and apply mobile redesign phase 1"
+          git fetch origin "${GITHUB_REF_NAME}"
+          git rebase "origin/${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
