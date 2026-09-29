@@ -67,3 +67,13 @@
 ### Phase 1 현재 상태
 - `mobile-redesign-v1`에서 debug toggle 및 pane touch guard가 원격 source에 반영된 상태.
 - 다음은 `Pie`의 portrait/status interaction owner와 이동 지도 owner를 별도 compact context로 추출한 뒤 portrait surface를 구현한다.
+
+### 2026-09-30 — 역할별 소스 분리 기반 추가
+- 확인: 현재 실행 코드는 하나의 약 5.36M-character module script에 번들되어 있다.
+- 단순 character-split을 실행 모듈로 사용하는 방식은 채택하지 않는다.
+- 역할별 목표 경계를 `src/app`, `src/screens`, `src/game`, `src/ui`, `src/mobile`, `src/debug`, `src/storage`, `src/shared`로 정의했다.
+- `docs/SOURCE_MODULARIZATION_PLAN.md` 추가.
+- `src/README.md`를 작업 브랜치 `mobile-redesign-v1`에 추가.
+- 원본을 수정하지 않고 semantic owner를 자동 분류하는 `tools/build_role_map.py` 및 `.github/workflows/role-map.yml`을 추가했다.
+- 현재 확인된 모바일 owner: status = `Pie -> R3`, movement/action surface = `jre` 계열.
+- 다음 실제 추출 순서는 status/map/debug/header 등 UI 경계가 명확한 부분부터 진행한다.
