@@ -107,7 +107,7 @@ jobs:
           set -euo pipefail
           files="$(git diff --name-only)"
           test "$files" = "Wayward_MOD_v2.107.html"
-          git diff --unified=0 -- Wayward_MOD_v2.107.html | grep -E 'mobile-redesign-v1-status-focus|mobile-redesign-v1-mobile-map-surface|hideWifeColumn:D|r==="focus"&&v("inline",!0,!1)'
+          git diff --unified=0 -- Wayward_MOD_v2.107.html | grep -E 'mobile-redesign-v1-status-focus|mobile-redesign-v1-mobile-map-surface|mobile-redesign-v1-portrait-movement|mobile-game-shell|mobile-action-panel|mobile-movement-surface|hideWifeColumn:D|r==="focus"&&v("inline",!0,!1)'
 
       - name: Commit
         shell: bash
