@@ -482,6 +482,68 @@ jobs:
           (out/"GLOBAL_PATCH_CONTEXTS.md").write_text("\n".join(global_parts),encoding="utf-8")
           PY
 
+      - name: Apply phase 1 mobile patch and validate
+        if: github.ref == 'refs/heads/mobile-redesign-v1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import subprocess
+          import tempfile
+
+          src = Path("Wayward_MOD_v2.107.html")
+          raw = src.read_text(encoding="utf-8")
+          marker = '<style data-mobile-redesign="v1-debug-toggle">'
+          added = False
+
+          if marker not in raw:
+              target = '#wc2-toggle{position:fixed;left:16px;bottom:16px;z-index:99998;'
+              if target not in raw:
+                  raise SystemExit("PATCH_GUARD_FAILED: expected wc2-toggle source target not found")
+              if raw.count("</head>") != 1:
+                  raise SystemExit("PATCH_GUARD_FAILED: expected exactly one </head>")
+              style = (
+                  '<style data-mobile-redesign="v1-debug-toggle">'
+                  '@media(max-width:1023px){'
+                  '#wc2-toggle{left:auto!important;right:max(8px,env(safe-area-inset-right))!important;'
+                  'bottom:max(8px,env(safe-area-inset-bottom))!important;'
+                  'opacity:.28!important;transform:scale(.82)!important;z-index:30!important}'
+                  '#wc2-toggle:active,#wc2-toggle:focus-visible{opacity:.92!important;transform:scale(1)!important}'
+                  '}</style>'
+              )
+              raw = raw.replace("</head>", style + "</head>", 1)
+              src.write_text(raw, encoding="utf-8")
+              added = True
+
+          # The patch is idempotent: an already patched source must remain byte-for-byte stable.
+          final_raw = src.read_text(encoding="utf-8")
+          if final_raw.count(marker) != 1:
+              raise SystemExit("PATCH_GUARD_FAILED: mobile debug-toggle marker count is not 1")
+
+          # Syntax-check every inline script without exposing the multi-MB source to the tool response.
+          scripts = re.findall(r"<script\b[^>]*>(.*?)</script\s*>", final_raw, re.I | re.S)
+          if not scripts:
+              raise SystemExit("SYNTAX_CHECK_FAILED: no inline script blocks found")
+          for idx, code in enumerate(scripts, 1):
+              with tempfile.NamedTemporaryFile("w", suffix=f".{idx}.js", encoding="utf-8", delete=False) as f:
+                  f.write(code)
+                  tmp = f.name
+              try:
+                  subprocess.run(["node", "--check", tmp], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+              except subprocess.CalledProcessError as exc:
+                  print(exc.stderr)
+                  raise SystemExit(f"SYNTAX_CHECK_FAILED: inline script #{idx}")
+              finally:
+                  Path(tmp).unlink(missing_ok=True)
+
+          subprocess.run(["git", "diff", "--check"], check=True)
+          print(f"PHASE1_PATCH={'applied' if added else 'already-present'}")
+          print(f"INLINE_SCRIPTS={len(scripts)}")
+          print("SYNTAX_CHECK=PASS")
+          PY
+
       - name: Commit generated analysis
         shell: bash
         run: |
