@@ -93,3 +93,12 @@
 - inline `<script>`를 추출해 `node --check`로 syntax 검증한다.
 - `git diff --check`를 통과하지 않으면 commit하지 않는다.
 - 모바일 UI 수정은 game state/save/RNG/ID/undo/turn 처리와 분리한다.
+
+### 2026-09-30 — 지도 패치 최종 반영 확인
+- Draft PR `#1`을 통해 mobile surface workflow를 실행하도록 구성했다.
+- CI commit `fbf3693a315d029cc56806dc9cb7007dfce1e26f`의 실제 source blob에서 다음 marker를 확인했다: `mobile-redesign-v1-status-focus`, `mobile-redesign-v1-mobile-map-surface`, `mobile-redesign-v1-pane-touch-guard`.
+- `.map-pinned` 모바일 전체 화면 규칙이 실제 HTML에 존재하며 해당 anchor는 1회만 남아 있다.
+- source blob 크기 확인: 5,631,558 chars.
+- 대용량 source를 직접 Contents API로 다시 업로드하는 방식은 요청 본문 연결 오류가 발생해 사용하지 않았고, 작은 workflow 수정 → Draft PR CI → bot commit 경로로 source patch를 반영했다.
+- 따라서 portrait status와 portrait movement map은 작업 브랜치 source에 실제 반영된 상태다.
+- GitHub API의 현재 check-runs 조회에는 별도 Check Run이 노출되지 않았으므로, 'GitHub UI의 체크 아이콘 PASS'까지는 주장하지 않는다. 대신 source patch가 commit 단계까지 진행된 흔적과 최종 blob 내용을 확인했다.
