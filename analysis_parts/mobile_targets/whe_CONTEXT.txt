@@ -1,5 +1,5 @@
 source_line=5912
-start_offset=5305211
+start_offset=5305517
 chars=121200
 
 은 그대로 유지됩니다."),f("notoriety","악명 100 마녀사냥 배드엔딩","악명 80/90 경고와 100 도달 시 MOD 게임 오버를 사용합니다. 악명 자체와 원본 효과는 그대로 유지됩니다.")]}),m.jsx(koRichEndingSettings249,{settings:t,onChange:o,onMessage:s}),m.jsxs("div",{className:"mt-4 border-t border-stone-800 pt-4",children:[m.jsx("p",{className:"text-xs text-stone-500 mb-2",children:"MOD 설정 백업 · 게임 저장 JSON에는 포함되지 않습니다."}),m.jsxs("div",{className:"grid grid-cols-1 sm:grid-cols-3 gap-2",children:[m.jsx("button",{onClick:h,className:"px-3 py-2 rounded bg-stone-800 hover:bg-stone-700 border border-stone-700 text-sm",children:"설정 내보내기"}),m.jsx("button",{onClick:()=>r.current?.click(),className:"px-3 py-2 rounded bg-stone-800 hover:bg-stone-700 border border-stone-700 text-sm",children:"설정 불러오기"}),m.jsx("button",{onClick:u,className:"px-3 py-2 rounded bg-stone-800 hover:bg-stone-700 border border-stone-700 text-sm",children:"기본값 복원"})]}),m.jsx("input",{ref:r,type:"file",accept:"application/json,.json",className:"hidden",onChange:c}),n&&m.jsx("p",{className:"text-xs text-emerald-300 mt-2",children:n})]}),m.jsx("button",{onClick:e,className:"mt-5 w-full px-4 py-2 bg-amber-700 hover:bg-amber-600 text-white rounded text-sm font-medium",children:"닫기"})]})})}

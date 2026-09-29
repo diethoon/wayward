@@ -3362,8 +3362,8 @@
 
 ### N (line 5910)
 - sample chars: 12000
-- class literals: 50
-- layout tokens: {'flex': 7, 'flex-1': 5, 'min-h-0': 4, 'grid': 3, 'items-center': 2, 'fixed': 2, 'overflow-y-auto': 2, 'min-w-0': 2, 'grid-cols-2': 1, 'grid-cols-1': 1, 'justify-center': 1, 'w-full': 1, 'max-w-sm': 1, 'flex-col': 1, 'h-full': 1}
+- class literals: 49
+- layout tokens: {'flex': 7, 'flex-1': 4, 'grid': 3, 'min-h-0': 3, 'items-center': 2, 'fixed': 2, 'min-w-0': 2, 'grid-cols-2': 1, 'grid-cols-1': 1, 'justify-center': 1, 'w-full': 1, 'max-w-sm': 1, 'flex-col': 1, 'h-full': 1, 'overflow-y-auto': 1}
   - flex flex-wrap gap-1
   - hidden desk:flex text-[0.6rem] uppercase tracking-widest text-stone-600 mb-1.5 items-center justify-between
   - mt-1.5 grid grid-cols-2 gap-1.5
@@ -3377,8 +3377,8 @@
 
 ### F3 (line 5910)
 - sample chars: 12000
-- class literals: 49
-- layout tokens: {'flex': 12, 'flex-1': 9, 'min-h-0': 8, 'overflow-y-auto': 4, 'items-center': 3, 'flex-col': 2, 'h-full': 2, 'min-w-0': 2, 'fixed': 2, 'justify-center': 1, 'w-full': 1, 'max-w-xl': 1, 'max-h-[90vh]': 1, 'min-h-[336px]': 1}
+- class literals: 47
+- layout tokens: {'flex': 11, 'flex-1': 9, 'min-h-0': 8, 'overflow-y-auto': 4, 'flex-col': 2, 'h-full': 2, 'min-w-0': 2, 'fixed': 2, 'items-center': 2, 'justify-center': 1, 'w-full': 1, 'max-w-xl': 1, 'max-h-[90vh]': 1, 'min-h-[336px]': 1}
   - flex items-baseline gap-2 mb-1 px-1
   - flex-1 h-px bg-stone-800
   - flex flex-col h-full min-h-0
@@ -3394,8 +3394,8 @@
 
 ### P5 (line 5911)
 - sample chars: 12000
-- class literals: 50
-- layout tokens: {'flex': 12, 'min-h-0': 8, 'flex-1': 8, 'overflow-y-auto': 4, 'items-center': 4, 'flex-col': 2, 'h-full': 2, 'min-w-0': 2, 'fixed': 2, 'min-h-[336px]': 2, 'justify-center': 1, 'w-full': 1, 'max-w-xl': 1, 'max-h-[90vh]': 1}
+- class literals: 48
+- layout tokens: {'flex': 11, 'min-h-0': 8, 'flex-1': 8, 'overflow-y-auto': 4, 'items-center': 3, 'flex-col': 2, 'h-full': 2, 'min-w-0': 2, 'fixed': 2, 'min-h-[336px]': 2, 'justify-center': 1, 'w-full': 1, 'max-w-xl': 1, 'max-h-[90vh]': 1}
   - flex flex-col h-full min-h-0
   - shrink-0 flex items-baseline gap-2 mb-1 px-1
   - flex-1 h-px bg-stone-800
@@ -3412,7 +3412,7 @@
 
 ### gle (line 5911)
 - sample chars: 12000
-- class literals: 45
+- class literals: 43
 - layout tokens: {'flex': 10, 'flex-1': 6, 'min-h-0': 6, 'items-center': 4, 'overflow-y-auto': 3, 'min-w-0': 2, 'fixed': 2, 'min-h-[336px]': 2, 'flex-col': 1, 'h-full': 1, 'justify-center': 1, 'w-full': 1, 'max-w-xl': 1, 'max-h-[90vh]': 1}
   - shrink-0 mt-2 pt-2 border-t border-stone-800 flex items-baseline gap-3 px-1 text-[0.68rem]
   - flex flex-1 min-h-0 min-w-0
@@ -3431,8 +3431,8 @@
 
 ### O5 (line 5911)
 - sample chars: 12000
-- class literals: 41
-- layout tokens: {'flex': 9, 'flex-1': 7, 'min-h-0': 6, 'items-center': 4, 'min-w-0': 3, 'overflow-y-auto': 3, 'fixed': 2, 'min-h-[336px]': 2, 'flex-col': 1, 'h-full': 1, 'justify-center': 1, 'w-full': 1, 'max-w-xl': 1, 'max-h-[90vh]': 1}
+- class literals: 38
+- layout tokens: {'flex': 9, 'flex-1': 6, 'min-h-0': 6, 'items-center': 4, 'overflow-y-auto': 3, 'min-w-0': 2, 'fixed': 2, 'min-h-[336px]': 2, 'flex-col': 1, 'h-full': 1, 'justify-center': 1, 'w-full': 1, 'max-w-xl': 1, 'max-h-[90vh]': 1}
   - flex flex-1 min-h-0 min-w-0
   - pointer-events-none fixed z-50 rounded border border-amber-500/60 bg-stone-800/90 px-2 py-1 text-[0.7rem] uppercase tracking-widest text-amber-300 shadow-lg
   - min-w-0
@@ -3451,8 +3451,8 @@
 
 ### wle (line 5911)
 - sample chars: 12000
-- class literals: 42
-- layout tokens: {'flex': 10, 'flex-1': 7, 'min-h-0': 6, 'items-center': 4, 'min-w-0': 3, 'overflow-y-auto': 3, 'fixed': 2, 'flex-col': 2, 'min-h-[336px]': 2, 'h-full': 1, 'justify-center': 1, 'w-full': 1, 'max-w-xl': 1, 'max-h-[90vh]': 1}
+- class literals: 39
+- layout tokens: {'flex': 9, 'flex-1': 7, 'min-h-0': 6, 'items-center': 4, 'min-w-0': 3, 'overflow-y-auto': 3, 'fixed': 2, 'min-h-[336px]': 2, 'flex-col': 1, 'h-full': 1, 'justify-center': 1, 'w-full': 1, 'max-w-xl': 1, 'max-h-[90vh]': 1}
   - flex flex-1 min-h-0 min-w-0
   - pointer-events-none fixed z-50 rounded border border-amber-500/60 bg-stone-800/90 px-2 py-1 text-[0.7rem] uppercase tracking-widest text-amber-300 shadow-lg
   - min-w-0

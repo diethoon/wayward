@@ -1,4 +1,6 @@
-m-bg800);color:var(--wm-text100);border-color:var(--wm-bg600)}
+299-modal .ko299-card{background:var(--wm-bg900);border-color:var(--wm-bg600)}
+body[data-wayward-theme] #ko299-modal .field{border-color:var(--wm-bg700)}
+body[data-wayward-theme] #ko299-modal button,body[data-wayward-theme] #ko299-modal input,body[data-wayward-theme] #ko299-modal select{background:var(--wm-bg800);color:var(--wm-text100);border-color:var(--wm-bg600)}
 body[data-wayward-theme] #ko299-modal button:hover{background:var(--wm-bg700)}
 body[data-wayward-theme] #ko299-modal .muted{color:var(--wm-text400)}
 body[data-wayward-theme] #ko299-modal .title,body[data-wayward-theme] #ko299-modal .heading{color:var(--wm-accent)}

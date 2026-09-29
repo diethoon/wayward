@@ -1,7 +1,7 @@
 source=Wayward_MOD_v2.107.html
-sha256=b796c459b2a6088ce9ea9c9aab0d9c02389685d9b20efb72707bcc1f12bf7a6f
-bytes_utf8=7399633
-chars=5630715
+sha256=e4e516f9a666401db827fc293eed369c1cc9660c2de7b19f8bb361b631af1578
+bytes_utf8=7399939
+chars=5631021
 lines=6808
 max_line_chars=2468306
 max_line_number=5044
@@ -78,4 +78,4 @@ Wayward_MOD_v2.107.part067.txt	chars 5280001-5360000	count 80000
 Wayward_MOD_v2.107.part068.txt	chars 5360001-5440000	count 80000
 Wayward_MOD_v2.107.part069.txt	chars 5440001-5520000	count 80000
 Wayward_MOD_v2.107.part070.txt	chars 5520001-5600000	count 80000
-Wayward_MOD_v2.107.part071.txt	chars 5600001-5630715	count 30715
+Wayward_MOD_v2.107.part071.txt	chars 5600001-5631021	count 31021

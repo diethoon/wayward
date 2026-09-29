@@ -1,9 +1,9 @@
 # Wayward_MOD_v2.107 전체 소스 구조 분석
 
 ## 원본
-- SHA-256: b796c459b2a6088ce9ea9c9aab0d9c02389685d9b20efb72707bcc1f12bf7a6f
-- UTF-8 bytes: 7,399,633
-- characters: 5,630,715
+- SHA-256: e4e516f9a666401db827fc293eed369c1cc9660c2de7b19f8bb361b631af1578
+- UTF-8 bytes: 7,399,939
+- characters: 5,631,021
 - lines: 6,808
 - max single line: 2,468,306 chars (line 5044)
 
