@@ -786,6 +786,38 @@ jobs:
           (out/"ROBUST_MOBILE_COMPONENT_CONTEXTS.md").write_text("\n".join(rows),encoding="utf-8")
           PY
 
+      - name: Generate exact mobile surface owner contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          raw = Path("Wayward_MOD_v2.107.html").read_text(encoding="utf-8")
+          out = Path("analysis_parts/mobile_targets")
+          out.mkdir(parents=True, exist_ok=True)
+
+          symbols = ["jre","R3","M0","Oie","E3","Bie","Yie"]
+          rows = ["# Exact mobile surface owner contexts",""]
+          for name in symbols:
+              patterns = [
+                  rf"\bfunction\s+{re.escape(name)}\s*\(",
+                  rf"\b(?:const|let|var)\s+{re.escape(name)}\s*=",
+              ]
+              hits = []
+              for pat in patterns:
+                  hits.extend(list(re.finditer(pat, raw)))
+              if not hits:
+                  rows += [f"## MISSING | {name}", ""]
+                  continue
+              for idx, m in enumerate(sorted(hits, key=lambda x:x.start())[:3], 1):
+                  lo = max(0, m.start()-1800)
+                  hi = min(len(raw), m.start()+12000)
+                  ctx = re.sub(r"\s+", " ", raw[lo:hi]).strip()
+                  rows += [f"## {name} | definition {idx} | source_line {raw.count(chr(10),0,m.start())+1}", ctx, ""]
+          (out/"SURFACE_OWNER_CONTEXTS.md").write_text("\n".join(rows), encoding="utf-8")
+          PY
+
       - name: Commit generated analysis and mobile patch
         shell: bash
         run: |
