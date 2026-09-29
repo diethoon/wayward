@@ -19,7 +19,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate character-safe analysis parts
+      - name: Generate full-source analysis material
         shell: bash
         run: |
           set -euo pipefail
@@ -34,24 +34,22 @@ jobs:
           out = Path("analysis_parts")
           out.mkdir(exist_ok=True)
 
+          raw = src.read_text(encoding="utf-8")
+          sha256 = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+          total_chars = len(raw)
+          total_bytes = len(raw.encode("utf-8"))
+          lines = raw.splitlines()
+          total_lines = len(lines)
+
           for p in out.glob("Wayward_MOD_v2.107.part*.txt"):
               p.unlink()
 
-          raw = src.read_text(encoding="utf-8")
-          total_chars = len(raw)
-          total_lines = raw.count("\n") + (1 if raw else 0)
-          sha256 = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-          # The previous splitter used line boundaries and produced one ~2.47M-char
-          # chunk because the source contains an enormous single line. Split by
-          # character count instead so every generated file remains connector-safe.
           chunk_chars = 80_000
           parts = []
-
           for offset in range(0, total_chars, chunk_chars):
               chunk = raw[offset:offset + chunk_chars]
-              index = len(parts) + 1
-              name = f"Wayward_MOD_v2.107.part{index:03d}.txt"
+              idx = len(parts) + 1
+              name = f"Wayward_MOD_v2.107.part{idx:03d}.txt"
               (out / name).write_text(chunk, encoding="utf-8")
               parts.append({
                   "name": name,
@@ -60,67 +58,151 @@ jobs:
                   "chars": len(chunk),
               })
 
-          def n(pattern, flags=re.I):
-              return len(re.findall(pattern, raw, flags))
+          body_m = re.search(r"<body\b[^>]*>(.*?)</body\s*>", raw, re.I | re.S)
+          body = body_m.group(1) if body_m else ""
+          ui_body = re.sub(r"<script\b[^>]*>.*?</script\s*>", "", body, flags=re.I | re.S)
+          ui_body = re.sub(r"<style\b[^>]*>.*?</style\s*>", "", ui_body, flags=re.I | re.S)
 
-          tags = Counter(re.findall(r"<\s*([A-Za-z][\w:-]*)\b", raw))
-          ids = re.findall(r'\bid\s*=\s*["\']([^"\']+)["\']', raw, re.I)
-          class_attrs = re.findall(r'\bclass\s*=\s*["\']([^"\']+)["\']', raw, re.I)
-          events = re.findall(r'addEventListener\s*\(\s*["\']([^"\']+)', raw, re.I)
-          functions = re.findall(r'\bfunction\s+([A-Za-z_$][\w$]*)\s*\(', raw)
-          script_srcs = re.findall(r'<script[^>]+\bsrc\s*=\s*["\']([^"\']+)', raw, re.I)
+          html_tag_counts = Counter(
+              m.group(1).lower()
+              for m in re.finditer(r"<\s*([A-Za-z][\w:-]*)\b", ui_body)
+          )
+          html_ids = re.findall(r'\bid\s*=\s*["\']([^"\']+)["\']', ui_body, re.I)
+          html_classes = []
+          for x in re.findall(r'\bclass\s*=\s*["\']([^"\']+)["\']', ui_body, re.I):
+              html_classes.extend([v for v in x.split() if v])
 
-          lines = raw.splitlines()
+          visible_text = re.sub(r"<!--.*?-->", " ", ui_body, flags=re.S)
+          visible_text = re.sub(r"<[^>]+>", " ", visible_text)
+          visible_text = re.sub(r"\s+", " ", visible_text).strip()
+
+          (out / "UI_HTML.txt").write_text(ui_body.strip() + "\n", encoding="utf-8")
+          (out / "UI_TEXT.txt").write_text(visible_text + "\n", encoding="utf-8")
+
+          style_blocks = re.findall(r"<style\b[^>]*>(.*?)</style\s*>", raw, re.I | re.S)
+          css = "\n\n".join(
+              f"/* STYLE BLOCK {i+1} */\n{x}" for i, x in enumerate(style_blocks)
+          )
+          (out / "CSS_FULL.txt").write_text(css + "\n", encoding="utf-8")
+
+          css_rule_rows = []
+          css_media = []
+          for css_block_no, block in enumerate(style_blocks, 1):
+              for m in re.finditer(r"([^{}]+)\{([^{}]*)\}", block, re.S):
+                  selector = re.sub(r"\s+", " ", m.group(1)).strip()
+                  body_css = re.sub(r"\s+", " ", m.group(2)).strip()
+                  if selector:
+                      css_rule_rows.append((css_block_no, selector, body_css))
+              for m in re.finditer(r"@media\s*([^\{]+)\{", block, re.I):
+                  css_media.append(m.group(1).strip())
+
+          css_tokens = Counter()
+          for prop in re.findall(r"([A-Za-z-]+)\s*:", css):
+              css_tokens[prop.lower()] += 1
+
+          script_blocks = re.findall(r"<script\b([^>]*)>(.*?)</script\s*>", raw, re.I | re.S)
+          fn_rows = []
+          for m in re.finditer(r"\bfunction\s+([A-Za-z_$][\w$]*)\s*\(", raw):
+              fn_rows.append((m.group(1), raw.count("\n", 0, m.start()) + 1))
+
+          event_types = Counter(
+              m.group(1)
+              for m in re.finditer(r"addEventListener\s*\(\s*['\"]([^'\"]+)", raw, re.I)
+          )
+          selectors = re.findall(
+              r"\b(?:getElementById|querySelector|querySelectorAll|getElementsByClassName|getElementsByTagName)"
+              r"\s*\(\s*['\"]([^'\"]+)['\"]",
+              raw,
+          )
+          storage_keys = re.findall(
+              r"\b(?:localStorage|sessionStorage)\."
+              r"(?:getItem|setItem|removeItem)\s*\(\s*['\"]([^'\"]+)['\"]",
+              raw,
+          )
+          urls = re.findall(
+              r"\b(?:fetch|WebSocket|EventSource)\s*\(\s*['\"]([^'\"]+)",
+              raw,
+          )
+
+          fn_prefix = Counter()
+          for name, _ in fn_rows:
+              base = re.sub(r"\d+$", "", name)
+              fn_prefix[base[:32] if base else name[:32]] += 1
+
+          snippet_patterns = [
+              ("DOM mutation", r"innerHTML|outerHTML|insertAdjacentHTML|createElement|appendChild|replaceChildren"),
+              ("class/style", r"classList\.|\.style\.|setAttribute\(|removeAttribute\("),
+              ("responsive", r"matchMedia\(|innerWidth|innerHeight|resize|orientation"),
+              ("input/touch", r"touchstart|touchmove|touchend|pointerdown|pointerup|keydown|keyup"),
+              ("navigation", r"location\.|history\.|URLSearchParams|pushState|replaceState"),
+              ("save/load", r"localStorage|sessionStorage|autosave|save|load"),
+              ("modal/panel", r"modal|overlay|drawer|panel|dialog|menu"),
+          ]
+
+          snippet_lines = []
+          seen = set()
+          for label, pattern in snippet_patterns:
+              for m in re.finditer(pattern, raw, re.I):
+                  pos = m.start()
+                  line_no = raw.count("\n", 0, pos) + 1
+                  key = (label, line_no, m.group(0).lower())
+                  if key in seen:
+                      continue
+                  seen.add(key)
+                  lo = max(0, pos - 500)
+                  hi = min(len(raw), pos + 900)
+                  ctx = re.sub(r"\s+", " ", raw[lo:hi].replace("\n", " ")).strip()
+                  snippet_lines.append(f"## {label} | line {line_no}\nSNIPPET: {ctx}\n")
+                  if len(snippet_lines) >= 220:
+                      break
+              if len(snippet_lines) >= 220:
+                  break
+
           max_line_len = max((len(x) for x in lines), default=0)
           max_line_no = next((i for i, x in enumerate(lines, 1) if len(x) == max_line_len), 0)
 
-          report = {
+          manifest = {
               "source": str(src),
               "sha256": sha256,
-              "bytes_utf8": len(raw.encode("utf-8")),
+              "bytes_utf8": total_bytes,
               "chars": total_chars,
               "lines": total_lines,
-              "max_line_chars": max_line_len,
-              "max_line_number": max_line_no,
               "chunk_chars": chunk_chars,
               "parts": parts,
-              "counts": {
-                  "script_tags": n(r"<\s*script\b"),
-                  "style_tags": n(r"<\s*style\b"),
-                  "button_tags": n(r"<\s*button\b"),
-                  "input_tags": n(r"<\s*input\b"),
-                  "img_tags": n(r"<\s*img\b"),
-                  "form_tags": n(r"<\s*form\b"),
-                  "event_attributes": n(r"\bon[a-z]+\s*="),
-                  "addEventListener": len(events),
-                  "named_functions": len(functions),
-                  "fetch_calls": n(r"\bfetch\s*\("),
-                  "localStorage_refs": n(r"\blocalStorage\b"),
-                  "sessionStorage_refs": n(r"\bsessionStorage\b"),
-                  "media_queries": n(r"@media\b"),
-                  "position_fixed": n(r"position\s*:\s*fixed\b"),
-                  "position_sticky": n(r"position\s*:\s*sticky\b"),
-                  "overflow_auto_scroll": n(r"overflow(?:-x|-y)?\s*:\s*(?:auto|scroll)\b"),
-                  "viewport_meta": n(r'<meta\b[^>]*\bname\s*=\s*["\']viewport["\']'),
+              "max_line_chars": max_line_len,
+              "max_line_number": max_line_no,
+              "html": {
+                  "body_chars": len(body),
+                  "ui_body_chars": len(ui_body),
+                  "tag_counts": dict(html_tag_counts),
+                  "id_count": len(html_ids),
+                  "duplicate_id_count": len(html_ids) - len(set(html_ids)),
+                  "class_token_count": len(html_classes),
+                  "unique_class_count": len(set(html_classes)),
               },
-              "tag_counts": dict(tags.most_common(100)),
-              "script_srcs": script_srcs,
-              "unique_id_count": len(set(ids)),
-              "duplicate_id_count": len(ids) - len(set(ids)),
-              "class_attribute_count": len(class_attrs),
-              "event_types": dict(Counter(events)),
-              "function_names": functions[:1000],
+              "css": {
+                  "style_blocks": len(style_blocks),
+                  "css_chars": len(css),
+                  "rule_count": len(css_rule_rows),
+                  "media_queries": css_media,
+                  "property_frequency": dict(css_tokens.most_common(100)),
+              },
+              "javascript": {
+                  "script_blocks": [{"attrs": a, "chars": len(code)} for a, code in script_blocks],
+                  "named_function_count": len(fn_rows),
+                  "event_types": dict(event_types),
+                  "selector_count": len(selectors),
+                  "storage_keys": sorted(set(storage_keys)),
+                  "network_targets": sorted(set(urls)),
+              },
           }
 
-          (out / "MANIFEST.json").write_text(
-              json.dumps(report, ensure_ascii=False, indent=2),
-              encoding="utf-8"
-          )
+          (out / "MANIFEST.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
-          manifest_lines = [
+          manifest_txt = [
               f"source={src}",
               f"sha256={sha256}",
-              f"bytes_utf8={report['bytes_utf8']}",
+              f"bytes_utf8={total_bytes}",
               f"chars={total_chars}",
               f"lines={total_lines}",
               f"max_line_chars={max_line_len}",
@@ -129,67 +211,67 @@ jobs:
               f"parts={len(parts)}",
               "",
           ]
-          manifest_lines += [
-              f"{p['name']}\tchars {p['char_start']}-{p['char_end']}\tcount {p['chars']}"
-              for p in parts
-          ]
-          (out / "MANIFEST.txt").write_text(
-              "\n".join(manifest_lines) + "\n",
-              encoding="utf-8"
-          )
+          manifest_txt += [f"{p['name']}\tchars {p['char_start']}-{p['char_end']}\tcount {p['chars']}" for p in parts]
+          (out / "MANIFEST.txt").write_text("\n".join(manifest_txt) + "\n", encoding="utf-8")
 
-          # Concise text report for quick inspection without loading the source.
-          text_report = [
-              "# Wayward_MOD_v2.107 full-source static inventory",
+          report = [
+              "# Wayward_MOD_v2.107 전체 소스 구조 분석",
+              "",
+              "## 원본",
               f"- SHA-256: {sha256}",
-              f"- UTF-8 bytes: {report['bytes_utf8']:,}",
+              f"- UTF-8 bytes: {total_bytes:,}",
               f"- characters: {total_chars:,}",
               f"- lines: {total_lines:,}",
-              f"- maximum single line: {max_line_len:,} chars (line {max_line_no})",
-              f"- analysis parts: {len(parts)} × <= {chunk_chars:,} chars",
+              f"- max single line: {max_line_len:,} chars (line {max_line_no})",
               "",
-              "## Counts",
-          ]
-          text_report += [f"- {k}: {v:,}" for k, v in report["counts"].items()]
-          text_report += [
+              "## UI HTML",
+              f"- body chars: {len(body):,}",
+              f"- UI HTML chars after removing script/style: {len(ui_body):,}",
+              f"- id count: {len(html_ids):,}",
+              f"- duplicate id count: {len(html_ids)-len(set(html_ids)):,}",
+              f"- class tokens: {len(html_classes):,}",
+              f"- unique classes: {len(set(html_classes)):,}",
               "",
-              "## Largest/most common HTML tags",
+              "### HTML tags",
           ]
-          text_report += [f"- {k}: {v:,}" for k, v in tags.most_common(60)]
-          text_report += [
-              "",
-              "## Media-query conditions",
-          ]
-          for m in re.findall(r"@media\s*([^\{]+)\{", raw, re.I)[:100]:
-              text_report.append(f"- {m.strip()}")
-          text_report += [
-              "",
-              "## Function index (first 600)",
-          ]
-          for m in re.finditer(r"\bfunction\s+([A-Za-z_$][\w$]*)\s*\(", raw):
-              line_no = raw.count("\n", 0, m.start()) + 1
-              text_report.append(f"- line {line_no}: {m.group(1)}()")
-              if len(text_report) > 700:
-                  break
-          (out / "ANALYSIS_REPORT.md").write_text(
-              "\n".join(text_report) + "\n",
-              encoding="utf-8"
+          report += [f"- {k}: {v}" for k, v in html_tag_counts.most_common()]
+          report += ["", "## CSS", f"- style blocks: {len(style_blocks)}", f"- CSS chars: {len(css):,}", f"- CSS rule candidates: {len(css_rule_rows):,}", "", "### media queries"]
+          report += [f"- {x}" for x in css_media]
+          report += ["", "### common properties"]
+          report += [f"- {k}: {v}" for k, v in css_tokens.most_common(100)]
+          report += ["", "### largest CSS rules"]
+          for block_no, selector, body_css in sorted(css_rule_rows, key=lambda x: len(x[2]), reverse=True)[:120]:
+              report.append(f"- [style {block_no}] {selector} => {body_css[:500]}")
+          report += ["", "## JavaScript", f"- script blocks: {len(script_blocks)}", f"- named functions: {len(fn_rows):,}", f"- addEventListener types: {dict(event_types)}", f"- DOM selector calls: {len(selectors):,}", "", "### storage keys"]
+          report += [f"- {x}" for x in sorted(set(storage_keys))]
+          report += ["", "### network targets"]
+          report += [f"- {x}" for x in sorted(set(urls))]
+          report += ["", "### notable function names"]
+          for name, line_no in fn_rows[:500]:
+              report.append(f"- line {line_no}: {name}()")
+          report += ["", "### function-name families"]
+          report += [f"- {k}: {v}" for k, v in fn_prefix.most_common(120)]
+          (out / "STATIC_REPORT.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+
+          (out / "UI_SNIPPETS.md").write_text(
+              "# UI/runtime targeted source snippets\n\n" + "\n".join(snippet_lines),
+              encoding="utf-8",
           )
 
-          print(f"TOTAL_LINES={total_lines}")
-          print(f"TOTAL_CHARS={total_chars}")
-          print(f"TOTAL_PARTS={len(parts)}")
-          print(f"MAX_LINE_CHARS={max_line_len}")
-          print(f"MAX_LINE_NUMBER={max_line_no}")
-          print(f"SHA256={sha256}")
+          print(f"FULL SOURCE: {total_chars:,} chars / {total_bytes:,} bytes / {total_lines:,} lines")
+          print(f"PARTS: {len(parts)}")
+          print(f"MAX LINE: {max_line_len:,} chars at line {max_line_no}")
+          print(f"BODY: {len(body):,} chars; UI HTML: {len(ui_body):,} chars")
+          print(f"CSS: {len(css):,} chars across {len(style_blocks)} style blocks")
+          print(f"JS FUNCTIONS: {len(fn_rows):,}")
           PY
 
-      - name: Commit generated analysis data
+      - name: Commit generated analysis
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add analysis_parts/
-          git commit -m "chore: regenerate Wayward analysis parts" || echo "No changes"
+          git commit -m "chore: generate complete Wayward source analysis" || echo "No changes"
           git push
