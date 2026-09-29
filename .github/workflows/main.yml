@@ -414,6 +414,74 @@ jobs:
           (out/"CSS_CONTEXTS.md").write_text("\n".join(parts)+"\n",encoding="utf-8")
           PY
 
+      - name: Generate compact mobile patch contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          raw = Path("Wayward_MOD_v2.107.html").read_text(encoding="utf-8")
+          out = Path("analysis_parts/mobile_targets")
+          out.mkdir(parents=True, exist_ok=True)
+
+          def function_range(name):
+              m = re.search(r"\bfunction\s+" + re.escape(name) + r"\s*\([^)]*\)\s*\{", raw)
+              if not m: return None
+              brace = raw.find("{", m.start(), m.end())
+              i, depth, state, esc = brace, 0, "code", False
+              while i < len(raw):
+                  ch = raw[i]; nx = raw[i+1] if i+1 < len(raw) else ""
+                  if state == "line":
+                      if ch == "\n": state = "code"
+                  elif state == "block":
+                      if ch == "*" and nx == "/": state = "code"; i += 1
+                  elif state in ("single","double","template"):
+                      if esc: esc = False
+                      elif ch == "\\": esc = True
+                      elif (state=="single" and ch=="'") or (state=="double" and ch=='"') or (state=="template" and ch==chr(96)): state="code"
+                  else:
+                      if ch=="/" and nx=="/": state="line"; i+=1
+                      elif ch=="/" and nx=="*": state="block"; i+=1
+                      elif ch=="'": state="single"
+                      elif ch=='"': state="double"
+                      elif ch==chr(96): state="template"
+                      elif ch=="{": depth+=1
+                      elif ch=="}":
+                          depth-=1
+                          if depth==0: return (m.start(), i+1)
+                  i+=1
+              return None
+
+          targets={}
+          for name in ["Ihe","vle","zse","The","She","whe"]:
+              rr=function_range(name)
+              if rr: targets[name]=raw[rr[0]:rr[1]]
+
+          patterns=[
+              ("drag-resize",r"pointer(down|move|up)|touch(start|move|end)|drag|resize|divider|column"),
+              ("status-portrait",r"portrait|status|detailed|상태|초상"),
+              ("map-movement",r"map-pinned|movement|지도|이동|map"),
+              ("debug-toggle",r"wc2-toggle"),
+              ("mobile-layout",r"desk:|100dvh|safe-area|overflow-y-auto|overflow-x-auto"),
+          ]
+          parts=["# Compact mobile patch contexts",""]
+          for label,pattern in patterns:
+              for fn_name,fn_text in targets.items():
+                  for idx,m in enumerate(list(re.finditer(pattern,fn_text,re.I))[:5],1):
+                      lo=max(0,m.start()-1200); hi=min(len(fn_text),m.end()+2200)
+                      parts += [f"## {label} | {fn_name} | match {idx}",re.sub(r"\s+"," ",fn_text[lo:hi]).strip(),""]
+          (out/"PATCH_CONTEXTS.md").write_text("\n".join(parts),encoding="utf-8")
+
+          global_parts=["# Compact global mobile patch contexts",""]
+          for label,pattern in [("portrait-status",r"portrait|상태"),("movement-map",r"map-pinned|movement|지도|이동"),("debug-toggle",r"wc2-toggle")]:
+              for idx,m in enumerate(list(re.finditer(pattern,raw,re.I))[:6],1):
+                  lo=max(0,m.start()-1000); hi=min(len(raw),m.end()+1800)
+                  global_parts += [f"## {label} | match {idx}",re.sub(r"\s+"," ",raw[lo:hi]).strip(),""]
+          (out/"GLOBAL_PATCH_CONTEXTS.md").write_text("\n".join(global_parts),encoding="utf-8")
+          PY
+
       - name: Commit generated analysis
         shell: bash
         run: |
