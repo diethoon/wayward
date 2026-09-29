@@ -102,3 +102,5 @@ jobs:
           git add Wayward_MOD_v2.107.html
           git commit -m "chore: apply mobile debug toggle patch"
           git push
+
+# retrigger
