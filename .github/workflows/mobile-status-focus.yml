@@ -1,4 +1,4 @@
-name: Apply mobile portrait status access
+name: Apply mobile portrait status and map surfaces
 
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
         with:
           ref: ${{ github.head_ref || github.ref_name }}
 
-      - name: Patch mobile focus status owner
+      - name: Patch mobile surfaces
         shell: bash
         run: |
           set -euo pipefail
@@ -35,17 +35,16 @@ jobs:
           p = Path("Wayward_MOD_v2.107.html")
           s = p.read_text(encoding="utf-8")
 
+          status_marker = "mobile-redesign-v1-status-focus"
           old1 = 'v=(A,C=!0)=>m.jsx(Pie,{hideWifeColumn:y,'
           new1 = 'v=(A,C=!0,D=y)=>m.jsx(Pie,{hideWifeColumn:D,'
           old2 = 'r==="focus"&&v(y?"inline":"external")'
           new2 = 'r==="focus"&&v("inline",!0,!1)'
-
-          if "mobile-redesign-v1-status-focus" not in s:
-              if s.count(old1) != 1:
-                  raise SystemExit(f"PATCH_GUARD_FAILED old1 count={s.count(old1)}")
-              if s.count(old2) != 1:
-                  raise SystemExit(f"PATCH_GUARD_FAILED old2 count={s.count(old2)}")
+          if status_marker not in s:
+              if s.count(old1) != 1 or s.count(old2) != 1:
+                  raise SystemExit("STATUS_GUARD_FAILED")
               s = s.replace(old1, new1, 1).replace(old2, new2, 1)
+              s = s.replace(new1, '/*' + status_marker + '*/' + new1, 1)
 
           map_marker = "mobile-redesign-v1-mobile-map-surface"
           map_anchor = ".map-pinned>div{margin:0!important;border:0!important;background:transparent!important}"
@@ -56,15 +55,7 @@ jobs:
               s = s.replace(map_anchor, map_css, 1)
 
           p.write_text(s, encoding="utf-8")
-          print("STATUS_AND_MAP_PATCH_APPLIED_OR_PRESENT")
-
-              'v=(A,C=!0,D=y)=>m.jsx(Pie,{hideWifeColumn:D,',
-              '/*mobile-redesign-v1-status-focus*/v=(A,C=!0,D=y)=>m.jsx(Pie,{hideWifeColumn:D,',
-              1,
-          )
-
-          p.write_text(s, encoding="utf-8")
-          print("PATCH_APPLIED")
+          print("MOBILE_SURFACE_PATCH=PASS")
           PY
 
       - name: Validate HTML script syntax
@@ -74,7 +65,6 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
-
           raw = Path("Wayward_MOD_v2.107.html").read_text(encoding="utf-8")
           blocks = re.findall(r"<script\b[^>]*>(.*?)</script\s*>", raw, flags=re.I | re.S)
           if not blocks:
@@ -91,8 +81,7 @@ jobs:
           set -euo pipefail
           files="$(git diff --name-only)"
           test "$files" = "Wayward_MOD_v2.107.html"
-          git diff --numstat -- Wayward_MOD_v2.107.html
-          git diff --unified=0 -- Wayward_MOD_v2.107.html | grep -E 'mobile-redesign-v1-status-focus|hideWifeColumn:D|r==="focus"&&v("inline",!0,!1)'
+          git diff --unified=0 -- Wayward_MOD_v2.107.html | grep -E 'mobile-redesign-v1-status-focus|mobile-redesign-v1-mobile-map-surface|hideWifeColumn:D|r==="focus"&&v("inline",!0,!1)'
 
       - name: Commit
         shell: bash
@@ -101,5 +90,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Wayward_MOD_v2.107.html
+          if git diff --cached --quiet; then
+            echo "No source changes"
+            exit 0
+          fi
           git commit -m "fix: apply mobile status and map surfaces"
           git push origin "HEAD:${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
