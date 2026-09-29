@@ -52,3 +52,18 @@
 ## 다음 단계
 - drag/resize 실제 핸들 컴포넌트와 portrait status/map의 실제 interaction owner를 추가로 좁힌다.
 - 이후 각 항목을 한 단계씩 수정하고 매 단계마다 syntax/diff 검증한다.
+
+### Phase 1 추가 검증 — 모바일 pane touch guard
+- 작업 브랜치: `mobile-redesign-v1`
+- pane manager의 두 pointer-down 지점을 정확히 1회씩 찾은 뒤 모바일 breakpoint(`max-width:1023px`)에서는 handler를 즉시 반환하도록 guard를 적용했다.
+- 데스크톱에서는 기존 handler가 그대로 실행된다.
+- guard marker: `mobile-redesign-v1-pane-touch-guard`
+- 이미 적용된 source에서는 patch를 다시 삽입하지 않는 idempotent 방식으로 workflow를 수정했다.
+- GitHub Actions run `36618168741`: success
+- inline script syntax check: PASS
+- `git diff --check`: PASS
+- 저장/RNG/ID/undo/턴 처리 코드는 수정하지 않았다.
+
+### Phase 1 현재 상태
+- `mobile-redesign-v1`에서 debug toggle 및 pane touch guard가 원격 source에 반영된 상태.
+- 다음은 `Pie`의 portrait/status interaction owner와 이동 지도 owner를 별도 compact context로 추출한 뒤 portrait surface를 구현한다.
