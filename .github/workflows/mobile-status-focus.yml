@@ -59,14 +59,7 @@ jobs:
               s = s.replace(old_shell,new_shell,1)
               s = s.replace(old_panel,new_panel,1)
               s = s.replace(old_movement,new_movement,1)
-              portrait_css = """<style data-mobile-redesign="v1-portrait-movement">
-@media(max-width:1023px) and (orientation:portrait){
-  .mobile-game-shell{flex-direction:column!important}
-  .mobile-game-shell .mobile-action-panel{width:100%!important;max-width:none!important;flex:0 0 min(38dvh,24rem)!important;min-height:0!important;order:0!important;border-bottom:1px solid rgb(68 64 60)!important}
-  .mobile-game-shell .mobile-action-panel>div:first-child{min-height:0!important;overflow-y:auto!important}
-  .mobile-movement-surface{position:sticky;top:0;z-index:20;margin:0 0 .5rem!important;padding:.35rem 0 .5rem!important;background:rgb(28 25 23 / 96%)!important;border-bottom:1px solid rgb(68 64 60)!important}
-}
-</style>"""
+              portrait_css = '<style data-mobile-redesign="v1-portrait-movement">\\n@media(max-width:1023px) and (orientation:portrait){\\n  .mobile-game-shell{flex-direction:column!important}\\n  .mobile-game-shell .mobile-action-panel{width:100%!important;max-width:none!important;flex:0 0 min(38dvh,24rem)!important;min-height:0!important;order:0!important;border-bottom:1px solid rgb(68 64 60)!important}\\n  .mobile-game-shell .mobile-action-panel>div:first-child{min-height:0!important;overflow-y:auto!important}\\n  .mobile-movement-surface{position:sticky;top:0;z-index:20;margin:0 0 .5rem!important;padding:.35rem 0 .5rem!important;background:rgb(28 25 23 / 96%)!important;border-bottom:1px solid rgb(68 64 60)!important}\\n}\\n</style>'
               head_count = s.count("</head>")
               if head_count != 1:
                   raise SystemExit(f"PORTRAIT_MOVEMENT_HEAD_GUARD_FAILED count={head_count}")
