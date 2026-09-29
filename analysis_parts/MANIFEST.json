@@ -1,8 +1,8 @@
 {
   "source": "Wayward_MOD_v2.107.html",
-  "sha256": "e4e516f9a666401db827fc293eed369c1cc9660c2de7b19f8bb361b631af1578",
-  "bytes_utf8": 7399939,
-  "chars": 5631021,
+  "sha256": "bdd5051e45cd60f8cc1297b6893bc6028e261475c483e1bd1d853933fb46eb62",
+  "bytes_utf8": 7399971,
+  "chars": 5631053,
   "lines": 6808,
   "chunk_chars": 80000,
   "parts": [
@@ -429,8 +429,8 @@
     {
       "name": "Wayward_MOD_v2.107.part071.txt",
       "char_start": 5600001,
-      "char_end": 5631021,
-      "chars": 31021
+      "char_end": 5631053,
+      "chars": 31053
     }
   ],
   "max_line_chars": 2468306,
@@ -575,7 +575,7 @@
     "script_blocks": [
       {
         "attrs": " type=\"module\" crossorigin",
-        "chars": 5361440
+        "chars": 5361472
       }
     ],
     "named_function_count": 2752,

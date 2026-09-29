@@ -1,4 +1,4 @@
-uce((v,id)=>v+q[id]*om(ue.getState().state,id),0))}g (배달료 포함)`:'수량 확인 필요'};Object.values(inputs).forEach(x=>x.oninput=update);buy.onclick=()=>{const qty=ko299ReadQty(inputs);if(!qty)return box.show('수량은 품목별 0~99의 정수로 입력해 주세요.',true);if(!ko299Action({type:'ko299_delivery',qty}))return box.show('구매할 수 없습니다. 골드, 이벤트, 수량을 확인해 주세요.',true);box.show('물자가 즉시 도착했습니다.');showSupply()};update()}
+(1.25*['food','beer','wine'].reduce((v,id)=>v+q[id]*om(ue.getState().state,id),0))}g (배달료 포함)`:'수량 확인 필요'};Object.values(inputs).forEach(x=>x.oninput=update);buy.onclick=()=>{const qty=ko299ReadQty(inputs);if(!qty)return box.show('수량은 품목별 0~99의 정수로 입력해 주세요.',true);if(!ko299Action({type:'ko299_delivery',qty}))return box.show('구매할 수 없습니다. 골드, 이벤트, 수량을 확인해 주세요.',true);box.show('물자가 즉시 도착했습니다.');showSupply()};update()}
  showSupply();
  b.append(ko299Node('div','아이템 · 개점 전만 구매 · 장바구니 한 번에 왕복 60분',{className:'heading'}));
  b.append(ko299Node('p','일반 아이템 종류별 10개, 성격개변최면제는 종류별 1개·전체 10개까지 보관합니다. 기존에 더 많이 보관한 세이브의 재고는 유지됩니다.',{className:'muted'}));
@@ -77,5 +77,4 @@ body[data-wayward-theme="ivory"]{--wm-bg950:#d4d8da;--wm-bg900:#e2e5e6;--wm-bg80
 body[data-wayward-theme="charcoal"]{--wm-bg950:#090c0f;--wm-bg900:#12171b;--wm-bg800:#1d2429;--wm-bg700:#2c363e;--wm-bg600:#41505a;--wm-text100:#f2f5f5;--wm-text200:#e1e9e9;--wm-text300:#cbd6d8;--wm-text400:#a6b5b9;--wm-text500:#8799a0;--wm-accent:#e8b974;--wm-focus:#d69b53}
 body[data-wayward-theme="midnight"]{--wm-bg950:#071020;--wm-bg900:#0d1930;--wm-bg800:#182644;--wm-bg700:#283a5d;--wm-bg600:#41577d;--wm-text100:#eef4ff;--wm-text200:#dce7fa;--wm-text300:#bdcfea;--wm-text400:#98b0d5;--wm-text500:#839ec7;--wm-accent:#99c5ff;--wm-focus:#78b2ff}
 body[data-wayward-theme="sage"]{--wm-bg950:#0b1917;--wm-bg900:#10221f;--wm-bg800:#1c312b;--wm-bg700:#30473c;--wm-bg600:#496354;--wm-text100:#f1f6ee;--wm-text200:#dfeadf;--wm-text300:#c6dbc8;--wm-text400:#a6c2ab;--wm-text500:#88a791;--wm-accent:#b6df9d;--wm-focus:#94c77b}
-body[data-wayward-theme] #ko299-modal{color:var(--wm-text100)}
-body[data-wayward-theme] #ko
+body[data-wayward-theme] #ko299-modal{color:var(--wm-text10
