@@ -624,6 +624,7 @@ jobs:
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Apply mobile pane touch guard and validate
+        if: github.ref == 'refs/heads/mobile-redesign-v1'
         shell: bash
         run: |
           set -euo pipefail
@@ -631,37 +632,47 @@ jobs:
           from pathlib import Path
           import re
           import subprocess, tempfile
+
           src = Path("Wayward_MOD_v2.107.html")
           raw = src.read_text(encoding="utf-8")
           marker = "mobile-redesign-v1-pane-touch-guard"
-          if marker in raw:
-              print("MOBILE_PANE_GUARD_ALREADY_PRESENT")
-              raise SystemExit(0)
-          a = 'onPointerDown:y(o[k-1],w),onDoubleClick:()=>t({paneWidths:{...mp}})'
-          b = 'onPointerDown:f(w),onPointerMove:_'
-          if raw.count(a) != 1 or raw.count(b) != 1:
-              raise SystemExit("Expected mobile pane anchors were not found exactly once")
-          x = raw.replace(
-              a,
-              'onPointerDown:h=>{/*mobile-redesign-v1-pane-touch-guard*/if(typeof window!=="undefined"&&window.matchMedia&&window.matchMedia("(max-width:1023px)").matches)return;y(o[k-1],w)(h)},onDoubleClick:()=>t({paneWidths:{...mp}})'
-          )
-          x = x.replace(
-              b,
-              'onPointerDown:h=>{/*mobile-redesign-v1-pane-touch-guard*/if(typeof window!=="undefined"&&window.matchMedia&&window.matchMedia("(max-width:1023px)").matches)return;f(w)(h)},onPointerMove:_'
-          )
-          restored = x.replace(
-              'onPointerDown:h=>{/*mobile-redesign-v1-pane-touch-guard*/if(typeof window!=="undefined"&&window.matchMedia&&window.matchMedia("(max-width:1023px)").matches)return;y(o[k-1],w)(h)},onDoubleClick:()=>t({paneWidths:{...mp}})',
-              a
-          ).replace(
-              'onPointerDown:h=>{/*mobile-redesign-v1-pane-touch-guard*/if(typeof window!=="undefined"&&window.matchMedia&&window.matchMedia("(max-width:1023px)").matches)return;f(w)(h)},onPointerMove:_',
-              b
-          )
-          if restored != raw:
-              raise SystemExit("Diff guard failed")
-          src.write_text(x, encoding="utf-8")
-          scripts = [m.group(1) for m in re.finditer(r"<script\b[^>]*>([\s\S]*?)</script\s*>", x, re.I)]
+          changed = False
+
+          if marker not in raw:
+              a = 'onPointerDown:y(o[k-1],w),onDoubleClick:()=>t({paneWidths:{...mp}})'
+              b = 'onPointerDown:f(w),onPointerMove:_'
+              if raw.count(a) != 1 or raw.count(b) != 1:
+                  raise SystemExit("Expected mobile pane anchors were not found exactly once")
+
+              x = raw.replace(
+                  a,
+                  'onPointerDown:h=>{/*mobile-redesign-v1-pane-touch-guard*/if(typeof window!=="undefined"&&window.matchMedia&&window.matchMedia("(max-width:1023px)").matches)return;y(o[k-1],w)(h)},onDoubleClick:()=>t({paneWidths:{...mp}})',
+                  1
+              ).replace(
+                  b,
+                  'onPointerDown:h=>{/*mobile-redesign-v1-pane-touch-guard*/if(typeof window!=="undefined"&&window.matchMedia&&window.matchMedia("(max-width:1023px)").matches)return;f(w)(h)},onPointerMove:_',
+                  1
+              )
+
+              restored = x.replace(
+                  'onPointerDown:h=>{/*mobile-redesign-v1-pane-touch-guard*/if(typeof window!=="undefined"&&window.matchMedia&&window.matchMedia("(max-width:1023px)").matches)return;y(o[k-1],w)(h)},onDoubleClick:()=>t({paneWidths:{...mp}})',
+                  a,
+                  1
+              ).replace(
+                  'onPointerDown:h=>{/*mobile-redesign-v1-pane-touch-guard*/if(typeof window!=="undefined"&&window.matchMedia&&window.matchMedia("(max-width:1023px)").matches)return;f(w)(h)},onPointerMove:_',
+                  b,
+                  1
+              )
+              if restored != raw:
+                  raise SystemExit("Diff guard failed")
+
+              src.write_text(x, encoding="utf-8")
+              raw = x
+              changed = True
+
+          scripts = [m.group(1) for m in re.finditer(r"<script\b[^>]*>([\s\S]*?)</script\s*>", raw, re.I)]
           checked = 0
-          for i, code in enumerate(scripts, 1):
+          for code in scripts:
               if not code.strip():
                   continue
               with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8", delete=False) as h:
@@ -672,8 +683,20 @@ jobs:
               finally:
                   Path(p).unlink(missing_ok=True)
               checked += 1
-          print("MOBILE_PANE_GUARD_OK inline_scripts=" + str(checked))
+
+          subprocess.run(["git", "diff", "--check"], check=True)
+          print("MOBILE_PANE_GUARD=" + ("applied" if changed else "already-present"))
+          print("INLINE_SCRIPTS=" + str(checked))
+          print("SYNTAX_CHECK=PASS")
           PY
+
           git add Wayward_MOD_v2.107.html
+          if git diff --cached --quiet; then
+            echo "No pane source changes to commit"
+            exit 0
+          fi
+
           git commit -m "fix: disable pane drag and resize on mobile"
-          git push
+          git fetch origin "${GITHUB_REF_NAME}"
+          git rebase "origin/${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
