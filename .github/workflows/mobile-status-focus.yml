@@ -6,6 +6,11 @@ on:
     paths:
       - "Wayward_MOD_v2.107.html"
       - ".github/workflows/mobile-status-focus.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Wayward_MOD_v2.107.html"
+      - ".github/workflows/mobile-status-focus.yml"
   workflow_dispatch:
 
 permissions:
@@ -17,6 +22,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Patch mobile focus status owner
         shell: bash
@@ -33,16 +40,24 @@ jobs:
           old2 = 'r==="focus"&&v(y?"inline":"external")'
           new2 = 'r==="focus"&&v("inline",!0,!1)'
 
-          if s.count(old1) != 1:
-              raise SystemExit(f"PATCH_GUARD_FAILED old1 count={s.count(old1)}")
-          if s.count(old2) != 1:
-              raise SystemExit(f"PATCH_GUARD_FAILED old2 count={s.count(old2)}")
+          if "mobile-redesign-v1-status-focus" not in s:
+              if s.count(old1) != 1:
+                  raise SystemExit(f"PATCH_GUARD_FAILED old1 count={s.count(old1)}")
+              if s.count(old2) != 1:
+                  raise SystemExit(f"PATCH_GUARD_FAILED old2 count={s.count(old2)}")
+              s = s.replace(old1, new1, 1).replace(old2, new2, 1)
 
-          s = s.replace(old1, new1, 1).replace(old2, new2, 1)
-          if "mobile-redesign-v1-status-focus" in s:
-              raise SystemExit("PATCH_GUARD_FAILED marker already present")
+          map_marker = "mobile-redesign-v1-mobile-map-surface"
+          map_anchor = ".map-pinned>div{margin:0!important;border:0!important;background:transparent!important}"
+          if map_marker not in s:
+              if s.count(map_anchor) != 1:
+                  raise SystemExit(f"MAP_GUARD_FAILED anchor count={s.count(map_anchor)}")
+              map_css = map_anchor + ".map-pinned{position:fixed!important;inset:0!important;z-index:15!important;width:100vw!important;height:100dvh!important;max-width:none!important;max-height:none!important;overflow:auto!important;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)!important;background:rgba(12,10,9,.98)!important;overscroll-behavior:contain!important;touch-action:pan-x pan-y!important;isolation:isolate!important}/*" + map_marker + "*/"
+              s = s.replace(map_anchor, map_css, 1)
 
-          s = s.replace(
+          p.write_text(s, encoding="utf-8")
+          print("STATUS_AND_MAP_PATCH_APPLIED_OR_PRESENT")
+
               'v=(A,C=!0,D=y)=>m.jsx(Pie,{hideWifeColumn:D,',
               '/*mobile-redesign-v1-status-focus*/v=(A,C=!0,D=y)=>m.jsx(Pie,{hideWifeColumn:D,',
               1,
@@ -86,5 +101,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Wayward_MOD_v2.107.html
-          git commit -m "fix: expose portrait status on mobile focus"
-          git push
+          git commit -m "fix: apply mobile status and map surfaces"
+          git push origin "HEAD:${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
