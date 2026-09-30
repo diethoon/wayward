@@ -1,1 +1,0 @@
-function whe({onClose:e}

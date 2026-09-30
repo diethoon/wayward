@@ -1,1 +1,0 @@
-function V5({label:e,title:t,onClick:o,disabled:n}
