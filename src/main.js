@@ -1420,16 +1420,26 @@ m.jsxs("span",{children:["기력 ",h," · 기분 ",c," · 신뢰도 ",u]}),
 p.length>0&&m.jsxs(m.Fragment,{children:[m.jsx("br",{}),m.jsxs("span",{children:["함께 있음: ",p.join(", ")]})]})
 ]})
 ]}):m.jsxs(m.Fragment,{children:[
-m.jsxs("div",{className:"min-w-0 shrink-0",children:[m.jsx("div",{className:"text-sm font-semibold text-amber-300 whitespace-nowrap",children:rr(n)}),m.jsx("div",{className:"text-[0.65rem] text-stone-500 whitespace-nowrap",children:"현재 위치"})]}),
+m.jsxs("div",{className:"px-2.5 py-2 flex items-center gap-2 border-b border-stone-800",children:[
+m.jsxs("div",{className:"min-w-0 shrink-0",children:[
+m.jsx("div",{className:"text-sm font-semibold text-amber-300 whitespace-nowrap",children:rr(n)}),
+m.jsx("div",{className:"text-[0.65rem] text-stone-500 whitespace-nowrap",children:"현재 위치"})
+]}),
 m.jsx("span",{className:"h-7 w-px bg-stone-800"}),
 m.jsxs("div",{className:"min-w-0 flex-1",children:[
-m.jsxs("div",{className:"flex items-baseline gap-2",children:[m.jsx("span",{className:"text-[0.78rem] font-semibold text-stone-200 whitespace-nowrap",children:"당신"}),m.jsx("span",{className:"text-[0.7rem] text-stone-400 whitespace-nowrap",children:e.phase==="prep"?"준비 중":dle(e)})]}),
+m.jsxs("div",{className:"flex items-baseline gap-2",children:[
+m.jsx("span",{className:"text-[0.78rem] font-semibold text-stone-200 whitespace-nowrap",children:"당신"}),
+m.jsx("span",{className:"text-[0.7rem] text-stone-400 whitespace-nowrap",children:e.phase==="prep"?"준비 중":dle(e)})
+]}),
 m.jsx("div",{className:"mt-1",children:m.jsx(Use,{inline:!0})})
 ]})
 ]}),
 m.jsx("button",{type:"button",onClick:()=>a(v=>v==="wife"?"":"wife"),className:"w-full text-left px-2.5 py-2 hover:bg-stone-800/60 transition-colors",children:m.jsxs("div",{className:"flex items-start gap-2",children:[
 m.jsxs("div",{className:"min-w-0 flex-1",children:[
-m.jsxs("div",{className:"flex items-baseline gap-2",children:[m.jsx("span",{className:"text-sm font-semibold text-pink-300 whitespace-nowrap",children:rr(s)}),m.jsx("span",{className:"text-[0.7rem] text-stone-400 truncate",children:o.name+" · "+i+(p.length?" · 함께: "+p.join(", "):"")})]}),
+m.jsxs("div",{className:"flex items-baseline gap-2",children:[
+m.jsx("span",{className:"text-sm font-semibold text-pink-300 whitespace-nowrap",children:rr(s)}),
+m.jsx("span",{className:"text-[0.7rem] text-stone-400 truncate",children:o.name+" · "+i+(p.length?" · 함께: "+p.join(", "):"")})
+]}),
 m.jsx("div",{className:"mt-1",children:m.jsx(Qm,{inline:!0,bars:[
 {key:"energy",label:"기력",value:h,tone:ll(h),title:o.name+" · 기력 "+h},
 {key:"mood",label:"기분",value:c,tone:ll(c),title:o.name+" · 기분 "+c},
@@ -1438,9 +1448,11 @@ m.jsx("div",{className:"mt-1",children:m.jsx(Qm,{inline:!0,bars:[
 ]}),
 m.jsx("span",{className:"shrink-0 text-stone-500 text-sm pt-0.5",children:r==="wife"?"▾":"▸"})
 ]})}),
-r==="wife"&&m.jsxs("div",{className:"border-t border-stone-800 bg-stone-950/30 p-2",children:[m.jsxs("div",{className:"text-xs text-stone-400 space-y-1",children:[
-m.jsxs("div",{children:["현재 위치: ",rr(s)]}),m.jsxs("div",{children:["현재 행동: ",i]}),m.jsxs("div",{children:["기력 ",h," · 기분 ",c," · 신뢰도 ",u]})
-]})]})
+r==="wife"&&m.jsx("div",{className:"border-t border-stone-800 bg-stone-950/30 p-2",children:m.jsxs("div",{className:"text-xs text-stone-400 space-y-1",children:[
+m.jsxs("div",{children:["현재 위치: ",rr(s)]}),
+m.jsxs("div",{children:["현재 행동: ",i]}),
+m.jsxs("div",{children:["기력 ",h," · 기분 ",c," · 신뢰도 ",u]})
+]})})
 ]})
 ]})
 }function WaywardCurrentActivity(){
