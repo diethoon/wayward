@@ -792,3 +792,26 @@ body[data-wayward-theme="ivory"] [class~="text-yellow-600"]{color:#854d0e!import
     margin-top:.08rem !important; font-size:.62rem !important; line-height:1.08 !important;
   }
 }
+
+
+@media (max-width:1023px) {
+  .mobile-status-summary-row-wife {
+    display:block !important; min-height:0 !important; padding:.04rem .1rem !important;
+  }
+  .mobile-status-row-wife .mobile-status-wife-grid,
+  .mobile-status-summary-row-wife .mobile-status-wife-grid {
+    display:block !important; width:100% !important; min-width:0 !important;
+  }
+  .mobile-status-summary-row-wife .mobile-status-wife-head {
+    display:grid !important; grid-template-columns:2.7rem minmax(0,1fr) .9rem !important;
+    width:100% !important; min-width:0 !important; align-items:center !important;
+  }
+  .mobile-status-summary-row-wife .mobile-status-wife-stats {
+    display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+    width:auto !important; min-width:0 !important; margin:.03rem 0 0 2.7rem !important;
+  }
+  .mobile-status-summary-row-wife .mobile-status-wife-stats span {
+    font-size:.68rem !important; line-height:1.08 !important; white-space:nowrap !important;
+    overflow:hidden !important; text-overflow:ellipsis !important; word-break:keep-all !important;
+  }
+}
