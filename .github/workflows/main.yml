@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   split:
-    if: github.ref != 'refs/heads/studio'
+    # Studio도 대형 실행본을 동일한 compact 분석 파이프라인으로 검증한다.
     runs-on: ubuntu-latest
 
     steps:
