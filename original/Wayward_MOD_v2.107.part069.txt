@@ -1,0 +1,494 @@
+"div",{className:"flex items-center justify-between px-3 py-2 border-b border-stone-800",children:[m.jsxs("div",{className:"text-xs text-stone-400",children:["기록된 오류 (",t.length,")"]}),m.jsxs("div",{className:"flex items-center gap-2",children:[m.jsx("button",{onClick:()=>aR(),className:"text-xs text-stone-500 hover:text-stone-200",children:"비우기"}),m.jsx("button",{onClick:e,className:"text-stone-500 hover:text-stone-200 text-xs",children:"✕"})]})]}),m.jsx("div",{className:"overflow-y-auto text-[11px] font-mono leading-snug p-2 space-y-2 text-stone-300",children:t.map((o,n)=>m.jsxs("div",{className:"border-l-2 border-rose-800 pl-2",children:[m.jsxs("div",{className:"text-stone-500",children:[o.at.toLocaleTimeString()," · ",o.source]}),m.jsx("div",{className:"whitespace-pre-wrap break-words text-rose-200",children:o.message}),o.stack&&m.jsx("div",{className:"whitespace-pre-wrap break-words text-stone-500 mt-1",children:o.stack})]},n))})]})}const sy=["웨이워드는 번듯한 곳이라면 어디서든 말을 타고 이틀은 와야 닿는 곳에 있습니다. 지붕은 두 군데서 새고, 문 위의 종에는 종추가 없습니다. 벌이는 임대료를 겨우 낼 정도입니다. 납부일은 매주 일요일입니다.","{wifeName}은(는) 당신과 함께 홀을 맡습니다. 손님이 자리에 다 앉기도 전에 이름과 마시는 술을 알고 있습니다. 이제 그녀의 이름을 아는 손님도 생기기 시작했습니다."];function oce(){const e=ue(i=>{var h;return((h=g(i.state))==null?void 0:h.name)??"그녀"}),t=vt(i=>i.set),[o,n]=X.useState(0),s=()=>t({onboardingSeen:!0}),r=o===sy.length-1,a=sy[o].replace("{wifeName}",e);return m.jsx("div",{className:"min-h-screen flex flex-col items-center justify-center bg-stone-900 text-stone-100 px-6 py-12",children:m.jsxs("div",{className:"max-w-xl w-full",children:[m.jsx("p",{className:"text-lg leading-relaxed text-stone-200 min-h-[8rem]",children:a}),m.jsxs("div",{className:"mt-8 flex items-center justify-between",children:[m.jsx("div",{className:"flex gap-1.5",children:sy.map((i,h)=>m.jsx("span",{className:["block h-1.5 w-6 rounded-full",h===o?"bg-amber-500":h<o?"bg-amber-800":"bg-stone-700"].join(" ")},h))}),m.jsxs("div",{className:"flex gap-2",children:[m.jsx("button",{onClick:s,className:"px-3 py-1.5 text-xs text-stone-500 hover:text-stone-300",children:"건너뛰기"}),r?m.jsx("button",{onClick:s,className:"px-5 py-2 bg-amber-700 hover:bg-amber-600 text-white rounded text-sm font-medium",children:"시작하기"}):m.jsx("button",{onClick:()=>n(i=>i+1),className:"px-5 py-2 bg-amber-700 hover:bg-amber-600 text-white rounded text-sm font-medium",children:"다음"})]})]})]})})}function nce(){koImageSession297();const e=vt(I=>I.fontScale);X.useEffect(()=>{document.documentElement.style.fontSize=`${e*16}px`},[e]);const t=vt(I=>I.imageBackendMode),o=vt(I=>I.imageBackendUrl);X.useEffect(()=>{u3({mode:t,url:o,allowAutoProbe:d3()})},[t,o]);const n=ue(I=>I.started),s=ue(I=>I.selectingArchetype),r=ue(I=>I.selectingBuilder),a=ue(I=>I.selectingBackstory),i=ue(I=>I.pendingStarterId),h=ue(I=>I.state.day),c=vt(I=>I.onboardingSeen),u=n&&!c&&h===1,f=ue(I=>I.chooseStarter),_=ue(I=>I.pendingCustomArchetype),y=ue(I=>I.backFromBackstory),w=ue(I=>I.startGameWithBackstory),k=ue(I=>I.openWifeBuilder),v=ue(I=>I.builderEditId),S=ue(I=>I.closeWifeBuilder),$=ue(I=>I.returnToTitle),j=r?m.jsx(Vhe,{editId:v??void 0,onSaved:S,onBack:S}):a&&i?m.jsx(Khe,{archetypeId:i,archetype:_??void 0,onConfirm:I=>w(i,I),onBack:y}):s?m.jsx(zhe,{onSelect:f,onOpenBuilder:k,onBack:$}):n?u?m.jsx(oce,{}):m.jsx(Ihe,{}):m.jsx(Phe,{});return m.jsxs(m.Fragment,{children:[j,m.jsx(ece,{})]})}function sce(){"serviceWorker"in navigator&&/^https?:$/.test(window.location.protocol)&&navigator.serviceWorker.register(new URL("sw.js",window.location.href).href).catch(e=>{console.warn("[wayward] service worker not registered",e)})}Xhe();Fse(window.location.search);sce();uD.createRoot(document.getElementById("root")).render(m.jsx(X.StrictMode,{children:m.jsx(nce,{})}));
+
+/* --- Wayward MOD v2.103 (safe whitelist + guarded debug mode) --- */
+(()=>{
+  const WC2_TRAITS=[
+    {id:'true_prude',name:'극도로 보수적',desc:'노출·대담함·성적 행동 전반에 강한 저항을 보이는 성향.'},
+    {id:'self_protective',name:'자기보호적',desc:'위험하거나 꺼림칙한 상황에서 자신을 더 강하게 방어하는 성향.'},
+    {id:'latent_dominant',name:'지배 성향',desc:'주도권을 잡는 행동에 기울고 복종 쪽에는 불리한 보정이 생길 수 있음.'},
+    {id:'romance_starved',name:'애정에 굶주림',desc:'다정함·정서적 친밀감·로맨스에 더 크게 반응하는 성향.'},
+    {id:'likes_cheating',name:'외도 성향',desc:'배우자 밖의 관계나 금기를 넘는 상황에 더 끌릴 수 있는 성향.'},
+    {id:'cold_pragmatist',name:'냉정한 실리주의자',desc:'감정보다 현실적 이득, 특히 금전 제안을 더 중시하는 성향.'},
+    {id:'breaks_under_pressure',name:'압박에 약함',desc:'지속적인 압박이나 밀어붙임에 더 쉽게 흔들리는 성향.'},
+    {id:'guilt_eroticizer',name:'죄책감에서 흥분',desc:'죄책감·수치감이 역설적으로 자극으로 작용하기 쉬운 성향.'},
+    {id:'latent_exhibitionist',name:'노출 성향',desc:'남의 시선과 공개적인 노출 상황에 더 긍정적으로 반응하는 성향.'},
+    {id:'public_thrill_seeker',name:'공개 스릴 추구',desc:'들킬 위험과 공개적인 상황의 스릴에 더 끌리는 성향.'},
+    {id:'latent_submissive',name:'복종 성향',desc:'상대에게 주도권을 넘기고 따르는 행동에 더 기울기 쉬운 성향.'},
+    {id:'easily_intoxicated',name:'술에 쉽게 취함',desc:'음주 상태에서 판단과 반응이 더 크게 변하는 성향.'},
+    {id:'enjoys_making_him_jealous',name:'질투 유발을 즐김',desc:'배우자의 질투를 유도하는 상황 자체에 자극을 느끼는 성향.'},
+    {id:'wants_to_be_corrupted',name:'타락 욕구',desc:'자신이 점점 변하고 선을 넘는 과정 자체에 끌리는 성향.'},
+    {id:'latent_masochist',name:'피학 성향',desc:'거친 자극·고통·굴욕 계열에 반응할 수 있는 숨은 성향.'},
+    {id:'latent_voyeur',name:'관음 성향',desc:'다른 사람의 행동을 지켜보는 상황에 반응하는 숨은 성향.'},
+    {id:'curious_about_women',name:'여성에게 호기심',desc:'여성 대상 관계나 이벤트에 반응하는 숨은 성향.'},
+    {id:'jealousy_kindled',name:'질투로 자극받음',desc:'질투와 경쟁 구도가 감정적·성적 자극이 되기 쉬운 성향.'},
+    {id:'wary_of_drinks',name:'술을 경계함',desc:'술과 관련된 권유와 상황을 더 조심스럽게 받아들이는 성향.'},
+    {id:'latent_self_pleasure',name:'숨겨진 자기쾌락 성향',desc:'혼자 욕구를 해소하는 상황에 반응하는 숨은 성향.'}
+  ];
+  const WC2_TRAIT_IDS=new Set(WC2_TRAITS.map(x=>x.id));
+
+  const WC2_ATTRS=[
+    ['strength','힘','육체적인 힘. 힘겨루기·신체적 판정 등에 사용됩니다.'],
+    ['deftness','손재주','정교함과 손놀림. 작업·기민한 행동 계열에 쓰입니다.'],
+    ['vigor','활력','체력과 버티는 힘에 가까운 능력치입니다.'],
+    ['wit','재치','상황 판단, 눈치, 속임수 간파 등에 관여합니다.'],
+    ['composure','침착성','압박·수치·감정 흔들림을 버티는 능력입니다.'],
+    ['charm','매력','사회적·대인 매력과 관련된 능력치입니다.'],
+    ['openness','개방성','새로운 경험과 성적·사회적 개방성에 관여합니다.'],
+    ['confidence','자신감','자기주장과 압박 저항, 여러 행동 판정에 관여합니다.'],
+    ['honesty','정직성','숨기기/고백하기 및 비밀 관련 판정에 관여합니다.']
+  ];
+  const WC2_AFFINITIES=[
+    ['romantic','로맨스','애정·다정함·정서적 친밀감 선호'],
+    ['oral','구강','구강 계열 행동 선호'],
+    ['vaginal','성관계','일반 성관계 선호'],
+    ['anal','항문','항문 계열 행동 선호'],
+    ['exhibition','노출','노출 및 남의 시선에 대한 선호'],
+    ['submission','복종','상대에게 주도권을 넘기는 행동 선호'],
+    ['domination','지배','본인이 주도권을 잡는 행동 선호'],
+    ['prostitution','금전 관계','금전 대가가 있는 상황에 대한 선호'],
+    ['drinking','음주','술과 음주 상황에 대한 선호'],
+    ['taboo','금기','금기·선을 넘는 상황에 대한 선호']
+  ];
+  const WC2_PLAYER_PERSONALITY=[
+    ['dominance','지배성','플레이어가 지배적인 태도를 취할 때의 기반 수치'],
+    ['charisma','카리스마','설득·매력적인 태도에 쓰이는 플레이어 성격 수치'],
+    ['cunning','교활함','기만·속임수·계략 계열에 쓰이는 플레이어 성격 수치']
+  ];
+
+  const WC2_HUSBAND_FEELINGS=[
+    ['devotion','헌신','남편을 향한 지속적인 헌신. 게임의 긍정 관계 감정군에 포함됩니다.'],
+    ['tenderness','다정함','남편에게 느끼는 애정과 부드러운 감정.'],
+    ['longing','갈망/열망','남편의 관심과 친밀감을 그리워하는 감정.'],
+    ['desire','남편을 향한 욕망','남편을 대상으로 한 성적 욕망.'],
+    ['pushed_away','마음을 닫음 (실망 계열)','원본에는 disappointment라는 별도 감정 ID가 없습니다. 관계에서 밀려났다고 느껴 마음의 벽을 세운 상태입니다.'],
+    ['contempt','경멸/원망','남편을 향한 지속적인 경멸. 화면의 원망 계산에도 강하게 반영됩니다.'],
+    ['anger','분노','남편을 향한 분노. 원망 계열 계산에 포함됩니다.'],
+    ['disgust','혐오','남편을 대상으로 한 혐오감. 원망 계열 계산에 포함됩니다.'],
+    ['shame','수치심','남편과의 관계를 대상으로 한 수치심. 원망 계열 계산에 포함됩니다.'],
+    ['guilt','죄책감','남편과의 관계를 대상으로 한 죄책감. 원망 계열 계산에 포함됩니다.'],
+    ['regret','후회','남편과의 관계에서 느끼는 후회. 실망과 가까운 장면에서 나타날 수 있습니다.'],
+    ['sadness','슬픔','남편과의 관계에서 생긴 슬픔. 원망 계열 계산에 포함됩니다.'],
+    ['humiliation','굴욕감','남편을 대상으로 한 굴욕감. 원망 계열 계산에 포함됩니다.']
+  ];
+  const WC2_SPELL_LABELS={assay_purse:'주머니 감정',strengthen:'강화',weaken:'약화',sway_affinity:'마음 흔들기'};
+  const WC2_OPTIONS_KEY='wayward-cheat-v22-options';
+  let wc2Options={infiniteMana:false};
+  try{Object.assign(wc2Options,JSON.parse(localStorage.getItem(WC2_OPTIONS_KEY)||'{}'))}catch{}
+  const saveOptions=()=>{try{localStorage.setItem(WC2_OPTIONS_KEY,JSON.stringify(wc2Options))}catch{}};
+
+  // 원본 캐릭터 상세창의 누락 특성 라벨 보완. 상태값은 변경하지 않고 표시명만 추가합니다.
+  try{Object.assign(eie,{
+    self_protective:{label:'자기보호적',hint:'위험하거나 꺼림칙한 상황에서 자신을 더 강하게 방어함'},
+    likes_cheating:{label:'외도 성향',hint:'배우자 밖의 관계나 금기를 넘는 상황에 더 끌릴 수 있음'},
+    enjoys_making_him_jealous:{label:'질투 유발을 즐김',hint:'배우자의 질투를 유도하는 상황 자체를 즐김'},
+    wants_to_be_corrupted:{label:'타락 욕구',hint:'자신이 변하고 선을 넘는 과정 자체에 끌림'},
+    wary_of_drinks:{label:'술을 경계함',hint:'술과 관련된 권유와 상황을 더 조심스럽게 받아들임'},
+    latent_self_pleasure:{label:'숨겨진 자기쾌락 성향',hint:'혼자 욕구를 해소하는 상황에 반응하는 숨은 성향'}
+  })}catch{}
+
+  const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+  function clone(v){try{return structuredClone(v)}catch(_){return JSON.parse(JSON.stringify(v))}}
+  function getPrimary(s){return s&&s.characters&&s.primaryCharacterId?s.characters[s.primaryCharacterId]??null:null}
+  function getPath(obj,path){let cur=obj;for(const k of path){if(cur==null)return undefined;cur=cur[k]}return cur}
+  function setPath(obj,path,value){let cur=obj;for(let i=0;i<path.length-1;i++){const k=path[i];if(!cur[k]||typeof cur[k]!=='object')cur[k]={};cur=cur[k]}cur[path[path.length-1]]=value}
+  function el(tag,props={},children=[]){const n=document.createElement(tag);for(const[k,v]of Object.entries(props)){if(k==='className')n.className=v;else if(k==='text')n.textContent=v;else if(k==='style'&&v)Object.assign(n.style,v);else if(k.startsWith('on')&&typeof v==='function')n.addEventListener(k.slice(2).toLowerCase(),v);else if(v!==undefined&&v!==null)n.setAttribute(k,String(v))}for(const c of(Array.isArray(children)?children:[children])){if(c==null)continue;n.appendChild(typeof c==='string'?document.createTextNode(c):c)}return n}
+  const fmt=v=>Number.isInteger(v)?String(v):String(Number(v.toFixed? v.toFixed(2):v));
+  const wc2RememberValue=i=>{i.dataset.wc2InitialValue=i.value;return i};
+  const wc2RememberCheck=i=>{i.dataset.wc2InitialChecked=i.checked?'1':'0';return i};
+  const wc2ValueChanged=i=>Number(i.value)!==Number(i.dataset.wc2InitialValue);
+  const wc2CheckChanged=i=>(i.checked?'1':'0')!==i.dataset.wc2InitialChecked;
+
+  function husbandFeelingValue(wife,id){let best=0;for(const f of wife?.feelings??[]){if(f?.emotion===id&&f?.target?.kind==='husband')best=Math.max(best,Number(f.intensity)||0)}return clamp(best,0,100)}
+  function setHusbandFeeling(wife,id,value,slot){const keep=(wife.feelings??[]).filter(f=>!(f?.emotion===id&&f?.target?.kind==='husband'));const v=clamp(Number(value)||0,0,100);if(v>0)keep.push({emotion:id,intensity:v,source:'cheat:husband_feeling',triggeredAtSlot:slot??0,expiresAtSlot:(slot??0)+10000,target:{kind:'husband'},class:'persistent'});wife.feelings=keep}
+
+  function init(){
+    if(typeof ue==='undefined'||!ue?.getState||document.getElementById('wc2-toggle'))return;
+    const css=el('style',{id:'wc2-style',text:`
+      #wc2-toggle{position:fixed;left:16px;bottom:16px;z-index:99998;background:#7c2d12;color:#fff;border:1px solid #f59e0b;border-radius:999px;padding:10px 14px;font:700 14px/1.2 "Malgun Gothic","Apple SD Gothic Neo",sans-serif;box-shadow:0 10px 26px rgba(0,0,0,.4);cursor:pointer}
+      #wc2-panel{display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.7);backdrop-filter:blur(2px);font-family:"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif;color:#f5f5f4}
+      #wc2-panel.open{display:block}.wc2-shell{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(1520px,96vw);height:min(91vh,960px);display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:12px}.wc2-card{min-width:0;height:100%;display:flex;flex-direction:column;background:#171312;border:1px solid #57534e;border-radius:16px;box-shadow:0 25px 90px rgba(0,0,0,.55);overflow:hidden}.wc2-live{min-width:0;height:100%;display:flex;flex-direction:column;background:#171312;border:1px solid #57534e;border-radius:16px;box-shadow:0 25px 90px rgba(0,0,0,.45);overflow:hidden}.wc2-live-head{padding:13px 14px;border-bottom:1px solid #292524;background:#1c1917}.wc2-live-title{font-size:15px;font-weight:800;color:#fbbf24}.wc2-live-sub{font-size:10px;color:#a8a29e;line-height:1.4;margin-top:3px}.wc2-live-body{flex:1;min-height:0;overflow-y:auto;padding:10px}.wc2-live-group{border:1px solid #292524;border-radius:10px;background:#0c0a09;margin-bottom:9px;overflow:hidden}.wc2-live-group summary{cursor:pointer;padding:9px 10px;font-size:12px;font-weight:800;color:#fde68a;background:#1c1917}.wc2-live-group-body{padding:7px}.wc2-live-row{padding:7px 0;border-bottom:1px solid rgba(87,83,78,.25)}.wc2-live-row:last-child{border-bottom:none}.wc2-live-row-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px}.wc2-live-label{min-width:0;overflow-wrap:anywhere;font-size:11px;font-weight:700;color:#e7e5e4}.wc2-live-lock{font-size:9px;color:#a8a29e;display:flex;align-items:center;gap:4px;white-space:nowrap}.wc2-live-controls{display:grid;grid-template-columns:minmax(0,1fr) 72px;gap:6px;align-items:center}.wc2-live-controls.no-slider{grid-template-columns:1fr}.wc2-live-controls input[type=range]{width:100%;accent-color:#d97706}.wc2-live-controls input[type=number]{width:100%;box-sizing:border-box;background:#171312;color:#fff;border:1px solid #57534e;border-radius:6px;padding:5px 6px;font-size:11px}.wc2-live-note{font-size:9px;color:#78716c;line-height:1.35;margin-top:4px}.wc2-head-actions{display:flex;align-items:center;gap:7px}.wc2-live-drawer-btn,.wc2-live-close{display:none!important}
+      .wc2-header,.wc2-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;background:#1c1917}.wc2-header{border-bottom:1px solid #292524}.wc2-footer{border-top:1px solid #292524;flex-wrap:wrap}
+      .wc2-title{font-size:20px;font-weight:800;color:#fbbf24}.wc2-sub{font-size:11px;color:#a8a29e;margin-top:3px;line-height:1.4}.wc2-safe{display:inline-block;margin-left:8px;color:#86efac;border:1px solid #166534;background:#052e16;padding:2px 6px;border-radius:999px;font-size:10px;vertical-align:2px}
+      .wc2-tabs{display:flex;gap:6px;padding:10px 14px;border-bottom:1px solid #292524;background:#0c0a09;overflow-x:auto}.wc2-tabs button{white-space:nowrap}.wc2-tabs button.active{background:#92400e;border-color:#f59e0b;color:#fff}
+      .wc2-body{flex:1;min-height:0;overflow:auto;padding:16px}.wc2-view{display:none}.wc2-view.active{display:block}.wc2-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}.wc2-stack{min-width:0;display:flex;flex-direction:column;gap:14px}
+      .wc2-box{min-width:0;background:#1c1917;border:1px solid #44403c;border-radius:12px;padding:14px}.wc2-box h3{margin:0 0 8px;font-size:15px;color:#fde68a}.wc2-note{font-size:11px;color:#a8a29e;line-height:1.45;margin-bottom:10px}.wc2-warn{font-size:11px;color:#fcd34d;background:#451a03;border:1px solid #92400e;border-radius:8px;padding:8px 10px;line-height:1.45;margin-bottom:10px}
+      .wc2-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.wc2-grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.wc2-field{min-width:0;background:#0c0a09;border:1px solid #292524;border-radius:9px;padding:8px}.wc2-field-top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:3px 8px;align-items:baseline;margin-bottom:5px}.wc2-field-top>label,.wc2-field-top>span:first-child{min-width:0;overflow-wrap:anywhere}.wc2-field label{font-size:12px;color:#e7e5e4;font-weight:700}.wc2-range{flex-shrink:0;white-space:nowrap;font-size:9px;color:#78716c}.wc2-visitor-grid .wc2-field-top{font-size:13px}.wc2-desc{font-size:10px;color:#78716c;line-height:1.3;min-height:2.5em;margin-top:4px}.wc2-field input[type=number]{width:100%;box-sizing:border-box;background:#171312;color:#fff;border:1px solid #57534e;border-radius:7px;padding:7px 8px;font-size:13px}.wc2-field input:disabled{opacity:.45}.wc2-select{width:100%;box-sizing:border-box;background:#0c0a09;color:#fff;border:1px solid #57534e;border-radius:7px;padding:8px 9px;font-size:12px;margin-bottom:10px}
+      .wc2-trait-head,.wc2-trait{display:grid;grid-template-columns:minmax(0,1.5fr) 70px 70px;gap:8px;align-items:center}.wc2-trait-head{font-size:10px;color:#78716c;padding:6px 0}.wc2-trait{padding:8px 0;border-bottom:1px solid rgba(87,83,78,.35)}.wc2-trait:last-child{border-bottom:none}.wc2-trait-name{font-size:12px;font-weight:700}.wc2-trait-id{font-size:9px;color:#78716c}.wc2-trait-desc{font-size:10px;color:#a8a29e;line-height:1.35;margin-top:2px}.wc2-center{text-align:center}.wc2-center input{transform:scale(1.12)}
+      .wc2-aff-row{display:grid;grid-template-columns:minmax(0,1fr) 130px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(87,83,78,.3)}.wc2-aff-row:last-child{border-bottom:none}.wc2-aff-title{font-size:12px;font-weight:700}.wc2-aff-desc{font-size:10px;color:#78716c;margin-top:2px}.wc2-aff-row input{width:100%;box-sizing:border-box;background:#0c0a09;color:#fff;border:1px solid #57534e;border-radius:7px;padding:7px 8px}
+      .wc2-pills{display:flex;gap:7px;flex-wrap:wrap}.wc2-pill{font-size:10px;padding:4px 8px;border:1px solid #44403c;border-radius:999px;background:#292524;color:#e7e5e4}.wc2-ro{display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:6px 0;border-bottom:1px solid rgba(87,83,78,.3)}.wc2-ro:last-child{border-bottom:none}.wc2-ro span:first-child{min-width:0;overflow-wrap:anywhere}.wc2-ro span:last-child{flex-shrink:0;color:#fbbf24;font-family:monospace}
+      .wc2-toggle-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid rgba(87,83,78,.3)}.wc2-toggle-row:last-child{border-bottom:none}.wc2-toggle-row input[type=checkbox]{transform:scale(1.18);margin:3px 3px 0 0}.wc2-toggle-label{font-size:12px;font-weight:700;color:#e7e5e4}.wc2-toggle-desc{font-size:10px;color:#78716c;line-height:1.35;margin-top:2px}
+      #wc2-panel button{background:#44403c;color:#f5f5f4;border:1px solid #57534e;border-radius:8px;padding:8px 11px;font-size:12px;font-weight:700;cursor:pointer}#wc2-panel button:hover{filter:brightness(1.12)}#wc2-panel button.primary{background:#b45309;border-color:#f59e0b}#wc2-panel button.good{background:#166534;border-color:#22c55e}#wc2-panel button.bad{background:#7f1d1d;border-color:#ef4444}#wc2-panel button:disabled{opacity:.35;cursor:not-allowed}.wc2-actions{display:flex;flex-wrap:wrap;gap:7px}.wc2-status{font-size:11px;color:#93c5fd;min-height:1.2em;flex:1;min-width:180px}.wc2-debug-control{margin-left:auto;display:flex;align-items:center;gap:9px;max-width:310px;padding:6px 8px;border:1px solid #78350f;border-radius:9px;background:#1c1208;cursor:pointer}.wc2-debug-control input{transform:scale(1.15);flex:none}.wc2-debug-title{font-size:11px;font-weight:800;color:#fbbf24}.wc2-debug-desc{font-size:9px;line-height:1.3;color:#d6d3d1}
+      @media(max-width:1500px){.wc2-shell{width:min(1180px,96vw);height:min(94vh,960px);display:block}.wc2-card{height:100%}.wc2-live{display:none;position:absolute;right:0;top:0;width:min(360px,92vw);height:100%;z-index:5;border-radius:16px}.wc2-live.open{display:flex}.wc2-live-drawer-btn,.wc2-live-close{display:inline-block!important}}
+      @media(max-width:880px){.wc2-columns{grid-template-columns:1fr}.wc2-grid3{grid-template-columns:repeat(2,minmax(0,1fr))}.wc2-shell{height:94vh}}
+      @media(max-width:560px){.wc2-grid,.wc2-grid3{grid-template-columns:1fr}.wc2-trait-head,.wc2-trait{grid-template-columns:minmax(0,1fr) 55px 55px}.wc2-aff-row{grid-template-columns:minmax(0,1fr) 100px}.wc2-shell{width:98vw}.wc2-header,.wc2-footer{padding:10px 12px;gap:8px}.wc2-body{padding:12px}.wc2-title{font-size:17px}.wc2-live{width:96vw}.wc2-live-controls{grid-template-columns:minmax(0,1fr) 68px}}
+    `});document.head.appendChild(css);
+
+    const toggle=el('button',{id:'wc2-toggle',text:'Wayward MOD v2.107'});
+    const panel=el('div',{id:'wc2-panel'}),shell=el('div',{className:'wc2-shell'}),card=el('div',{className:'wc2-card'}),live=el('aside',{className:'wc2-live'});shell.append(card,live);panel.appendChild(shell);
+    const title=el('div',{},[el('div',{className:'wc2-title'},['Wayward MOD v2.107',el('span',{className:'wc2-safe',text:'SAFE WHITELIST'})]),el('div',{className:'wc2-sub',text:'기본 모드는 검증된 저장값만 편집합니다. DEBUG를 켜도 scene·slot·RNG·ID·이벤트 큐 같은 내부 진행값은 열지 않습니다.'})]);
+    const liveDrawerBtn=el('button',{className:'wc2-live-drawer-btn',text:'LIVE'}),guestStudioButton=el('button',{text:'손님 편집/추가'}),close=el('button',{className:'bad',text:'닫기'}),headActions=el('div',{className:'wc2-head-actions'},[liveDrawerBtn,close]);guestStudioButton.style.display='none';guestStudioButton.addEventListener('click',()=>{if(debugMode)koOpenGuestEditor299()});card.appendChild(el('div',{className:'wc2-header'},[title,headActions]));
+    const liveTitle=el('div',{className:'wc2-live-title',text:'LIVE CONTROL'}),liveSub=el('div',{className:'wc2-live-sub',text:'기존 SAFE WHITELIST의 직접 숫자값만 즉시 조작합니다. 새 스탯은 해금하지 않습니다.'}),liveClose=el('button',{className:'wc2-live-close',text:'닫기'}),liveHead=el('div',{className:'wc2-live-head'},[el('div',{style:{display:'flex',justifyContent:'space-between',gap:'8px',alignItems:'flex-start'}},[el('div',{},[liveTitle,liveSub]),liveClose])]),liveBody=el('div',{className:'wc2-live-body'});live.append(liveHead,liveBody);
+    const tabs=el('div',{className:'wc2-tabs'});const tabDefs=[['basic','기본/경제'],['stats','능력치/성격'],['traits','특성/선호'],['relations','관계/평판'],['magic','마법']];for(const [id,label]of tabDefs){const b=el('button',{text:label});b.dataset.tab=id;tabs.appendChild(b)}tabs.appendChild(guestStudioButton);card.appendChild(tabs);
+    const body=el('div',{className:'wc2-body'});card.appendChild(body);
+    const views={};for(const [id]of tabDefs){views[id]=el('div',{className:'wc2-view'});views[id].dataset.view=id;body.appendChild(views[id])}
+    const status=el('div',{className:'wc2-status'}),actions=el('div',{className:'wc2-actions'});
+    const refresh=el('button',{text:'현재 값 다시 불러오기'}),undoCheat=el('button',{text:'직전 치트 수정 되돌리기'}),goldBtn=el('button',{className:'good',text:'골드 999999'}),discover=el('button',{text:'보유 특성 전부 발견'}),apply=el('button',{className:'primary',text:'적용'});actions.append(refresh,undoCheat,goldBtn,discover,apply);
+    const debugCb=el('input',{type:'checkbox'}),debugText=el('div',{},[el('div',{className:'wc2-debug-title',text:'디버그 모드'}),el('div',{className:'wc2-debug-desc',text:'⚠ 진행·밸런스 수치를 직접 수정합니다. 이상 동작 가능성을 감수할 때만 사용.'})]),debugControl=el('label',{className:'wc2-debug-control'},[debugText,debugCb]);card.appendChild(el('div',{className:'wc2-footer'},[status,actions,debugControl]));
+    let lastBackup=null,currentTab='basic',selectedPatronIndex=null,debugMode=false;globalThis.__waywardModDebug240=globalThis.__waywardModDebug240??{ntrAttachmentOverride:null};
+    const msg=(t,c='#93c5fd')=>{status.textContent=t;status.style.color=c};
+function koNtrStatus264(state){
+ const wife=getPrimary(state);if(!wife)return '아내 상태를 불러오지 못했습니다.';
+ const record=Pb(state),risk=koNtrLeavingRisk234(state),stage=koNtrStage265(state),rules=oc(wife),history=state.assertionHistory??{},day=state.day??1;
+ const resent=Ke(wife),trust=wife.relationship?.trust??50,age=key=>history[key]==null?'없음':`${day-history[key]}일 전`;
+ const first=history.assert_ntr_warning_t1!=null&&day-history.assert_ntr_warning_t1>=0&&day-history.assert_ntr_warning_t1<=14;
+ const slack=first?5:0,resentGate=risk.strong?rules.warningT2Resentment:rules.entryResentment,trustGate=risk.strong?rules.warningT2Trust:rules.entryTrust;
+ let next='';
+ if(!koModBadEndingEnabled239('ntr'))next='모드 설정에서 NTR 엔딩이 꺼져 있습니다.';
+ else if(wife.leavingState?.ntrPatronName)next=`이탈 예정일: ${wife.leavingState.leavingOnDay}일차 · 취침 후 아침에 판정`;
+ else if(!record.topPatron)next='손님 관계 기록이 필요합니다. 세션 애착도 변경만으로는 진행할 수 없습니다.';
+ else if(wife.leavingState)next=`일반 이탈 대기 중: ${wife.leavingState.leavingOnDay}일차`; 
+ else if(stage.active){
+   if(wife.leavingConfrontationAnsweredDay!=null&&day-wife.leavingConfrontationAnsweredDay<=7)next='엔딩 대면 답변 완료: 다음 영업 마감 시 이탈 카운트다운 판정. 옷차림 흔적을 묻는 「그녀를 추궁하기」는 별개의 대화입니다.';
+   else next='최후 경고 완료: 다음 영업 마감의 별도 대면 이벤트 대기. 최근 포옹 1회만으로 단계가 취소되지 않습니다.';
+ }
+ else if(stage.recovered&&history.assert_ntr_warning_t2!=null&&day-history.assert_ntr_warning_t2<=14)next='원망과 신뢰가 모두 회복되어 이탈이 보류됩니다. 경고 후 14일 안에 관계가 다시 악화하면 진행될 수 있습니다.';
+ else if(!first&&!risk.eligible)next='손님 애착 50 이상이 필요합니다.';
+ else if(!first&&!risk.t1)next=`첫 경고 조건: 원망 ${rules.warningT1Resentment} 이상 · 신뢰 ${rules.warningT1Trust} 이하`;
+ else if(!first)next='첫 경고 대기: 아내와 같은 장소에서 시간 진행 (3일차 이후 · 다른 주장 사건 뒤 80분 유예).';
+ else if(history.assert_ntr_warning_t2==null||day-history.assert_ntr_warning_t2>14){
+   if(!risk.eligible)next='최후 경고 전에 손님 애착 45 이상이 필요합니다. 첫 경고 후 14일 동안 5점의 완충이 적용됩니다.';
+   else if(!risk.t2)next=`최후 경고 조건: 원망 ${resentGate-slack} 이상 · 신뢰 ${trustGate+slack} 이하`;
+   else next='최후 경고 대기: 침실에서 시간 진행 또는 취침 직전 1회 판정 (4일차 이후 · 다른 주장 사건 뒤 80분 유예).';
+ }else next='최후 경고가 14일을 넘었거나 관계 기록에서 애착 있는 손님이 사라졌습니다.';
+ return `손님: ${record.topPatron?.name??'없음'} · 실제 애착 ${Number(record.topAttach??0).toFixed(1)} / 판정 애착 ${Number(risk.topAttach??0).toFixed(1)}\n원망 ${resent.toFixed(1)} · 신뢰 ${trust.toFixed(1)} · 첫 NTR 경고 ${age('assert_ntr_warning_t1')} · 최후 NTR 경고 ${age('assert_ntr_warning_t2')}\n다음 단계: ${next}`;
+}
+function koNtrProbe264(state){
+ try{
+  // Work exclusively on a disposable copy, with a coherent synthetic calendar.
+  let copy=clone(state),day=Math.max(10,copy.day??1),slot=(day-1)*1440+1200;
+  const patron='NTR 시험 손님';
+  copy={...copy,day,slot,phase:'last_call',pendingEvent:void 0,patronRecords:[{name:patron,romantic:100,platonic:30,visitCount:10},...copy.patronRecords??[]],assertionHistory:{...copy.assertionHistory,assert_ntr_warning_t1:day-1,assert_ntr_warning_t2:day}};
+  copy=H(copy,w=>({...w,relationship:{...w.relationship,trust:0},leavingState:void 0,leavingConfrontationAnsweredDay:void 0,leavingConfrontationFiredDay:void 0,feelings:[...w.feelings??[],{emotion:'contempt',intensity:95,source:'debug:ntr-probe:leaving_confrontation:dismissed',expiresAtSlot:slot+20000,target:{kind:'husband'}}]}));
+  if(!koModBadEndingEnabled239('ntr'))return 'NTR 엔딩 OFF: 모드 설정에서 켜야 시험할 수 있습니다.';
+  const risk=koNtrLeavingRisk234(copy);
+  if(!risk.entry)return '가상 관계 조건을 준비했지만 NTR 진입 판정이 성립하지 않았습니다.';
+  const expected=Pb(copy).topPatron?.name??patron;
+  copy=dse(copy);if(copy.pendingEvent?.type!=='leaving_confrontation')return '대면 이벤트 생성 실패';
+  copy=bZ(copy,'leaving_confront_dismiss');copy=dse({...copy,day:day+1,slot:slot+1440});
+  const leaving=g(copy).leavingState;
+  if(!leaving?.ntrPatronName||leaving.ntrPatronName!==expected)return '이탈 카운트다운 생성 실패';
+  const due=leaving.leavingOnDay;
+  copy=w0({...copy,day:due-1,slot:(due-2)*1440+1380,phase:'bedroom',pendingEvent:void 0});
+  if(!copy.gameOver||!copy.gameOverReason?.includes(expected))return '마지막 취침 엔딩 처리 실패';
+  return `가상 조건으로 대면 → 이탈 → 취침 후 엔딩까지 재현 성공 (대상: ${expected}, 실제 세이브 변경 없음).\n\n${copy.gameOverReason}`;
+ }catch(error){return `가상 경로 검사 실패: ${error?.message??String(error)}`}
+}
+
+function koNtrPrepare265(state,step,index){
+ if(!koModBadEndingEnabled239('ntr'))return{error:'모드 설정에서 NTR 엔딩을 켜세요.'};
+ if(state.pendingEvent)return{error:'진행 중인 이벤트를 먼저 해결하세요.'};
+ if(getPrimary(state)?.leavingState)return{error:'이미 이탈 카운트다운이 시작되었습니다.'};
+ if((state.day??1)<(step==='first'?3:4))return{error:`${step==='first'?'첫':'최후'} 경고는 ${step==='first'?3:4}일차부터 시험할 수 있습니다.`};
+ const selected=state.patronRecords?.[index];
+ if(!selected?.name)return{error:'먼저 실제 손님 관계 기록에서 손님을 선택하세요. 가상 손님은 세이브에 만들지 않습니다.'};
+ const draft=clone(state),record=draft.patronRecords[index];
+ record.romantic=Math.min(100,Math.max(Number(record.romantic)||0,100));
+ record.platonic=Math.min(100,Math.max(Number(record.platonic)||0,35));
+ const wife=getPrimary(draft),rules=oc(wife),need=step==='first'?rules.warningT1Resentment+10:Math.max(rules.warningT2Resentment,rules.entryResentment)+10;
+ wife.relationship.trust=Math.min(wife.relationship.trust??50,10);
+ setHusbandFeeling(wife,'contempt',Math.max(Ke(wife),need),draft.slot??0);
+ if(step==='final'||step==='confront')draft.assertionHistory={...draft.assertionHistory,assert_leaving_warning_t1:Math.max(1,draft.day-1),assert_ntr_warning_t1:Math.max(1,draft.day-1)};
+ if(step==='confront')draft.assertionHistory={...draft.assertionHistory,assert_leaving_warning_t2:draft.day,assert_ntr_warning_t2:draft.day};
+ return{state:draft,attach:Pb(draft).topAttach,eligible:koNtrLeavingRisk234(draft).eligible,stage:koNtrStage265(draft).active};
+}
+
+    const maxMana=a=>Math.round(30+70*clamp(Number(a)||0,0,100)/100);
+    let manaRefillGuard=false;
+    function refillManaIfNeeded(){if(!wc2Options.infiniteMana||manaRefillGuard)return;try{const cur=ue.getState(),st=cur.state,m=st?.player?.magic;if(!m?.grimoireFound)return;const cap=maxMana(m.attunement??0),have=Number(m.mana?.current??0);if(have>=cap)return;const draft=clone(st);draft.player.magic.mana={...(draft.player.magic.mana??{}),current:cap};manaRefillGuard=true;ue.setState(prev=>({...prev,state:draft}));manaRefillGuard=false}catch{manaRefillGuard=false}}
+
+    const liveLocks=new Map();let liveApplyGuard=false;
+    const liveKey=path=>path.join('.');
+    function liveGroups(state,wife){
+      const cid=state.primaryCharacterId,magic=state.player?.magic??{},groups=[];
+      const keep=(defs)=>defs.filter(d=>typeof getPath(state,d.path)==='number');
+      groups.push({title:'경제',defs:keep([
+        {path:['economy','gold'],label:'골드',min:0,max:999999999,step:1,integer:true,slider:false},
+        {path:['economy','debt'],label:'빚',min:0,max:999999999,step:1,integer:true,slider:false}
+      ])});
+      groups.push({title:'플레이어 능력치',defs:keep(WC2_ATTRS.map(([k,n])=>({path:['player','attributes',k],label:n,min:0,max:100,step:1,integer:true,slider:true})))});
+      groups.push({title:'플레이어 성격',defs:keep(WC2_PLAYER_PERSONALITY.map(([k,n])=>({path:['player','personality',k],label:n,min:0,max:100,step:1,integer:true,slider:true})))});
+      groups.push({title:`${wife.name??'배우자'} 능력치`,defs:keep(WC2_ATTRS.map(([k,n])=>({path:['characters',cid,'attributes',k],label:n,min:0,max:100,step:1,integer:true,slider:true})))});
+      groups.push({title:'배우자 고급 성향',defs:keep([
+        {path:['characters',cid,'libido'],label:'성욕',min:8,max:95,step:1,integer:true,slider:true},
+        {path:['characters',cid,'volatility'],label:'변동성',min:.1,max:.85,step:.01,slider:true}
+      ])});
+      groups.push({title:'행동 선호도',defs:keep(WC2_AFFINITIES.map(([k,n])=>({path:['characters',cid,'affinities',k],label:n,min:-2,max:2,step:1,slider:true})))});
+      if(debugMode)groups.push({title:'DEBUG — 진행 상태',defs:keep([
+        {path:['player','stats','energy'],label:'플레이어 Energy',min:0,max:100,step:1,slider:true,debug:true},
+        {path:['player','stats','mood'],label:'플레이어 Mood',min:0,max:100,step:1,slider:true,debug:true},
+        {path:['player','stats','arousal'],label:'플레이어 Arousal',min:0,max:100,step:1,slider:true,debug:true},
+        {path:['player','fatigue'],label:'플레이어 Fatigue',min:0,max:100,step:1,slider:true,debug:true},
+        {path:['characters',cid,'stats','energy'],label:`${wife.name??'배우자'} Energy`,min:0,max:100,step:1,slider:true,debug:true},
+        {path:['characters',cid,'stats','mood'],label:`${wife.name??'배우자'} Mood`,min:0,max:100,step:1,slider:true,debug:true},
+        {path:['characters',cid,'stats','arousal'],label:`${wife.name??'배우자'} Arousal`,min:0,max:100,step:1,slider:true,debug:true}
+      ])});
+      groups.push({title:'관계 / 평판',defs:keep([
+        {path:['characters',cid,'relationship','trust'],label:'배우자 신뢰',min:0,max:100,step:1,integer:true,slider:true},
+        {path:['tavernReputation','service'],label:'서비스 평판',min:0,max:100,step:1,slider:true},
+        {path:['tavernReputation','notoriety'],label:'악명',min:0,max:100,step:1,slider:true},
+        {path:['tavernReputation','renown'],label:'명성',min:0,max:100,step:1,slider:true}
+      ])});
+      const manaMax=maxMana(magic.attunement??0);
+      groups.push({title:'마법',defs:keep([
+        {path:['player','magic','understanding'],label:'이해도',min:0,max:100,step:1,integer:true,slider:true},
+        {path:['player','magic','attunement'],label:'동조율',min:0,max:100,step:1,integer:true,slider:true,magicAttunement:true},
+        {path:['player','magic','mana','current'],label:'현재 마나',min:0,max:manaMax,step:1,integer:true,slider:true,mana:true,disabled:!!wc2Options.infiniteMana}
+      ])});
+      return groups.filter(g=>g.defs.length);
+    }
+    function normalizeLiveValue(spec,raw,state){let v=Number(raw);if(!Number.isFinite(v))v=0;let max=spec.max;if(spec.mana)max=maxMana(state.player?.magic?.attunement??0);v=clamp(v,spec.min,max);if(spec.integer)v=Math.round(v);else if(spec.step===.1)v=Math.round(v*10)/10;else if(spec.step===.01)v=Math.round(v*100)/100;return v}
+    function normalizeLiveMagic(draft,spec){if(!draft.player?.magic)return;if(spec.magicAttunement){const mm=maxMana(draft.player.magic.attunement??0);draft.player.magic.mana=draft.player.magic.mana??{current:30};draft.player.magic.mana.current=wc2Options.infiniteMana?mm:clamp(Number(draft.player.magic.mana.current)||0,0,mm)}if(spec.mana&&wc2Options.infiniteMana){const mm=maxMana(draft.player.magic.attunement??0);draft.player.magic.mana.current=mm}}
+    function applyLiveValue(spec,raw){if(liveApplyGuard||spec.disabled)return;const now=ue.getState(),draft=clone(now.state),key=liveKey(spec.path),v=normalizeLiveValue(spec,raw,draft),old=Number(getPath(draft,spec.path));if(liveLocks.has(key))liveLocks.set(key,v);if(old===v)return;setPath(draft,spec.path,v);normalizeLiveMagic(draft,spec);if(typeof koValidSaveState175==='function'&&!koValidSaveState175(draft))return;liveApplyGuard=true;try{ue.setState(prev=>({...prev,state:draft}))}finally{liveApplyGuard=false}}
+    function enforceLiveLocks(){if(liveApplyGuard||liveLocks.size===0)return;const now=ue.getState(),draft=clone(now.state),wife=getPrimary(draft);if(!wife)return;const specs=new Map(liveGroups(draft,wife).flatMap(g=>g.defs.map(d=>[liveKey(d.path),d])));let changed=false;for(const[key,target]of [...liveLocks]){const spec=specs.get(key);if(!spec||spec.disabled){liveLocks.delete(key);continue}const v=normalizeLiveValue(spec,target,draft),cur=Number(getPath(draft,spec.path));if(cur===v)continue;setPath(draft,spec.path,v);normalizeLiveMagic(draft,spec);changed=true}if(!changed)return;if(typeof koValidSaveState175==='function'&&!koValidSaveState175(draft)){liveLocks.clear();return}liveApplyGuard=true;try{ue.setState(prev=>({...prev,state:draft}))}finally{liveApplyGuard=false}}
+    function renderLive(){const state=ue.getState().state,wife=getPrimary(state);if(!wife)return;liveBody.innerHTML='';liveBody.appendChild(el('div',{className:'wc2-warn',text:debugMode?'DEBUG 활성화: Energy · Mood · Arousal · Fatigue를 직접 조작·세션 고정할 수 있습니다. 장면/이벤트 판정에 영향을 줄 수 있습니다.':'기본 모드: SAFE WHITELIST 값만 즉시 조작합니다. 진행 상태를 열려면 하단의 디버그 모드를 켜세요.'}));for(const group of liveGroups(state,wife)){const details=el('details',{className:'wc2-live-group',open:'open'}),summary=el('summary',{text:group.title}),body=el('div',{className:'wc2-live-group-body'});details.append(summary,body);for(const spec of group.defs){const key=liveKey(spec.path),cur=Number(getPath(state,spec.path)),row=el('div',{className:'wc2-live-row'}),lock=el('input',{type:'checkbox'});lock.checked=liveLocks.has(key);lock.disabled=!!spec.disabled;const lockLabel=el('label',{className:'wc2-live-lock'},[lock,document.createTextNode(spec.disabled?'무한 마나 사용 중':'세션 고정')]),top=el('div',{className:'wc2-live-row-top'},[el('span',{className:'wc2-live-label',text:spec.label}),lockLabel]),controls=el('div',{className:`wc2-live-controls${spec.slider===false?' no-slider':''}`}),num=el('input',{type:'number',min:spec.min,max:spec.max,step:spec.step});num.value=fmt(cur);num.disabled=!!spec.disabled;num.dataset.liveKey=key;let range=null,backup=null;const begin=()=>{backup??=clone(ue.getState().state)},finish=()=>{if(backup){lastBackup=backup;backup=null;undoCheat.disabled=false}if(spec.magicAttunement)renderLive()};num.addEventListener('focus',begin);num.addEventListener('input',()=>{applyLiveValue(spec,num.value);if(range)range.value=String(normalizeLiveValue(spec,num.value,ue.getState().state))});num.addEventListener('change',finish);if(spec.slider!==false){range=el('input',{type:'range',min:spec.min,max:spec.max,step:spec.step});range.value=String(cur);range.disabled=!!spec.disabled;range.dataset.liveKey=key;range.addEventListener('pointerdown',begin);range.addEventListener('input',()=>{num.value=range.value;applyLiveValue(spec,range.value)});range.addEventListener('change',finish);controls.append(range,num)}else controls.append(num);lock.addEventListener('change',()=>{if(lock.checked)liveLocks.set(key,normalizeLiveValue(spec,getPath(ue.getState().state,spec.path),ue.getState().state));else liveLocks.delete(key)});row.append(top,controls);if(spec.disabled)row.appendChild(el('div',{className:'wc2-live-note',text:'기존 무한 마나 옵션이 현재 마나를 관리하고 있어 중복 제어를 막았습니다.'}));body.appendChild(row)}liveBody.appendChild(details)}}
+    function syncLiveDisplay(){if(!panel.classList.contains('open'))return;const state=ue.getState().state,wife=getPrimary(state);if(!wife)return;const specs=new Map(liveGroups(state,wife).flatMap(g=>g.defs.map(d=>[liveKey(d.path),d])));for(const node of liveBody.querySelectorAll('[data-live-key]')){const key=node.dataset.liveKey,spec=specs.get(key);if(!spec)continue;const cur=normalizeLiveValue(spec,getPath(state,spec.path),state),max=spec.mana?maxMana(state.player?.magic?.attunement??0):spec.max;node.max=String(max);if(document.activeElement!==node)node.value=String(cur)}}
+    function clearDebugSession240(){for(const key of [...liveLocks.keys()]){if(key==='player.stats.energy'||key==='player.stats.mood'||key==='player.stats.arousal'||key==='player.fatigue'||key.startsWith('characters.')&&(key.endsWith('.stats.energy')||key.endsWith('.stats.mood')||key.endsWith('.stats.arousal')))liveLocks.delete(key)}try{globalThis.__waywardModDebug240.ntrAttachmentOverride=null}catch{}}function resetLiveLocks(){liveLocks.clear();try{globalThis.__waywardModDebug240.ntrAttachmentOverride=null}catch{}try{renderLive()}catch{}}window.__waywardModResetLiveLocks239=resetLiveLocks;
+
+    function field(path,label,value,{min=0,max=100,step=1,desc='',integer=false,disabled=false}={}){
+      const box=el('div',{className:'wc2-field'}),top=el('div',{className:'wc2-field-top'},[el('label',{text:label}),el('span',{className:'wc2-range',text:`${min} ~ ${max}`})]);
+      const input=el('input',{type:'number',min,max,step});input.value=fmt(Number(value??0));input.disabled=disabled;input.dataset.path=path.join('.');input.dataset.min=min;input.dataset.max=max;input.dataset.step=step;input.dataset.integer=integer?'1':'0';wc2RememberValue(input);box.append(top,input);if(desc)box.appendChild(el('div',{className:'wc2-desc',text:desc}));return box;
+    }
+    function box(titleText,note=''){const b=el('section',{className:'wc2-box'});b.appendChild(el('h3',{text:titleText}));if(note)b.appendChild(el('div',{className:'wc2-note',text:note}));return b}
+    function addFields(parent,titleText,defs,note=''){
+      const b=box(titleText,note),grid=el('div',{className:'wc2-grid'});for(const d of defs){const v=getPath(ue.getState().state,d.path);if(typeof v==='number')grid.appendChild(field(d.path,d.label,v,d))}b.appendChild(grid);parent.appendChild(b)
+    }
+    function setTab(id){currentTab=id;tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));Object.entries(views).forEach(([k,v])=>v.classList.toggle('active',k===id))}
+    tabs.addEventListener('click',e=>{const b=e.target.closest('button[data-tab]');if(b)setTab(b.dataset.tab)});
+
+    function render(){
+      const st=ue.getState(),s=st.state,w=getPrimary(s);if(!w)return;debugCb.checked=debugMode;guestStudioButton.style.display=debugMode?"":"none";
+      for(const v of Object.values(views))v.innerHTML='';
+      undoCheat.disabled=!lastBackup;
+
+      // Basic
+      const basicCols=el('div',{className:'wc2-columns'}),bl=el('div',{className:'wc2-stack'}),br=el('div',{className:'wc2-stack'});basicCols.append(bl,br);views.basic.appendChild(basicCols);
+      const sum=box('현재 상태','치트 에디터는 캐릭터 빌드·관계·경제·평판·마법 중 독립 저장값과 정상 범위가 확인된 항목만 편집합니다.');
+      const pills=el('div',{className:'wc2-pills'});[`진행일 ${s.day??'-'}`,`골드 ${s.economy?.gold??0}`,`숨은 특성 ${(w.latentTraits??[]).length}개`,`발견 특성 ${(w.noticedLatentTraits??[]).length}개`,`배우자 ${w.name??''}`].forEach(x=>pills.appendChild(el('span',{className:'wc2-pill',text:x})));sum.appendChild(pills);bl.appendChild(sum);
+      addFields(bl,'경제',[
+        {path:['economy','gold'],label:'골드',min:0,max:999999999,step:1,integer:true,desc:'현재 보유 골드. 원본 게임의 단순 현재값입니다.'},
+        {path:['economy','debt'],label:'빚',min:0,max:999999999,step:1,integer:true,desc:'현재 남은 부채. 이자·수금 시스템이 이후 이 현재값을 정상적으로 사용합니다.'}
+      ]);
+      const visitor=koGetModSettings239().options.visitorTraffic;
+      const visitorBox=box('방문량 조절','방문 확률 100%는 원본 기준입니다. 투숙객도 동시 손님 상한에 포함됩니다. 새 설정은 날짜를 넘기는 행동이 끝나면 적용되며, 게임 세이브가 아닌 브라우저의 MOD 설정에 저장됩니다.');
+      const visitorPercent=rate=>`${Math.round(rate*100)}%`;
+      visitorBox.appendChild(el('div',{className:'wc2-note',text:`현재 적용: 원본 대비 ${visitorPercent(visitor.active.multiplier)} · 동시 손님 ${visitor.active.cap}명 / 다음 날 예약: ${visitor.pending?`${visitorPercent(visitor.pending.multiplier)} · ${visitor.pending.cap}명`:'없음'}`}));
+      visitorBox.appendChild(el('div',{className:'wc2-note',text:'MOD 기본값: 방문 확률 원본 대비 125% · 동시 손님 상한 12명'}));
+      visitorBox.appendChild(el('div',{className:'wc2-desc',text:debugMode?'디버그 모드: 방문 확률 0~200%, 동시 손님 상한 0~24명까지 설정할 수 있습니다. 0은 새 일반 방문만 막고 기존 손님·객실 투숙객·수금원은 내보내지 않습니다.':'일반 모드: 방문 확률 50~150%, 동시 손님 상한 4~16명까지 설정할 수 있습니다. 아래 디버그 모드를 켜야 범위가 0~200% · 0~24명으로 확장됩니다.'}));
+      if(!debugMode&&(visitor.active.multiplier<.5||visitor.active.multiplier>1.5||visitor.active.cap<4||visitor.active.cap>16||visitor.pending&&(visitor.pending.multiplier<.5||visitor.pending.multiplier>1.5||visitor.pending.cap<4||visitor.pending.cap>16)))visitorBox.appendChild(el('div',{className:'wc2-warn',text:'이전에 지정한 디버그 범위 값은 그대로 유지됩니다. 일반 범위의 값으로 다시 예약하거나 예약 취소를 눌러 변경하세요.'}));
+      const visitorGrid=el('div',{className:'wc2-grid wc2-visitor-grid'});
+      const visitorFactor=el('input',{type:'number',min:debugMode?0:50,max:debugMode?200:150,step:1});visitorFactor.value=String(Math.round((visitor.pending?.multiplier??visitor.active.multiplier)*100));
+      const visitorCap=el('input',{type:'number',min:debugMode?0:4,max:debugMode?24:16,step:1});visitorCap.value=String(visitor.pending?.cap??visitor.active.cap);
+      for(const [label,node,range] of [['방문 확률',visitorFactor,debugMode?'원본 100% · 0 ~ 200%':'원본 100% · 50 ~ 150%'],['동시 손님 상한',visitorCap,debugMode?'원본 8명 · 0 ~ 24명':'원본 8명 · 4 ~ 16명']]){
+        visitorGrid.appendChild(el('label',{className:'wc2-field'},[el('span',{className:'wc2-field-top'},[el('span',{text:label}),el('span',{className:'wc2-range',text:range})]),node]));
+      }
+      visitorBox.appendChild(visitorGrid);
+      const visitorSave=el('button',{type:'button',text:'다음 날 적용 예약'});
+      visitorSave.addEventListener('click',()=>{
+        const factorText=visitorFactor.value.trim(),capText=visitorCap.value.trim(),percent=Number(factorText),cap=Number(capText),minPercent=debugMode?0:50,maxPercent=debugMode?200:150,minCap=debugMode?0:4,maxCap=debugMode?24:16;
+        if(!factorText||!capText||!Number.isSafeInteger(percent)||percent<minPercent||percent>maxPercent||!Number.isSafeInteger(cap)||cap<minCap||cap>maxCap){msg(`방문 확률은 ${minPercent}~${maxPercent}%의 정수, 동시 손님 상한은 ${minCap}~${maxCap}명의 정수로 입력해 주세요.`,'#fca5a5');return}
+        const saved=koQueueVisitorTraffic272(percent/100,cap,debugMode);
+        if(!saved){msg('설정을 저장하지 못했습니다.','#fca5a5');return}
+        render();msg(saved.options.visitorTraffic.pending?'설정을 예약했습니다. 날짜를 넘기는 행동이 끝나면 적용됩니다.':'예약을 취소하고 현재 적용값을 유지합니다.','#86efac');
+      });
+      const visitorCancel=el('button',{type:'button',text:'예약 취소',style:{marginLeft:'2px'}});visitorCancel.disabled=!visitor.pending;
+      visitorCancel.addEventListener('click',()=>{koCancelVisitorTraffic273();render();msg('다음 날 예약을 취소했습니다. 현재 적용값은 유지합니다.','#86efac')});
+      visitorBox.append(visitorSave,visitorCancel);br.appendChild(visitorBox);
+      if(!debugMode){const natural=box('진행 상태','Energy · Mood · Arousal · Fatigue, 물자·주당 임대료·엔딩 테스트값은 기본 SAFE 모드에서 숨깁니다. 필요할 때만 하단 디버그 모드를 켜세요.');natural.appendChild(el('div',{className:'wc2-note',text:'디버그 모드도 scene stage, slot/day, RNG, ID/counter, 이벤트 큐 같은 내부 진행값은 열지 않습니다.'}));br.appendChild(natural)}else{
+        const dbg=box('DEBUG — 진행 상태','⚠ 플레이 중 계속 변하는 실제 저장값입니다. 0~100 범위만 열며, 스피너는 1씩 움직이고 소수는 직접 타이핑할 수 있습니다.');const dg=el('div',{className:'wc2-grid'});
+        [['player.stats.energy','플레이어 Energy',s.player?.stats?.energy],['player.stats.mood','플레이어 Mood',s.player?.stats?.mood],['player.stats.arousal','플레이어 Arousal',s.player?.stats?.arousal],['player.fatigue','플레이어 Fatigue',s.player?.fatigue],[`characters.${s.primaryCharacterId}.stats.energy`,`${w.name??'배우자'} Energy`,w.stats?.energy],[`characters.${s.primaryCharacterId}.stats.mood`,`${w.name??'배우자'} Mood`,w.stats?.mood],[`characters.${s.primaryCharacterId}.stats.arousal`,`${w.name??'배우자'} Arousal`,w.stats?.arousal]].forEach(([p,l,v])=>{if(typeof v==='number')dg.appendChild(field(String(p).split('.'),l,v,{min:0,max:100,step:1,desc:'DEBUG 전용. 장면·행동 판정과 동시에 변할 수 있습니다.'}))});dbg.appendChild(dg);br.appendChild(dbg);
+        const econDbg=box('DEBUG — 경제 / 물자','주간 임대료와 재고는 정상 플레이 밸런스에 직접 영향을 줍니다. LIVE 슬라이더에는 넣지 않고 적용 버튼으로만 수정합니다.');const eg=el('div',{className:'wc2-grid'});
+        if(typeof s.economy?.weeklyRent==='number')eg.appendChild(field(['economy','weeklyRent'],'주당 임대료',s.economy.weeklyRent,{min:0,max:999999999,step:1,integer:true,desc:'원본 weeklyRent 저장값. 주차 결산·수금 조건에 사용됩니다.'}));for(const [k,l]of [['food','Food'],['beer','맥주'],['wine','와인']]){const v=s.supplies?.[k];if(typeof v==='number')eg.appendChild(field(['supplies',k],l,v,{min:0,max:999999999,step:1,integer:true,desc:`supplies.${k} 실제 재고값.`}))}econDbg.appendChild(eg);br.appendChild(econDbg);
+        const endDbg=box('DEBUG — 신규 배드엔딩 테스트','수금 누적과 NTR 손님 관계·경고 이력 수정은 세이브에 반영됩니다. NTR 애착 오버라이드는 현재 실행 세션에만 존재합니다.');
+        endDbg.appendChild(field(['economy','collectorStallStreak'],'수금 실패 누적',s.economy?.collectorStallStreak??0,{min:0,max:12,step:1,integer:true,desc:'실제 저장 범위 0~12의 누적 카운터입니다. 숫자 입력·▲▼·마우스 휠은 1씩 움직입니다. 엔딩 ON이면 6/7 경고, 다음 실패로 8 이상이 되면 MOD 수금원 엔딩 조건에 들어갑니다.'}));
+        let nr={topAttach:0,topPatron:void 0};try{nr=Pb(s)}catch{}const ntrRow=el('div',{className:'wc2-field'}),ntrTop=el('div',{className:'wc2-field-top'},[el('label',{text:'NTR 엔딩 판정 애착도'}),el('span',{className:'wc2-range',text:'0 ~ 100 · 세션 전용'})]),ntrControls=el('div',{style:{display:'grid',gridTemplateColumns:'auto 1fr',gap:'8px',alignItems:'center'}}),ntrEnable=el('input',{type:'checkbox'}),ntrInput=el('input',{type:'number',min:0,max:100,step:1});const existingOverride=globalThis.__waywardModDebug240?.ntrAttachmentOverride;ntrEnable.checked=typeof existingOverride==='number'&&Number.isFinite(existingOverride);ntrInput.value=fmt(ntrEnable.checked?existingOverride:(nr.topAttach??0));ntrInput.disabled=!ntrEnable.checked;ntrEnable.addEventListener('change',()=>{ntrInput.disabled=!ntrEnable.checked;globalThis.__waywardModDebug240.ntrAttachmentOverride=ntrEnable.checked?clamp(Number(ntrInput.value)||0,0,100):null;msg(ntrEnable.checked?'NTR 엔딩 판정 애착도 오버라이드를 켰습니다. patronRecords는 변경하지 않습니다.':'NTR 엔딩 판정 애착도 오버라이드를 해제했습니다.','#fde68a');renderLive();ntrStatus.textContent=koNtrStatus264(ue.getState().state)});ntrInput.addEventListener('input',()=>{if(ntrEnable.checked)globalThis.__waywardModDebug240.ntrAttachmentOverride=clamp(Number(ntrInput.value)||0,0,100);ntrStatus.textContent=koNtrStatus264(ue.getState().state)});ntrControls.append(ntrEnable,ntrInput);ntrRow.append(ntrTop,ntrControls,el('div',{className:'wc2-desc',text:`현재 최고 손님: ${nr.topPatron?.name??'없음'} · 실제 계산 애착 ${fmt(Number(nr.topAttach)||0)}. 첫 경고는 50부터, 강한 애착은 72부터. 첫 경고 뒤 14일 동안은 각각 45/67까지 완충됩니다. 신뢰·원망 조건도 필요합니다.`}));const ntrStatus=el('div',{className:'wc2-note',style:{whiteSpace:'pre-wrap',marginTop:'8px'}});ntrStatus.textContent=koNtrStatus264(s);ntrRow.appendChild(ntrStatus);
+const ntrProbe=el('button',{type:'button',text:'가상 조건으로 NTR 엔딩 경로 시험 (세이브 무변경)',style:{marginTop:'8px',padding:'6px 9px',border:'1px solid #a78bfa',borderRadius:'4px',background:'#292524',color:'#ddd6fe',cursor:'pointer'}});
+const ntrProbeResult=el('div',{className:'wc2-note',style:{whiteSpace:'pre-wrap',maxHeight:'160px',overflowY:'auto'}});
+ntrProbe.addEventListener('click',()=>{ntrProbeResult.textContent=koNtrProbe264(ue.getState().state)});
+ntrRow.appendChild(ntrProbe);ntrRow.appendChild(el('div',{className:'wc2-desc',text:'가상 시험은 조건을 복제본에서 강제로 충족시켜 종료 경로를 확인합니다. 자연 발생 확률이나 현재 세이브의 자격을 보증하지 않습니다.'}));ntrRow.appendChild(ntrProbeResult);endDbg.appendChild(ntrRow);
+const ntrSetup=box('NTR 조건 준비 — 실제 세이브 수정','기존 손님 관계 기록이 필요합니다. 원하는 단계에 필요한 관계 수치를 맞춥니다. 경고 이력 표시 버튼은 장면을 건너뛰므로 아래 설명을 확인하세요.');
+const ntrPatrons=(s.patronRecords??[]).map((p,index)=>({p,index})).filter(x=>x.p?.name),ntrSelect=el('select',{className:'wc2-select'});
+for(const x of ntrPatrons){const item=el('option',{value:x.index,text:`${x.p.name} · 실제 애착 ${Xo(x.p,w).toFixed(1)}`});item.selected=x.p===nr.topPatron;ntrSelect.appendChild(item)}
+ntrSetup.appendChild(ntrSelect);
+if(!ntrPatrons.length)ntrSetup.appendChild(el('div',{className:'wc2-note',text:'관계 기록에 손님이 없습니다. 자연스럽게 손님과 관계 기록을 만든 뒤 시험할 수 있습니다.'}));
+const ntrDetail=el('div');ntrSetup.appendChild(ntrDetail);
+const drawNtrDetail=()=>{ntrDetail.innerHTML='';const idx=Number(ntrSelect.value),record=s.patronRecords?.[idx];if(!record)return;
+ ntrDetail.appendChild(field(['patronRecords',String(idx),'romantic'],'선택 손님 연애 감정',record.romantic??0,{min:-100,max:100,step:1,integer:true,desc:'애착 판정의 기반값. 다른 손님이 더 높은 애착이면 그 손님이 엔딩 대상이 됩니다.'}));
+ ntrDetail.appendChild(field(['characters',s.primaryCharacterId,'relationship','trust'],'아내의 신뢰',w.relationship?.trust??50,{min:0,max:100,step:1,integer:true,desc:'첫 경고 기본 40 이하 · 최후 경고 기본 30 이하(애착 72 이상).'}));
+ const resentment=el('input',{type:'number',min:0,max:100,step:1});resentment.value=fmt(husbandFeelingValue(w,'contempt'));resentment.dataset.husbandFeeling='contempt';wc2RememberValue(resentment);
+ ntrDetail.appendChild(el('div',{className:'wc2-field'},[el('div',{className:'wc2-field-top'},[el('label',{text:'남편 대상 경멸 감정'}),el('span',{className:'wc2-range',text:'0 ~ 100'})]),resentment,el('div',{className:'wc2-desc',text:`실제 원망은 남편 대상 부정 감정 중 최고값입니다. 현재 ${Ke(w).toFixed(1)}. 경멸을 올리면 원망이 함께 올라갑니다.`})]));};
+ntrSelect.addEventListener('change',drawNtrDetail);drawNtrDetail();
+ntrSetup.appendChild(el('div',{className:'wc2-desc',text:'위 숫자만 바꿀 때는 화면 아래 「적용」을 누르세요. 경고 이력·상황 조건은 자동으로 조작하지 않습니다.'}));
+const ntrSteps=el('div',{style:{display:'grid',gap:'6px',marginTop:'10px'}});
+for(const [step,label,hint] of [
+ ['first','첫 NTR 경고 조건 준비','관계 수치만 맞춥니다. 같은 장소에서 시간을 진행해야 첫 경고를 볼 수 있습니다.'],
+ ['final','최후 NTR 경고 조건 준비','첫 경고를 이미 본 것으로 기록합니다. 침실에서 시간을 진행하거나 잠자기로 최후 경고를 시험하세요.'],
+ ['confront','영업 마감 대면 조건 준비','두 경고를 이미 본 것으로 기록합니다. 다음 영업 마감 때 별도 대면을 시험하세요.']
+]){const button=el('button',{type:'button',text:label,style:{padding:'6px 9px',border:'1px solid #a78bfa',borderRadius:'4px',background:'#292524',color:'#ddd6fe',cursor:'pointer'}});
+button.addEventListener('click',()=>{const now=ue.getState(),result=koNtrPrepare265(now.state,step,Number(ntrSelect.value));if(result.error){msg(result.error,'#fca5a5');return}
+if(typeof koValidSaveState175==='function'&&!koValidSaveState175(result.state)){msg('게임 세이브 구조 검증 실패: 수정하지 않았습니다.','#fca5a5');return}
+lastBackup=clone(now.state);ue.setState(prev=>({...prev,state:result.state}));render();renderLive();
+msg(`${label}: 저장값에 반영했습니다. ${result.eligible?'손님 애착 자격 충족.':'애착 판정이 50 미만입니다. 위의 세션 애착 오버라이드를 켜고 72 이상으로 맞춰 주세요.'} ${hint}`,'#86efac')});
+ntrSteps.appendChild(button);ntrSteps.appendChild(el('div',{className:'wc2-desc',text:hint}));}
+ntrSetup.appendChild(ntrSteps);ntrSetup.appendChild(el('div',{className:'wc2-note',text:'첫 경고 3일차 · 최후 경고 4일차 이후. 장소·기존 쿨다운·진행 중 이벤트·난수 판정은 그대로 적용됩니다. 준비 버튼은 실제 이벤트를 즉시 재생하지 않습니다. 되돌리려면 「직전 치트 수정 되돌리기」를 누르세요.'}));endDbg.appendChild(ntrSetup);br.appendChild(endDbg)
+      }
+      const safe=box('치트 에디터 안전성 원칙');safe.appendChild(el('div',{className:'wc2-warn',text:'DEBUG에서도 수정 제외: slot/day 내부 진행값, scene stage, 이벤트 큐·cooldown, customer ID/counter, location occupants, RNG state, save version. 위험값을 전부 여는 모드가 아닙니다.'}));br.appendChild(safe);
+
+      // Stats/personality
+      const statsCols=el('div',{className:'wc2-columns'}),sl=el('div',{className:'wc2-stack'}),sr=el('div',{className:'wc2-stack'});statsCols.append(sl,sr);views.stats.appendChild(statsCols);
+      const pa=box('플레이어 기본 능력치','게임이 0~100 범위로 사용하는 9개 attributes만 노출합니다.');const pag=el('div',{className:'wc2-grid3'});for(const[k,n,d]of WC2_ATTRS){const v=s.player?.attributes?.[k];if(typeof v==='number')pag.appendChild(field(['player','attributes',k],n,v,{min:0,max:100,step:1,desc:d}))}pa.appendChild(pag);sl.appendChild(pa);
+      const pp=box('플레이어 성격','플레이어의 선택 톤과 대인 판정에 사용하는 독립 성격 수치입니다.');const ppg=el('div',{className:'wc2-grid'});for(const[k,n,d]of WC2_PLAYER_PERSONALITY){const v=s.player?.personality?.[k];if(typeof v==='number')ppg.appendChild(field(['player','personality',k],n,v,{min:0,max:100,step:1,desc:d}))}pp.appendChild(ppg);sl.appendChild(pp);
+      const wa=box(`${w.name??'배우자'} 기본 능력치`,'원본 코드가 추적하는 9개 attributes. 효과가 붙은 임시 보정치가 아니라 저장된 기본값을 수정합니다.');const wag=el('div',{className:'wc2-grid3'});for(const[k,n,d]of WC2_ATTRS){const v=w.attributes?.[k];if(typeof v==='number')wag.appendChild(field(['characters',s.primaryCharacterId,'attributes',k],n,v,{min:0,max:100,step:1,desc:d}))}wa.appendChild(wag);sr.appendChild(wa);
+      const adv=box('배우자 고급 성향','생성 코드에서 정상 범위가 명확하게 clamp되는 독립 저장값입니다.');const advg=el('div',{className:'wc2-grid'});if(typeof w.libido==='number')advg.appendChild(field(['characters',s.primaryCharacterId,'libido'],'성욕 (Libido)',w.libido,{min:8,max:95,step:1,integer:true,desc:'전반적인 성적 욕구 강도. 원본 생성 범위 8~95.'}));if(typeof w.volatility==='number')advg.appendChild(field(['characters',s.primaryCharacterId,'volatility'],'변동성 (Volatility)',w.volatility,{min:.1,max:.85,step:.01,desc:'감정/반응의 변동성. 원본 생성 범위 0.10~0.85.'}));adv.appendChild(advg);sr.appendChild(adv);
+
+      // Traits + affinities
+      const traitCols=el('div',{className:'wc2-columns'}),tl=el('div',{className:'wc2-stack'}),tr=el('div',{className:'wc2-stack'});traitCols.append(tl,tr);views.traits.appendChild(traitCols);
+      const tb=box('숨은 특성 / 발견 특성','보유 = 실제 이벤트 판정에 사용되는 latentTraits. 발견 = UI에 드러난 noticedLatentTraits. 치트 에디터에는 기본 생성기의 3개 제한을 적용하지 않습니다.');tb.appendChild(el('div',{className:'wc2-trait-head'},[el('div',{text:'특성'}),el('div',{className:'wc2-center',text:'보유'}),el('div',{className:'wc2-center',text:'발견'})]));
+      const owned=w.latentTraits??[],seen=w.noticedLatentTraits??[];for(const t of WC2_TRAITS){const row=el('div',{className:'wc2-trait'}),info=el('div',{},[el('div',{className:'wc2-trait-name',text:t.name}),el('div',{className:'wc2-trait-id',text:t.id}),el('div',{className:'wc2-trait-desc',text:t.desc})]),o=el('input',{type:'checkbox'}),q=el('input',{type:'checkbox'});o.checked=owned.includes(t.id);q.checked=seen.includes(t.id);o.dataset.traitOwn=t.id;q.dataset.traitSeen=t.id;wc2RememberCheck(o);wc2RememberCheck(q);o.addEventListener('change',()=>{if(!o.checked)q.checked=false});q.addEventListener('change',()=>{if(q.checked)o.checked=true});row.append(info,el('div',{className:'wc2-center'},o),el('div',{className:'wc2-center'},q));tb.appendChild(row)}tl.appendChild(tb);
+      const unknown=owned.filter(x=>!WC2_TRAIT_IDS.has(x));if(unknown.length)tb.appendChild(el('div',{className:'wc2-warn',text:`이 버전이 모르는 기존 특성 ${unknown.length}개(${unknown.join(', ')})는 적용 시 삭제하지 않고 그대로 보존합니다.`}));
+      const ab=box('행동 선호도 (Affinities)','특성과 별개의 연속형 선호도입니다. 원본 로직이 -2.0~+2.0으로 clamp합니다.');for(const[k,n,d]of WC2_AFFINITIES){const v=w.affinities?.[k];if(typeof v!=='number')continue;const row=el('div',{className:'wc2-aff-row'}),info=el('div',{},[el('div',{className:'wc2-aff-title',text:n}),el('div',{className:'wc2-aff-desc',text:d})]),inp=el('input',{type:'number',min:-2,max:2,step:1});inp.value=fmt(v);inp.dataset.path=['characters',s.primaryCharacterId,'affinities',k].join('.');inp.dataset.min='-2';inp.dataset.max='2';inp.dataset.step='1';wc2RememberValue(inp);row.append(info,inp);ab.appendChild(row)}tr.appendChild(ab);
+      const tn=box('특성과 수치의 관계');tn.appendChild(el('div',{className:'wc2-note',text:'예: latent_exhibitionist는 질적인 숨은 특성이고, affinities.exhibition은 노출 행동 자체에 대한 연속형 선호입니다. 둘은 동시에 판정에 영향을 줄 수 있습니다. 상반 특성도 치트에서는 동시에 허용하지만 결과가 서로 상쇄될 수 있습니다.'}));tr.appendChild(tn);
+
+
+
+      // Relationships / reputation
+      const relCols=el('div',{className:'wc2-columns'}),rl=el('div',{className:'wc2-stack'}),rr=el('div',{className:'wc2-stack'});relCols.append(rl,rr);views.relations.appendChild(relCols);
+      addFields(rl,'배우자 관계',[
+        {path:['characters',s.primaryCharacterId,'relationship','trust'],label:'신뢰 (Trust)',min:0,max:100,step:1,integer:true,desc:'배우자 관계의 실제 저장값. 원본 관계 로직이 0~100 범위로 clamp합니다.'}
+      ],'파생 막대가 아니라 원본 세이브에 직접 저장되는 관계 수치만 편집합니다.');
+
+      const hf=box('남편에 대한 지속 감정','원본 feelings 시스템의 실제 감정 intensity를 0~100으로 편집합니다. 단순 파생 막대값을 억지로 수정하지 않고, 남편(target: husband)을 대상으로 한 persistent 감정만 조절합니다.');const hfg=el('div',{className:'wc2-grid'});for(const[id,n,d]of WC2_HUSBAND_FEELINGS){const v=husbandFeelingValue(w,id),fb=el('div',{className:'wc2-field'}),top=el('div',{className:'wc2-field-top'},[el('label',{text:n}),el('span',{className:'wc2-range',text:'0 ~ 100'})]),inp=el('input',{type:'number',min:0,max:100,step:1});inp.value=fmt(v);inp.dataset.husbandFeeling=id;wc2RememberValue(inp);fb.append(top,inp,el('div',{className:'wc2-desc',text:d}));hfg.appendChild(fb)}hf.appendChild(hfg);rl.appendChild(hf);
+      addFields(rr,'주점 평판',[
+        {path:['tavernReputation','service'],label:'서비스 평판',min:0,max:100,step:1,desc:'접객·서비스 평가. ▲▼/휠은 1씩, 소수는 직접 입력할 수 있습니다.'},
+        {path:['tavernReputation','notoriety'],label:'악명',min:0,max:100,step:1,desc:'추문성 악명. ▲▼/휠은 1씩, 소수는 직접 입력할 수 있습니다.'},
+        {path:['tavernReputation','renown'],label:'명성 (Renown)',min:0,max:100,step:1,desc:'일반적인 명성. ▲▼/휠은 1씩, 소수는 직접 입력할 수 있습니다.'}
+      ],'세 값 모두 원본 게임이 0~100 범위에서 지속적으로 증감시키는 현재 상태값입니다.');
+      const patronBox=box('손님 관계','현재 세이브의 patronRecords에 이미 존재하는, 실제로 만난 손님만 편집합니다. 손님 레코드·방문 기록·진행 단계 자체는 만들거나 수정하지 않습니다.');
+      const currentDay=s.day??0,patronEntries=(s.patronRecords??[]).map((record,index)=>({record,index})).filter(x=>x.record&&typeof x.record.name==='string').sort((a,b)=>(b.record.lastVisitDay??-1)-(a.record.lastVisitDay??-1)||String(a.record.name).localeCompare(String(b.record.name)));
+      if(patronEntries.length===0){patronBox.appendChild(el('div',{className:'wc2-note',text:'아직 기록된 손님 관계가 없습니다.'}))}else{
+        if(!Number.isInteger(selectedPatronIndex)||!patronEntries.some(x=>x.index===selectedPatronIndex))selectedPatronIndex=patronEntries[0].index;
+        const sel=el('select',{className:'wc2-select'});for(const x of patronEntries){const r=x.record,last=r.lastVisitDay,when=last==null?'방문일 기록 없음':last===currentDay?'오늘 방문':`마지막 방문: ${last}일차`,opt=el('option',{value:x.index,text:`${r.name} · 방문 ${r.visitCount??0}회 · ${when}`});opt.selected=x.index===selectedPatronIndex;sel.appendChild(opt)}patronBox.appendChild(sel);
+        const patronDetail=el('div');patronBox.appendChild(patronDetail);const drawPatron=idx=>{selectedPatronIndex=idx;patronDetail.innerHTML='';const chosen=patronEntries.find(x=>x.index===idx)??patronEntries[0],r=chosen.record,pg=el('div',{className:'wc2-grid'});
+          pg.appendChild(field(['patronRecords',String(chosen.index),'platonic'],'호감 / 친근감',r.platonic??0,{min:-100,max:100,step:1,integer:true,desc:'patronRecords.platonic. 원본 관계 갱신 함수가 -100~100으로 제한합니다.'}));
+          pg.appendChild(field(['patronRecords',String(chosen.index),'romantic'],'연애 감정',r.romantic??0,{min:-100,max:100,step:1,integer:true,desc:'patronRecords.romantic. 손님에 대한 연애적 애착의 기반값입니다.'}));
+          pg.appendChild(field(['patronRecords',String(chosen.index),'sexual'],'성적 끌림',r.sexual??0,{min:-100,max:100,step:1,integer:true,desc:'patronRecords.sexual. 손님에 대한 성적 끌림 저장값입니다.'}));patronDetail.appendChild(pg);
+          let attach=0;try{attach=Xo(r,w)}catch{}patronDetail.appendChild(el('div',{className:'wc2-ro'},[el('span',{text:'애착 (계산값 · 편집 안 함)'}),el('span',{text:fmt(Number(attach)||0)})]));};sel.addEventListener('change',()=>drawPatron(Number(sel.value)));drawPatron(selectedPatronIndex);
+      }
+      rr.appendChild(patronBox);
+
+      // Magic
+      const magic=s.player?.magic??{grimoireFound:false,understanding:0,attunement:0,mana:{current:30},spells:{},sessionsToday:0};
+      const mb=box('마법 / 비술 기능','원본 코드를 확인한 결과 grimoireFound는 단일 발견 플래그이며, 강화/약화와 마음 흔들기는 이 플래그가 켜지면 게임 자체에서 사용 가능으로 판정합니다. 주머니 감정만 별도 spell 객체가 필요합니다.');views.magic.appendChild(mb);
+      const bookRow=el('div',{className:'wc2-toggle-row'}),bookText=el('div',{},[el('div',{className:'wc2-toggle-label',text:'마도서 발견 / 비술 기능 ON'}),el('div',{className:'wc2-toggle-desc',text:'grimoireFound true/false. 책 발견 이벤트가 실제로 바꾸는 핵심 값입니다.'})]),bookCb=el('input',{type:'checkbox'});bookCb.checked=!!magic.grimoireFound;bookCb.dataset.magicBook='1';wc2RememberCheck(bookCb);bookRow.append(bookText,bookCb);mb.appendChild(bookRow);
+      const purseRow=el('div',{className:'wc2-toggle-row'}),purseText=el('div',{},[el('div',{className:'wc2-toggle-label',text:'주머니 감정 주문 습득'}),el('div',{className:'wc2-toggle-desc',text:'spells.assay_purse 존재 여부를 조절합니다. 새로 켤 때는 원본 최초 습득값(숙련도 8, casts 0)으로 생성합니다.'})]),purseCb=el('input',{type:'checkbox'});purseCb.checked=!!magic.spells?.assay_purse;purseCb.dataset.magicAssay='1';wc2RememberCheck(purseCb);purseCb.addEventListener('change',()=>{if(purseCb.checked)bookCb.checked=true});bookCb.addEventListener('change',()=>{if(!bookCb.checked)purseCb.checked=false});purseRow.append(purseText,purseCb);mb.appendChild(purseRow);
+      const infRow=el('div',{className:'wc2-toggle-row'}),infText=el('div',{},[el('div',{className:'wc2-toggle-label',text:'무한 마나'}),el('div',{className:'wc2-toggle-desc',text:'세이브 구조에는 치트 전용 필드를 넣지 않습니다. 켜져 있는 동안 마나가 소비되면 현재 동조율의 최대 마나로 즉시 복원합니다.'})]),infCb=el('input',{type:'checkbox'});infCb.checked=!!wc2Options.infiniteMana;infRow.append(infText,infCb);infCb.addEventListener('change',()=>{wc2Options.infiniteMana=infCb.checked;saveOptions();if(infCb.checked)liveLocks.delete('player.magic.mana.current');refillManaIfNeeded();renderLive();msg(infCb.checked?'무한 마나를 켰습니다.':'무한 마나를 껐습니다.',infCb.checked?'#86efac':'#fde68a')});mb.appendChild(infRow);
+
+      const mg=el('div',{className:'wc2-grid',style:{marginTop:'10px'}});mg.appendChild(field(['player','magic','understanding'],'이해도',magic.understanding??0,{min:0,max:100,step:1,desc:'마법 이론 이해도. 원본 로직에서 0~100 clamp.'}));mg.appendChild(field(['player','magic','attunement'],'동조율',magic.attunement??0,{min:0,max:100,step:1,desc:'마법 숙련의 핵심 성장값. 최대 마나도 이 값에 따라 30~100으로 증가.'}));const mm=maxMana(magic.attunement??0);mg.appendChild(field(['player','magic','mana','current'],'현재 마나',magic.mana?.current??0,{min:0,max:mm,step:1,desc:`현재 동조율 기준 최대 마나 ${mm}. 무한 마나가 켜져 있으면 자동으로 최대치가 유지됩니다.`}));mb.appendChild(mg);
+      const spellEntries=Object.entries(magic.spells??{}).filter(([,v])=>v&&typeof v.proficiency==='number');if(spellEntries.length){const sb=box('주문 숙련도','현재 세이브에 존재하는 spell proficiency만 조절합니다. 표시명도 한국어로 보완했습니다.');const sg=el('div',{className:'wc2-grid'});for(const[id,sp]of spellEntries)sg.appendChild(field(['player','magic','spells',id,'proficiency'],`${WC2_SPELL_LABELS[id]??id} 숙련도`,sp.proficiency,{min:0,max:100,step:1,desc:`시전 횟수(casts=${sp.casts??0})는 내부 기록이므로 수정하지 않습니다.`}));sb.appendChild(sg);views.magic.appendChild(sb)}
+      const mr=box('마법 해금 구조 메모');mr.appendChild(el('div',{className:'wc2-note',text:'현재 버전에서는 강화/약화·마음 흔들기는 마도서 발견 플래그만으로 메뉴가 열립니다. 주머니 감정은 별도 습득 상태입니다. activeAssay, sessionsToday 같은 일시 효과/카운터는 계속 수정하지 않습니다.'}));views.magic.appendChild(mr);
+      setTab(currentTab);
+    }
+
+    function applyPreset(kind){
+      const now=ue.getState(),draft=clone(now.state),wife=getPrimary(draft);if(!wife){msg('주요 캐릭터를 찾을 수 없습니다.','#fca5a5');return}
+      let touched=false,magicNumericTouched=false;
+      panel.querySelectorAll('input[data-path]:not(:disabled)').forEach(i=>{if(!wc2ValueChanged(i))return;const path=i.dataset.path.split('.');let v=Number(i.value);if(!Number.isFinite(v))v=0;const min=Number(i.dataset.min),max=Number(i.dataset.max);if(Number.isFinite(min)&&Number.isFinite(max))v=clamp(v,min,max);if(i.dataset.integer==='1')v=Math.round(v);else{const step=Number(i.dataset.step);if(step===.1)v=Math.round(v*10)/10;if(step===.01)v=Math.round(v*100)/100}if(Number(getPath(draft,path))===v)return;setPath(draft,path,v);touched=true;if(path[0]==='player'&&path[1]==='magic')magicNumericTouched=true});
+
+      const traitChanged=[...panel.querySelectorAll('input[data-trait-own],input[data-trait-seen]')].some(wc2CheckChanged);
+      if(traitChanged||kind==='discover'){
+        const oldOwned=Array.isArray(wife.latentTraits)?wife.latentTraits:[],oldSeen=Array.isArray(wife.noticedLatentTraits)?wife.noticedLatentTraits:[],unknownOwned=oldOwned.filter(x=>!WC2_TRAIT_IDS.has(x)),unknownSeen=oldSeen.filter(x=>!WC2_TRAIT_IDS.has(x));const own=[],seen=[];for(const t of WC2_TRAITS){const a=panel.querySelector(`input[data-trait-own="${t.id}"]`),b=panel.querySelector(`input[data-trait-seen="${t.id}"]`);if(a?.checked)own.push(t.id);if(a?.checked&&b?.checked)seen.push(t.id)}wife.latentTraits=[...new Set([...unknownOwned,...own])];wife.noticedLatentTraits=[...new Set([...unknownSeen,...seen])];touched=true;
+      }
+
+      panel.querySelectorAll('input[data-husband-feeling]').forEach(i=>{if(!wc2ValueChanged(i))return;setHusbandFeeling(wife,i.dataset.husbandFeeling,clamp(Number(i.value)||0,0,100),draft.slot??0);touched=true});
+      if(kind==='gold'&&draft.economy.gold!==999999){draft.economy.gold=999999;touched=true}
+      if(kind==='discover'){const next=[...new Set(wife.latentTraits)];if(JSON.stringify(next)!==JSON.stringify(wife.noticedLatentTraits)){wife.noticedLatentTraits=next;touched=true}}
+
+      const bookCb=panel.querySelector('input[data-magic-book]'),assayCb=panel.querySelector('input[data-magic-assay]'),magicToggleChanged=(bookCb&&wc2CheckChanged(bookCb))||(assayCb&&wc2CheckChanged(assayCb));
+      if(magicToggleChanged){
+        if(!draft.player.magic)draft.player.magic={grimoireFound:false,understanding:0,attunement:0,mana:{current:30},spells:{},sessionsToday:0};const magic=draft.player.magic;magic.spells=magic.spells??{};magic.mana=magic.mana??{current:30};if(bookCb)magic.grimoireFound=bookCb.checked;if(assayCb){if(assayCb.checked){magic.grimoireFound=true;if(!magic.spells.assay_purse)magic.spells.assay_purse={proficiency:8,casts:0}}else if(magic.spells.assay_purse)delete magic.spells.assay_purse}if(!magic.grimoireFound&&magic.spells.assay_purse)delete magic.spells.assay_purse;touched=true;
+      }
+      if(magicNumericTouched){const magic=draft.player.magic;if(magic){magic.understanding=clamp(Number(magic.understanding)||0,0,100);magic.attunement=clamp(Number(magic.attunement)||0,0,100);const mm=maxMana(magic.attunement);magic.mana=magic.mana??{current:30};magic.mana.current=wc2Options.infiniteMana?mm:clamp(Number(magic.mana.current)||0,0,mm);for(const sp of Object.values(magic.spells??{})){if(sp&&typeof sp.proficiency==='number')sp.proficiency=clamp(sp.proficiency,0,100)}}
+      }
+
+      if(!touched||JSON.stringify(draft)===JSON.stringify(now.state)){msg('실제 변경사항이 없습니다. 표시용 반올림 전의 원본 소수값도 그대로 유지했습니다.','#a8a29e');return}
+      if(typeof koValidSaveState175==='function'&&!koValidSaveState175(draft)){msg('게임 자체 세이브 구조 검증에 실패해 변경을 적용하지 않았습니다.','#fca5a5');return}
+      lastBackup=clone(now.state);ue.setState(prev=>({...prev,state:draft}));render();renderLive();const text=kind==='gold'?'골드를 999999로 설정하고 실제 변경값만 적용했습니다.':kind==='discover'?'현재 보유 특성을 모두 발견됨으로 처리했습니다.':'실제로 수정한 항목만 정상 범위와 게임 자체 세이브 검증을 거쳐 적용했습니다.';msg(text,'#86efac')
+    }
+
+    toggle.addEventListener('click',()=>{panel.classList.add('open');render();renderLive()});close.addEventListener('click',()=>{panel.classList.remove('open');live.classList.remove('open')});liveDrawerBtn.addEventListener('click',()=>{live.classList.toggle('open');renderLive()});liveClose.addEventListener('click',()=>live.classList.remove('open'));panel.addEventListener('click',e=>{if(e.target===panel){panel.classList.remove('open');live.classList.remove('open')}});document.addEventListener('keydown',e=>{if(!panel.classList.contains('open'))return;e.stopPropagation();if(e.key==='Escape'){e.preventDefault();if(live.classList.contains('open'))live.classList.remove('open');else panel.classList.remove('open')} });
+    debugCb.addEventListener('change',()=>{debugMode=debugCb.checked;if(!debugMode){clearDebugSession240();document.getElementById("ko299-modal")?.remove()}render();renderLive();msg(debugMode?'디버그 모드를 켰습니다. 진행 상태·물자·임대료·엔딩 테스트값 수정에 주의하세요.':'디버그 모드를 껐습니다. DEBUG 세션 고정과 NTR 판정 오버라이드를 해제했습니다.',debugMode?'#fbbf24':'#86efac')});
+    refresh.addEventListener('click',()=>{render();renderLive();msg('현재 game state 값을 다시 읽었습니다.')});apply.addEventListener('click',()=>applyPreset());goldBtn.addEventListener('click',()=>applyPreset('gold'));discover.addEventListener('click',()=>applyPreset('discover'));undoCheat.addEventListener('click',()=>{if(!lastBackup)return;const restore=clone(lastBackup);lastBackup=null;ue.setState(prev=>({...prev,state:restore}));render();renderLive();msg('직전 치트 적용 전 상태로 되돌렸습니다.','#fde68a')});
+    document.body.append(toggle,panel);
+    const syncVisibility=()=>{try{toggle.style.display=ue.getState().started?'block':'none';if(!ue.getState().started){panel.classList.remove('open');live.classList.remove('open')}}catch{}};syncVisibility();refillManaIfNeeded();try{ue.subscribe(()=>{syncVisibility();refillManaIfNeeded();enforceLiveLocks();syncLiveDisplay()})}catch{}
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+/* --- End Wayward MOD v2.103 --- */
+
+
+/* Wayward MOD v2.103 UI. All player-written names use textContent, never HTML. */
+const KO_THEMES102=[
+ ['classic','기본','#5b3923'],['ivory','펄 그레이','#e2e5e6'],['charcoal','다크','#1d2429'],
+ ['midnight','미드나이트','#182644'],['sage','세이지','#30473c']
+];
+// Persisted device preference is applied before the first interactive game paint.
+try{const id=vt.getState().theme;if(KO_THEMES102.some(([key])=>key===id)&&id!=='classic')document.body.dataset.waywardTheme=id;else delete document.body.dataset.waywardTheme}catch{}
+function koThemeButton102({mobile}){
+ const chosen=vt(s=>s.theme),theme=KO_THEMES102.some(([id])=>id===chosen)?chosen:'classic';
+ const [open,setOpen]=X.useState(false),[position,setPosition]=X.useState(null),holder=X.useRef(null);
+ X.useLayoutEffect(()=>{
+  if(!open)return;
+  const place=()=>{const rect=holder.current?.getBoundingClientRect();if(!rect)return;
+   if(!rect.width){setOpen(false);return}
+   const width=Math.min(235,Math.max(0,window.innerWidth-12));
+   setPosition({position:'fixed',left:Math.max(6,Math.min(rect.right-width,window.innerWidth-width-6)),top:rect.bottom+5,width});
+  };
+  place();window.addEventListener('resize',place);window.addEventListener('scroll',place,true);
+  return()=>{window.removeEventListener('resize',place);window.removeEventListener('scroll',place,true)};
+ },[open]);
+ X.useEffect(()=>{if(theme==='classic')delete document.body.dataset.waywardTheme;else document.body.dataset.waywardTheme=theme},[theme]);
+ X.useEffect(()=>{if(!open)return;const outside=e=>{if(!holder.current?.contains(e.target))setOpen(false)},escape=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();setOpen(false)}};document.addEventListener('pointerdown',outside);document.addEventListener('keydown',escape);return()=>{document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',escape)}},[open]);
+ const cls=mobile?'shrink-0 border-l border-stone-700 px-2 text-[11px] text-amber-200 hover:bg-stone-700':'bg-stone-800/90 hover:bg-stone-700 border border-stone-700 rounded px-2 h-9 text-[12px] text-amber-200';
+ return m.jsxs('div',{className:'relative shrink-0 flex items-stretch',ref:holder,children:[
+  m.jsx('button',{type:'button',className:cls,title:'화면 테마 변경',onClick:()=>setOpen(v=>!v),'aria-expanded':open,'aria-label':'테마 변경',children:'◉ 테마'}),
+  open&&m.jsx('div',{id:'ko-theme-popover',style:position??undefined,role:'group','aria-label':'화면 테마 선택',children:KO_THEMES102.map(([id,label,color])=>m.jsxs('button',{type:'button',title:`${label} 테마`,'aria-label':`${label} 테마`,'aria-pressed':theme===id,onClick:()=>{vt.getState().set({theme:id});setOpen(false)},children:[m.jsx('span',{className:'ko-theme-dot',style:{background:color}}),m.jsx('span',{children:label})]},id))})
+ ]})
+}
+function koHeaderButtons299({variant:v}){
+ const count=ue(x=>Object.values(x.modData?.inventory??{}).reduce((a,n)=>a+(Number.isFinite(n)?Math.max(0,n):0),0));
+ const mobile=v==='mobile';
+ const base=mobile?'shrink-0 border-l border-stone-700 px-2 text-[11px] text-amber-200 hover:bg-stone-700':'bg-stone-800/90 hover:bg-stone-700 border border-stone-700 rounded px-2 h-9 text-[12px] text-amber-200';
+ const inv=m.jsxs('button',{className:base,onClick:koOpenInventory299,title:'보유 아이템',children:['👜 인벤토리 ',count]}),shop=m.jsx('button',{className:base,onClick:koOpenShop299,title:'배달·시장·고용',children:'상점'}),theme=m.jsx(koThemeButton102,{mobile});
+ return m.jsxs('div',{className:mobile?'flex items-stretch shrink-0':'hidden desk:flex fixed top-2 right-[6.5rem] z-30 gap-1',children:mobile?[theme,inv,shop]:[inv,shop,theme]})
+}
+function ko299Node(tag,text,props={}){const el=document.createElement(tag);if(text!=null)el.textContent=text;for(const [k,v] of Object.entries(props))if(k==='className')el.className=v;else if(k==='style')Object.assign(el.style,v);else if(k.startsWith('on'))el.addEventListener(k.slice(2).toLowerCase(),v);else el.setAttribute(k,v);return el}
+function ko299Css(){if(document.getElementById('ko299-styles'))return;
+ // Only intercept while our overlay exists. Native input/select defaults
+ // remain available; the underlying game must not consume these keystrokes.
+ window.addEventListener('keydown',e=>{
+  const modal=document.getElementById('ko299-modal');if(!modal)return;e.stopImmediatePropagation();
+  if(e.key==='Escape'){e.preventDefault();modal.remove();return}
+  if(e.key==='Tab'){
+   const items=[...modal.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,a[href],[tabindex="0"]')].filter(el=>el.getClientRects().length>0),i=items.indexOf(document.activeElement);
+   if(!items.length){e.preventDefault();modal.focus()}
+   else if(i<0||e.shiftKey&&i===0||!e.shiftKey&&i===items.length-1){e.preventDefault();items[e.shiftKey?items.length-1:0].focus()}
+  }else if(!modal.contains(e.target)){e.preventDefault();modal.focus()}
+ },true);
+ document.head.append(ko299Node('style',`#ko299-modal{position:fixed;inset:0;z-index:100002;background:#000b;color:#eee;display:flex;align-items:center;justify-content:center;padding:12px;font:13px/1.45 system-ui,'Malgun Gothic',sans-serif}#ko299-modal .ko299-card{width:min(760px,98vw);max-height:94dvh;overflow:auto;background:#1c1917;border:1px solid #78716c;border-radius:12px;padding:16px;box-shadow:0 15px 60px #000}#ko299-modal .ko299-card.wide{width:min(1100px,99vw)}#ko299-modal .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0}#ko299-modal .split{display:grid;grid-template-columns:minmax(190px,260px) minmax(0,1fr);gap:16px}#ko299-modal .fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}#ko299-modal .field{border:1px solid #44403c;border-radius:7px;padding:7px;min-width:0}#ko299-modal button,#ko299-modal input,#ko299-modal select{background:#292524;border:1px solid #78716c;color:#eee;border-radius:6px;padding:6px}#ko299-modal input[type=number]{width:76px}#ko299-modal input[type=range]{min-width:85px;flex:1;accent-color:#f59e0b}#ko299-modal .stack{display:flex;flex-direction:column;gap:8px}#ko299-modal button{cursor:pointer}#ko299-modal button:hover{background:#78350f}#ko299-modal button:disabled{opacity:.4;cursor:not-allowed}#ko299-modal .muted{color:#aaa;font-size:11px}#ko299-modal .title{font-size:20px;font-weight:bold;color:#fbbf24}#ko299-modal .heading{font-size:15px;color:#fde68a;font-weight:bold;margin:16px 0 5px}#ko299-modal .notice{color:#86efac;white-space:pre-wrap}#ko299-modal select[name=guests]{width:100%;height:32px}#ko299-modal .qty{width:80px!important}@media(max-width:670px){#ko299-modal .split,#ko299-modal .fields{grid-template-columns:1fr}#ko299-modal .ko299-card{padding:10px}#ko299-modal .field{padding:5px}}`,{id:'ko299-styles'}))}
+function ko299Modal(title,wide=false){ko299Css();document.getElementById('ko299-modal')?.remove();const cover=ko299Node('div',null,{id:'ko299-modal'}),card=ko299Node('div',null,{className:'ko299-card'+(wide?' wide':'')}),head=ko299Node('div',null,{className:'row'}),body=ko299Node('div'),message=ko299Node('div',null,{className:'notice'}),close=ko299Node('button','닫기',{onclick:()=>cover.remove()});head.append(ko299Node('div',title,{className:'title'}),close);head.style.justifyContent='space-between';card.append(head,body,message);cover.append(card);cover.onclick=e=>{if(e.target===cover)cover.remove()};cover.setAttribute('role','dialog');cover.setAttribute('aria-modal','true');cover.setAttribute('aria-label',title);cover.tabIndex=-1;document.body.append(cover);cover.focus();return {cover,body,message,show:(text,error=false)=>{message.textContent=text;message.style.color=error?'var(--wm-notice-error, #fca5a5)':'var(--wm-notice-ok, #86efac)'}}}
+function ko299Action(a){const before=ue.getState().state;ue.getState().dispatch(a);const after=ue.getState().state;if(after.gameOver)document.getElementById('ko299-modal')?.remove();return (after.logSeq??0)>(before.logSeq??0)}
+function ko299QtyRow(parent,label,def=0,max=99){const row=ko299Node('label',null,{className:'row'}),name=ko299Node('span',label);name.style.minWidth='160px';const input=ko299Node('input',null,{type:'number',min:'0',max:String(max),step:'1',value:String(def),className:'qty'});row.append(name,input);parent.append(row);return input}
+function ko299ReadQty(inputs){const qty={};for(const [id,input] of Object.entries(inputs)){const val=Number(input.value);if(!Number.isSafeInteger(val)||val<0||val>99)return null;qty[id]=val}return qty}
+function koOpenShop299(){const box=ko299Modal('상점 · 배달 / 아이템 / 고용'),b=box.body;
+ b.append(ko299Node('p','긴급 배달은 시세 합계에 25%를 더해 즉시 도착합니다. 식재료는 조리해야 손님에게 낼 수 있습니다.',{className:'muted'}));
+ const supply=ko299Node('section'),inputs={};b.append(supply);
+ function showSupply(){const s=ue.getState().state;supply.replaceChildren(ko299Node('div',`긴급 배달 · 보유 ${s.economy.gold}g · 재고 식재료 ${s.supplies.food}, 맥주 ${s.supplies.beer}, 와인 ${s.supplies.wine}`,{className:'heading'}));for(const [id,label] of [['food','식재료'],['beer','맥주'],['wine','와인']])inputs[id]=ko299QtyRow(supply,`${label} · 시세 ${om(s,id)}g`);const price=ko299Node('span','0g (배달료 포함)'),buy=ko299Node('button','즉시 배달');supply.append(ko299Node('div',null,{className:'row'}));const row=supply.lastChild;row.append(price,buy);const update=()=>{const q=ko299ReadQty(inputs);price.textContent=q?`${Math.ceil(1.25*['food','beer','wine'].reduce((v,id)=>v+q[id]*om(ue.getState().state,id),0))}g (배달료 포함)`:'수량 확인 필요'};Object.values(inputs).forEach(x=>x.oninput=update);buy.onclick=()=>{const qty=ko299ReadQty(inputs);if(!qty)return box.show('수량은 품목별 0~99의 정수로 입력해 주세요.',true);if(!ko299Action({type:'ko299_delivery',qty}))return box.show('구매할 수 없습니다.
