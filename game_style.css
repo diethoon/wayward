@@ -315,10 +315,6 @@ body[data-wayward-theme="ivory"] [class~="text-yellow-600"]{color:#854d0e!import
   .mobile-status-portrait > div > div { height:auto !important; min-height:0 !important; max-height:none !important; }
   .mobile-status-portrait img, .mobile-status-portrait video { width:100% !important; height:auto !important; max-width:100% !important; max-height:none !important; object-fit:contain; display:block; background:rgb(12 10 9); }
   #wc2-toggle {
-    left:max(6px,env(safe-area-inset-left)) !important;
-    right:auto !important;
-    top:auto !important;
-    bottom:max(6px,env(safe-area-inset-bottom)) !important;
     opacity:.05 !important;
     transform:none !important;
     background:rgba(124,45,18,.10) !important;
@@ -387,7 +383,7 @@ body[data-wayward-theme="ivory"] [class~="text-yellow-600"]{color:#854d0e!import
   .mobile-action-panel { order:2; width:min(37%,17rem) !important; max-width:17rem !important; min-width:min(12rem,37vw); min-height:0; overflow:hidden; padding-bottom:max(.25rem,env(safe-area-inset-bottom)) !important; }
   .mobile-action-location { max-height:34vh; overflow-y:auto; }
   .mobile-action-scroll { overflow-y:auto; overflow-x:hidden; }
-  #wc2-toggle { left:auto !important; right:max(8px,env(safe-area-inset-right)) !important; bottom:max(8px,env(safe-area-inset-bottom)) !important; }
+  #wc2-toggle { opacity:.05 !important; }
 }
 
 /* Mobile phone layout: persistent status + natural portrait + compact controls. */
@@ -614,5 +610,155 @@ body[data-wayward-theme="ivory"] [class~="text-yellow-600"]{color:#854d0e!import
 @media (max-width:360px) and (orientation:portrait) {
   .mobile-layout {
     grid-template-columns:minmax(0,60%) minmax(0,40%) !important;
+  }
+}
+
+
+/* Final mobile UX pass: original-sized text, dense spacing, persistent status/narration. */
+@media (max-width:1023px) {
+  .mobile-status-block {
+    margin:0 0 .2rem !important;
+    border-radius:.35rem !important;
+  }
+  .mobile-status-portrait {
+    width:100% !important;
+    min-width:60vw !important;
+    height:auto !important;
+    aspect-ratio:auto !important;
+  }
+  .mobile-status-portrait > div,
+  .mobile-status-portrait > div > div {
+    width:100% !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    aspect-ratio:auto !important;
+  }
+  .mobile-status-portrait img,
+  .mobile-status-portrait video {
+    width:100% !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-width:none !important;
+    max-height:none !important;
+    object-fit:contain !important;
+  }
+
+  /* Keep the original portrait's own status strip; remove the duplicate card made by Studio. */
+  .mobile-current-activity { display:none !important; }
+
+  .mobile-persistent-header {
+    flex:0 0 auto !important;
+    min-height:0 !important;
+    overflow:hidden !important;
+  }
+  .mobile-persistent-narration {
+    min-width:0 !important;
+    max-height:24dvh !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    margin:0 !important;
+    padding:0 .1rem .15rem !important;
+  }
+  .mobile-persistent-narration > div {
+    font-size:.875rem !important;
+    line-height:1.25 !important;
+  }
+  .mobile-persistent-narration .sticky {
+    margin:0 0 .15rem !important;
+    padding:.1rem 0 !important;
+  }
+
+  .mobile-status-summary {
+    padding:.05rem .2rem .1rem !important;
+  }
+  .mobile-status-location-row {
+    padding:.1rem .2rem .05rem !important;
+    gap:.25rem !important;
+  }
+  .mobile-status-location-name {
+    font-size:.75rem !important;
+    line-height:1.2 !important;
+  }
+  .mobile-status-location-hint {
+    font-size:.75rem !important;
+  }
+  .mobile-status-summary-row {
+    min-height:26px !important;
+    padding:.05rem .2rem !important;
+    gap:.25rem !important;
+    grid-template-columns:3rem minmax(0,1fr) 1rem !important;
+  }
+  .mobile-status-summary-label,
+  .mobile-status-summary-value,
+  .mobile-status-summary-row-wife .mobile-status-summary-value {
+    font-size:.75rem !important;
+    line-height:1.2 !important;
+  }
+  .mobile-status-summary-value,
+  .mobile-status-summary-row-wife .mobile-status-summary-value {
+    white-space:normal !important;
+    overflow:visible !important;
+    text-overflow:clip !important;
+    word-break:keep-all !important;
+  }
+  .mobile-status-summary-detail {
+    margin:.05rem .2rem .1rem 3rem !important;
+    padding:.15rem .3rem !important;
+    font-size:.75rem !important;
+    line-height:1.2 !important;
+  }
+
+  /* No artificial vertical breathing room in the phone UI. */
+  .mobile-main-panel > .shrink-0 { padding:.15rem .2rem 0 !important; }
+  .mobile-main-panel > .flex-1 { padding:.05rem .2rem .2rem !important; }
+  .mobile-action-scroll { padding-top:0 !important; padding-bottom:0 !important; }
+  .mobile-location-section { margin:0 0 .1rem !important; padding:.05rem !important; }
+  .mobile-move-toggle { min-height:32px !important; padding:.1rem .3rem !important; font-size:.75rem !important; }
+  .mobile-move-nav { padding:.05rem .1rem .1rem !important; }
+  .mobile-stock-up { padding:.15rem .2rem .2rem !important; }
+  .mobile-stock-up-button { min-height:34px !important; padding:.2rem .4rem !important; }
+  .mobile-stock-up-title { font-size:.75rem !important; }
+  .mobile-stock-up-cost,
+  .mobile-stock-up-hint { font-size:.6875rem !important; line-height:1.2 !important; }
+
+  /* MOD toggle remains draggable: do not override its inline left/top/bottom/right. */
+  #wc2-toggle {
+    opacity:.05 !important;
+    touch-action:none !important;
+  }
+  #wc2-toggle:hover,
+  #wc2-toggle:active,
+  #wc2-toggle:focus-visible,
+  #wc2-toggle.wc2-toggle-dragging {
+    opacity:.92 !important;
+  }
+}
+
+@media (max-width:1023px) and (orientation:portrait) {
+  .mobile-layout {
+    grid-template-columns:minmax(0,62%) minmax(0,38%) !important;
+  }
+}
+
+@media (max-width:360px) and (orientation:portrait) {
+  .mobile-layout {
+    grid-template-columns:minmax(0,60%) minmax(0,40%) !important;
+  }
+}
+
+@media (max-width:1023px) and (orientation:landscape) {
+  .mobile-layout {
+    display:flex !important;
+    flex-direction:row !important;
+  }
+  .mobile-main-panel {
+    flex:1 1 auto !important;
+    min-width:0 !important;
+  }
+  .mobile-action-panel {
+    width:37% !important;
+    max-width:17rem !important;
+    min-width:12rem !important;
   }
 }
