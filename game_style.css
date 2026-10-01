@@ -308,13 +308,103 @@ body[data-wayward-theme="ivory"] [class~="text-yellow-600"]{color:#854d0e!import
   .mobile-action-panel button, .mobile-main-panel button { word-break:keep-all; }
 }
 @media (max-width: 1023px) and (orientation: portrait) {
-  .mobile-layout { flex-direction:column !important; }
-  .mobile-main-panel { order:1; flex:1 1 auto !important; width:100% !important; min-height:0; border-left:0 !important; border-right:0 !important; }
-  .mobile-action-panel { order:2; width:100% !important; max-width:none !important; flex:0 0 auto !important; max-height:36dvh; overflow-y:auto; overflow-x:hidden; border-top:1px solid rgba(120,113,108,.55); border-left:0 !important; border-right:0 !important; padding-left:max(.35rem,env(safe-area-inset-left)) !important; padding-right:max(.35rem,env(safe-area-inset-right)) !important; padding-bottom:max(.3rem,env(safe-area-inset-bottom)) !important; }
-  .mobile-status-portrait { min-height:10rem !important; max-height:28dvh !important; }
-  .mobile-status-portrait img { max-height:28dvh; object-fit:cover; }
-  #wc2-toggle { opacity:.07 !important; transform:scale(.82) !important; z-index:30 !important; }
-  #wc2-toggle:hover, #wc2-toggle:active, #wc2-toggle:focus-visible, #wc2-toggle.wc2-toggle-dragging { opacity:.9 !important; transform:scale(1) !important; }
+  /* Phone portrait is a normal vertical document flow: no side-by-side panes. */
+  .mobile-layout {
+    display:flex !important;
+    flex-direction:column !important;
+    align-items:stretch !important;
+    width:100% !important;
+    height:auto !important;
+    min-height:0 !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+  }
+  .mobile-main-panel {
+    order:1;
+    width:100% !important;
+    min-width:0 !important;
+    height:auto !important;
+    min-height:0 !important;
+    flex:none !important;
+    border-left:0 !important;
+    border-right:0 !important;
+    overflow:visible !important;
+  }
+  .mobile-main-panel > .shrink-0 {
+    flex:none !important;
+  }
+  .mobile-main-panel > .flex-1 {
+    flex:none !important;
+    height:auto !important;
+    min-height:0 !important;
+    overflow:visible !important;
+  }
+  .mobile-action-panel {
+    order:2;
+    width:100% !important;
+    max-width:none !important;
+    min-width:0 !important;
+    max-height:none !important;
+    height:auto !important;
+    flex:none !important;
+    overflow:visible !important;
+    border-top:1px solid rgba(120,113,108,.55);
+    border-left:0 !important;
+    border-right:0 !important;
+    padding-left:max(.45rem,env(safe-area-inset-left)) !important;
+    padding-right:max(.45rem,env(safe-area-inset-right)) !important;
+    padding-bottom:max(.4rem,env(safe-area-inset-bottom)) !important;
+  }
+  .mobile-action-panel > .flex-1 {
+    overflow:visible !important;
+    min-height:0 !important;
+  }
+  .mobile-status-portrait {
+    min-height:12rem !important;
+    max-height:none !important;
+    height:auto !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+  }
+  .mobile-status-portrait img,
+  .mobile-status-portrait video {
+    width:100% !important;
+    max-width:100% !important;
+    max-height:48dvh !important;
+    height:auto !important;
+    object-fit:contain !important;
+  }
+  .mobile-action-panel .grid-cols-1 {
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  }
+  .mobile-action-panel .space-y-2 {
+    display:grid !important;
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    gap:.5rem !important;
+  }
+  .mobile-action-panel .space-y-2 > * {
+    min-width:0;
+  }
+  .mobile-action-panel button {
+    min-height:44px;
+    word-break:keep-all;
+  }
+  #wc2-toggle {
+    left:auto !important;
+    right:max(8px,env(safe-area-inset-right)) !important;
+    bottom:max(8px,env(safe-area-inset-bottom)) !important;
+    opacity:.025 !important;
+    transform:scale(.72) !important;
+    z-index:30 !important;
+  }
+  #wc2-toggle:hover,
+  #wc2-toggle:active,
+  #wc2-toggle:focus-visible,
+  #wc2-toggle.wc2-toggle-dragging {
+    opacity:.92 !important;
+    transform:scale(1) !important;
+  }
 }
 @media (max-width: 1023px) and (orientation: landscape) {
   .mobile-layout { flex-direction:row !important; }
