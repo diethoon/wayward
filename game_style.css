@@ -838,3 +838,66 @@ body[data-wayward-theme="ivory"] [class~="text-yellow-600"]{color:#854d0e!import
     text-overflow:ellipsis !important;
   }
 }
+
+
+/* Final compact status geometry: no wrapping labels, no horizontal drag, no redundant location block. */
+@media (max-width:1023px) {
+  .mobile-status-location-row {
+    min-height:18px !important;
+    padding:0 .08rem !important;
+    gap:.3rem !important;
+  }
+  .mobile-status-location-item {
+    gap:.18rem !important;
+    font-size:.68rem !important;
+    line-height:1 !important;
+  }
+  .mobile-status-location-item b { font-size:.72rem !important; }
+  .mobile-status-summary-row {
+    grid-template-columns:2.35rem minmax(0,1fr) .65rem !important;
+    min-height:21px !important;
+    padding:0 .08rem !important;
+    gap:.12rem !important;
+  }
+  .mobile-status-summary-label {
+    font-size:.68rem !important;
+    line-height:1 !important;
+  }
+  .mobile-status-summary-value {
+    font-size:.68rem !important;
+    line-height:1 !important;
+  }
+  .mobile-status-summary-chevron { font-size:.6rem !important; }
+
+  .mobile-status-summary-row-wife {
+    padding:0 .08rem !important;
+  }
+  .mobile-status-summary-row-wife .mobile-status-wife-head {
+    grid-template-columns:2.35rem minmax(0,1fr) .65rem !important;
+    gap:.12rem !important;
+  }
+  .mobile-status-summary-row-wife .mobile-status-wife-stats {
+    display:flex !important;
+    flex-wrap:nowrap !important;
+    justify-content:space-between !important;
+    align-items:center !important;
+    gap:.12rem !important;
+    margin:0 0 0 2.35rem !important;
+    width:calc(100% - 2.35rem) !important;
+  }
+  .mobile-status-summary-row-wife .mobile-status-wife-stats span {
+    flex:0 0 auto !important;
+    min-width:0 !important;
+    font-size:.58rem !important;
+    line-height:1 !important;
+    white-space:nowrap !important;
+    overflow:visible !important;
+    text-overflow:clip !important;
+  }
+  .mobile-status-summary-detail {
+    margin:.02rem .08rem .04rem 2.35rem !important;
+    padding:.04rem .12rem !important;
+    font-size:.62rem !important;
+    line-height:1 !important;
+  }
+}
