@@ -1189,7 +1189,7 @@ function koImageStatus297(){
 }
 function koImageSettings297(){
   const raw=vt(s=>s.koImage297),prefs=X.useMemo(()=>koImagePrefs297(raw),[raw]),active=koImageSession297();
-  const [mode,setMode]=X.useState(prefs.mode),[steps,setSteps]=X.useState(String(prefs.custom.steps)),[cfg,setCfg]=X.useState(String(prefs.custom.cfg)),[lora,setLora]=X.useState(String(prefs.custom.loraStrength));
+  const [mode,setMode]=X.useState(prefs.mode),[steps,setSteps]=X.useState(String(prefs.custom?.steps ?? 12)),[cfg,setCfg]=X.useState(String(prefs.custom?.cfg ?? 2)),[lora,setLora]=X.useState(String(prefs.custom?.loraStrength ?? 0.9));
   const [enabled,setEnabled]=X.useState(prefs.experimental.enabled),[variants,setVariants]=X.useState(String(prefs.experimental.variants)),[packs,setPacks]=X.useState(String(prefs.experimental.packs));
   const [profileName,setProfileName]=X.useState(""),[modelName,setModelName]=X.useState(""),[modelPath,setModelPath]=X.useState(""),[message,setMessage]=X.useState("");
   const inputClass="bg-stone-800 border border-stone-700 rounded px-2 py-1 text-sm",buttonClass="text-xs px-3 py-1.5 rounded border border-stone-700 hover:bg-stone-800";
