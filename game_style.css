@@ -901,3 +901,74 @@ body[data-wayward-theme="ivory"] [class~="text-yellow-600"]{color:#854d0e!import
     line-height:1 !important;
   }
 }
+
+
+/* Last-mile status compression: keep all persistent values on one compact row. */
+@media (max-width:1023px) {
+  .mobile-status-location-row {
+    display:block !important;
+    min-height:16px !important;
+    padding:0 !important;
+    margin:0 !important;
+  }
+  .mobile-status-location-item {
+    display:flex !important;
+    align-items:center !important;
+    gap:.16rem !important;
+    width:100% !important;
+    font-size:.64rem !important;
+    line-height:1 !important;
+  }
+  .mobile-status-location-item b {
+    font-size:.68rem !important;
+    flex:0 0 auto !important;
+  }
+
+  .mobile-status-summary-row {
+    grid-template-columns:2.1rem minmax(0,1fr) .55rem !important;
+    min-height:19px !important;
+    padding:0 !important;
+    gap:.08rem !important;
+  }
+  .mobile-status-summary-label,
+  .mobile-status-summary-value {
+    font-size:.64rem !important;
+    line-height:1 !important;
+  }
+
+  .mobile-status-summary-row-wife {
+    display:block !important;
+    min-height:34px !important;
+    padding:0 !important;
+  }
+  .mobile-status-summary-row-wife .mobile-status-wife-head {
+    grid-template-columns:2.1rem minmax(0,1fr) .55rem !important;
+    gap:.08rem !important;
+    min-height:19px !important;
+  }
+  .mobile-status-summary-row-wife .mobile-status-wife-stats {
+    display:flex !important;
+    flex-wrap:nowrap !important;
+    gap:.18rem !important;
+    margin:0 0 0 2.1rem !important;
+    width:calc(100% - 2.1rem) !important;
+    justify-content:flex-start !important;
+  }
+  .mobile-status-summary-row-wife .mobile-status-wife-stats span {
+    font-size:.55rem !important;
+    line-height:1 !important;
+    flex:0 1 auto !important;
+    white-space:nowrap !important;
+  }
+  .mobile-status-summary-detail {
+    font-size:.58rem !important;
+    line-height:1 !important;
+  }
+
+  .mobile-status-block {
+    margin-bottom:.05rem !important;
+  }
+  .mobile-status-summary {
+    padding:0 !important;
+  }
+}
