@@ -1,0 +1,125 @@
+name: Studio mobile UI fix
+
+on:
+  push:
+    branches: [studio]
+    paths:
+      - "src/main.js"
+      - ".github/workflows/studio-mobile-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch focused mobile components
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("src/main.js")
+          raw = p.read_text(encoding="utf-8")
+
+          def replace_function(src, name, next_name, replacement):
+              start = src.find("function " + name + "(")
+              end = src.find("function " + next_name + "(", start + 1)
+              if start < 0 or end < 0:
+                  raise SystemExit("PATCH_GUARD_FAILED: function boundary missing")
+              return src[:start] + replacement + src[end:]
+
+          stock = r'''function WaywardMobileStockButton(){
+          const e=ue(a=>a.state),t=ue(a=>a.dispatch),o=e.economy??{},n=e.supplies??{},r=e.supplyTargets??ap,a=wC(e),i=Yg.reduce((s,{key:h})=>s+a[h],0),h=bC(e),c=ib(a,h),gold=o.gold??0;
+          if(e.phase!=="prep"||i===0)return null;
+          const setTarget=(key,value)=>t({type:"set_supply_target",item:key,value:Math.max(0,value)});
+          return m.jsxs("section",{className:"mobile-stock-up",children:[
+          m.jsx("div",{className:"mobile-stock-targets",children:Yg.map(({key,label})=>{const current=n[key]??0,target=r[key]??0;return m.jsxs("div",{className:"mobile-stock-target-row",children:[
+          m.jsx("span",{className:"mobile-stock-target-label",children:label}),
+          m.jsx("span",{className:"mobile-stock-target-count",children:[current," / ",target]}),
+          m.jsxs("span",{className:"mobile-stock-target-stepper",children:[
+          m.jsx("button",{type:"button",onClick:()=>setTarget(key,target-1),disabled:target<=0,children:"−"}),
+          m.jsx("span",{children:target}),
+          m.jsx("button",{type:"button",onClick:()=>setTarget(key,target+1),children:"+"})
+          ]})
+          ]},key)})}),
+          m.jsxs("button",{type:"button",onClick:()=>t({type:"stock_up"}),className:"mobile-stock-up-button",children:[
+          m.jsx("span",{className:"mobile-stock-up-title",children:"물자 채우기"}),
+          m.jsx("span",{className:"mobile-stock-up-cost",children:[Math.min(c,gold),"골드 · 약 1시간"]})
+          ]}),
+          m.jsx("div",{className:"mobile-stock-up-hint",children:gold>=c?"오늘의 시장 가격으로 물자를 채웁니다.":"돈이 부족하면 가진 돈으로 살 수 있는 만큼만 들여놓습니다."})
+          ]})
+          }
+          '''
+
+          status = r'''function WaywardPersistentStatus(){
+          const e=ue(a=>a.state),t=ue(a=>a.state.primaryCharacterId),o=g(e),n=so(e),s=Oe(e),[r,a]=X.useState(""),[tab,setTab]=X.useState("image"),i=cle(e,t,o,!0,!1)??jae(o.currentTask),h=Math.round(o.stats.energy??0),c=Math.round(o.stats.mood??0),u=Math.round(o.relationship.trust??0),f=As(o),d=Math.round(e.player?.stats?.energy??0),p=Je(o,"devotion"),l=ire(),k=v=>a(r===v?"":v);
+          return l?m.jsxs("section",{className:"mb-2 mobile-status-block",children:[
+          m.jsxs("div",{className:"mobile-status-tabs",children:[
+          m.jsx("button",{type:"button",onClick:()=>setTab("image"),className:"mobile-status-tab "+(tab==="image"?"is-active":""),children:"초상화"}),
+          m.jsx("button",{type:"button",onClick:()=>setTab("stats"),className:"mobile-status-tab "+(tab==="stats"?"is-active":""),children:"상태"})
+          ]}),
+          tab==="image"?m.jsx("div",{className:"mobile-status-portrait",children:m.jsx(M0,{compact:!1})}):m.jsx("div",{className:"mobile-status-tab-panel",children:m.jsx(R3,{inline:!0})}),
+          m.jsxs("div",{className:"mobile-status-summary",children:[
+          m.jsxs("div",{className:"mobile-status-location-row",children:[
+          m.jsxs("span",{className:"mobile-status-location-item",children:[m.jsx("b",{children:rr(n)}),m.jsx("span",{children:"현재 위치"})]})
+          ]}),
+          m.jsx("button",{type:"button","aria-expanded":r==="player",onClick:()=>k("player"),className:"mobile-status-summary-row",children:[
+          m.jsx("span",{className:"mobile-status-summary-label",children:"당신"}),
+          m.jsxs("span",{className:"mobile-status-summary-value",children:[e.phase==="prep"?"준비 중":dle(e)," · 기력 ",d]}),
+          m.jsx("span",{className:"mobile-status-summary-chevron","aria-hidden":!0,children:r==="player"?"▾":"▸"})
+          ]}),
+          r==="player"&&m.jsx("div",{className:"mobile-status-summary-detail",children:m.jsxs("span",{children:["현재 상태: ",e.phase==="prep"?"준비 중":dle(e)," · 기력 ",d," · 소지금 ",e.economy?.gold??0,"골드"]})}),
+          m.jsx("button",{type:"button","aria-expanded":r==="wife",onClick:()=>k("wife"),className:"mobile-status-summary-row mobile-status-summary-row-wife",children:m.jsxs("div",{className:"mobile-status-wife-grid",children:[
+          m.jsxs("div",{className:"mobile-status-wife-head",children:[
+          m.jsx("span",{className:"mobile-status-summary-label",children:"피파"}),
+          m.jsx("span",{className:"mobile-status-summary-value",children:i}),
+          m.jsx("span",{className:"mobile-status-summary-chevron","aria-hidden":!0,children:r==="wife"?"▾":"▸"})
+          ]}),
+          m.jsxs("div",{className:"mobile-status-wife-stats",children:[
+          m.jsxs("span",{children:["헌신 ",p]}),
+          m.jsxs("span",{children:["기력 ",h]}),
+          m.jsxs("span",{children:["기분 ",c]}),
+          m.jsxs("span",{children:["신뢰도 ",u]}),
+          m.jsxs("span",{children:["매혹 ",f]})
+          ]})
+          ]})}),
+          r==="wife"&&m.jsx("div",{className:"mobile-status-summary-detail",children:m.jsxs("span",{children:["현재 위치: ",rr(s)," · 현재 행동: ",i]})})
+          ]})
+          ]}):null
+          }
+          '''
+
+          raw = replace_function(raw, "WaywardMobileStockButton", "WaywardPersistentStatus", stock)
+          raw = replace_function(raw, "WaywardPersistentStatus", "WaywardCurrentActivity", status)
+
+          if raw.count("function WaywardMobileStockButton(") != 1:
+              raise SystemExit("PATCH_GUARD_FAILED: stock component count")
+          if raw.count("function WaywardPersistentStatus(") != 1:
+              raise SystemExit("PATCH_GUARD_FAILED: status component count")
+          if "set_supply_target" not in raw:
+              raise SystemExit("PATCH_GUARD_FAILED: target control dispatch missing")
+          if 'children:"침실"}),m.jsx("span",{className:"mobile-status-location-item"' in raw:
+              raise SystemExit("PATCH_GUARD_FAILED: hardcoded bedroom status remains")
+          p.write_text(raw, encoding="utf-8")
+          PY
+
+      - name: Validate
+        run: |
+          set -euo pipefail
+          node --check src/main.js
+          git diff --check
+
+      - name: Commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.js
+          git commit -m "fix: compact mobile status and stock controls"
+          git push origin HEAD:studio
