@@ -815,3 +815,26 @@ body[data-wayward-theme="ivory"] [class~="text-yellow-600"]{color:#854d0e!import
     overflow:hidden !important; text-overflow:ellipsis !important; word-break:keep-all !important;
   }
 }
+
+
+/* The portrait component already renders its own task/status strip.
+   Mobile uses the dedicated compact status summary below the portrait, so do not duplicate it. */
+@media (max-width:1023px) {
+  .mobile-portrait-statebar { display:none !important; }
+
+  .mobile-status-summary { min-width:0 !important; overflow:hidden !important; }
+  .mobile-status-location-row,
+  .mobile-status-summary-row,
+  .mobile-status-wife-head,
+  .mobile-status-wife-stats { max-width:100% !important; }
+
+  .mobile-status-wife-stats {
+    grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+  }
+  .mobile-status-wife-stats span {
+    white-space:nowrap !important;
+    word-break:keep-all !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+  }
+}
