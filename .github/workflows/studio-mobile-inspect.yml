@@ -1,0 +1,53 @@
+name: Studio mobile UI inspect
+
+on:
+  push:
+    branches: [studio]
+    paths:
+      - "src/main.js"
+      - ".github/workflows/studio-mobile-inspect.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract focused UI context
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          raw=Path("src/main.js").read_text(encoding="utf-8")
+          pats=["mobile-stock-up","물자 채우기","조리 중","mobile-current-activity","mobile-status-location-row","mobile-status-summary-row"]
+          out=[f"src_len={len(raw)}"]
+          for p in pats:
+              out.append(f"\n===== {p} =====")
+              pos=0
+              for n in range(6):
+                  i=raw.find(p,pos)
+                  if i<0: break
+                  out.append(f"\n--- occurrence {n+1} at {i} ---")
+                  out.append(raw[max(0,i-5000):min(len(raw),i+10000)])
+                  pos=i+len(p)
+          Path("analysis_parts/studio_mobile_ui_context.txt").parent.mkdir(parents=True,exist_ok=True)
+          Path("analysis_parts/studio_mobile_ui_context.txt").write_text("\n".join(out),encoding="utf-8")
+          PY
+
+      - name: Validate source
+        run: node --check src/main.js
+
+      - name: Commit context
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add analysis_parts/studio_mobile_ui_context.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "chore: extract focused studio mobile UI context"
+          git push origin HEAD:studio
