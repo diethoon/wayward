@@ -997,6 +997,27 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Inspect studio mobile owners
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          raw = Path("src/main.js").read_text(encoding="utf-8")
+          print("SRC_LEN=", len(raw))
+          patterns = ["mobile-stock-up", "물자 채우기", "조리 중", "mobile-current-activity", "mobile-status-location-row", "mobile-status-summary-row"]
+          for pat in patterns:
+              print("\\n===== PATTERN:", pat, "=====")
+              start = 0; count = 0
+              while True:
+                  i = raw.find(pat, start)
+                  if i < 0 or count >= 4: break
+                  lo=max(0,i-3000); hi=min(len(raw),i+6000)
+                  print(raw[lo:hi])
+                  print("\\n--- OCCURRENCE END ---\\n")
+                  start=i+len(pat); count += 1
+          PY
+
       - name: Validate active source
         shell: bash
         run: |
