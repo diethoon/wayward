@@ -1419,8 +1419,7 @@ m.jsxs("span",{children:["현재 행동: ",i]}),m.jsx("br",{}),
 m.jsxs("span",{children:["기력 ",h," · 기분 ",c," · 신뢰도 ",u]}),
 p.length>0&&m.jsxs(m.Fragment,{children:[m.jsx("br",{}),m.jsxs("span",{children:["함께 있음: ",p.join(", ")]})]})
 ]})
-]}
-m.jsxs("div",{className:"px-2.5 py-2 flex items-center gap-2 border-b border-stone-800",children:[
+]}):m.jsxs(m.Fragment,{children:[,children:[
 m.jsxs("div",{className:"min-w-0 shrink-0",children:[m.jsx("div",{className:"text-sm font-semibold text-amber-300 whitespace-nowrap",children:rr(n)}),m.jsx("div",{className:"text-[0.65rem] text-stone-500 whitespace-nowrap",children:"현재 위치"})]}),
 m.jsx("span",{className:"h-7 w-px bg-stone-800"}),
 m.jsxs("div",{className:"min-w-0 flex-1",children:[
