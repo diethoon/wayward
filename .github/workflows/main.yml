@@ -997,47 +997,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Inspect studio mobile owners
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          raw = Path("src/main.js").read_text(encoding="utf-8")
-          out = []
-          out.append("# Studio mobile UI focused context")
-          out.append(f"src_len={len(raw)}")
-          patterns = ["mobile-stock-up", "물자 채우기", "조리 중", "mobile-current-activity", "mobile-status-location-row", "mobile-status-summary-row"]
-          for pat in patterns:
-              out.append(f"\n===== PATTERN: {pat} =====")
-              start = 0; count = 0
-              while True:
-                  i = raw.find(pat, start)
-                  if i < 0 or count >= 4: break
-                  lo=max(0,i-3500); hi=min(len(raw),i+8000)
-                  out.append(raw[lo:hi])
-                  out.append("\n--- OCCURRENCE END ---\n")
-                  start=i+len(pat); count += 1
-          text = "\n".join(out)
-          Path("analysis_parts/studio_mobile_ui_context.txt").parent.mkdir(parents=True,exist_ok=True)
-          Path("analysis_parts/studio_mobile_ui_context.txt").write_text(text,encoding="utf-8")
-          print("WROTE",len(text))
-          PY
-
-      - name: Commit focused source context
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add analysis_parts/studio_mobile_ui_context.txt
-          if git diff --cached --quiet; then
-            echo "No context changes"
-            exit 0
-          fi
-          git commit -m "chore: record studio mobile UI context"
-          git push origin HEAD:studio
-
       - name: Validate active source
         shell: bash
         run: |
