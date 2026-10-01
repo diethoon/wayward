@@ -5,6 +5,11 @@ on:
     branches: [main, mobile-redesign-v1, studio]
     paths:
       - "Wayward_MOD_v2.107.html"
+      - "src/main.js"
+      - "index.html"
+      - "game_style.css"
+      - "docs/MOBILE_REDESIGN_LOG.md"
+      - "docs/MOBILE_REDESIGN_RUNBOOK.md"
       - ".github/workflows/main.yml"
   workflow_dispatch:
 
@@ -983,193 +988,51 @@ jobs:
           git rebase "origin/${GITHUB_REF_NAME}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
-  studio_mobile_patch:
+  studio_validate:
     if: github.ref == 'refs/heads/studio'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout studio
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 1
 
-      - name: Apply portrait mobile UI patch
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          src = Path("src/main.js")
-          index = Path("index.html")
-          css = Path("game_style.css")
-          raw = src.read_text(encoding="utf-8")
-          if "function MobileStatusSummary(){" in raw:
-              raise SystemExit("PATCH_ALREADY_PRESENT")
-
-          tick = chr(96)
-          anchor = 'const kle=["story","house","focus"];'
-          if raw.count(anchor) != 1:
-              raise SystemExit("ANCHOR_COUNT")
-
-          # Exact existing mobile story block owner.
-          si = raw.index('const $=m.jsxs("div",{className:"min-w-0",children:[c&&m.jsx("div",{className:"mb-3",children:m.jsx(Wre,{})}),m.jsx(lre,{})]}),j=$,I=m.jsxs("div",{className:')
-          sj = raw.index(',children:', si)
-          story_head = raw[si:sj]
-          if 'w-[37%] max-w-[13rem] desk:w-[16rem]' not in story_head:
-              raise SystemExit("STORY_WIDTH_GUARD")
-          story_head_new = story_head.replace(
-              'w-[37%] max-w-[13rem]',
-              'mobile-action-panel w-[37%] max-w-[13rem]',
-              1
-          )
-
-          # Existing mobile main column.
-          outer = 'm.jsxs("div",{className:"lg:hidden flex-1 flex min-h-0",children:[n&&I,'
-          if outer not in raw:
-              raise SystemExit("OUTER_GUARD")
-          raw = raw.replace(outer,'m.jsxs("div",{className:"mobile-layout lg:hidden flex-1 flex min-h-0",children:[n&&I,',1)
-
-          pane_prefix = 'm.jsxs("div",{className:' + tick + 'flex-1 min-w-0 flex flex-col min-h-0 '
-          pane_i = raw.find(pane_prefix)
-          if pane_i < 0:
-              raise SystemExit("PANE_GUARD")
-          raw = raw.replace(
-              pane_prefix,
-              'm.jsxs("div",{className:' + tick + 'mobile-main-panel flex-1 min-w-0 flex flex-col min-h-0 ',
-              1
-          )
-
-          raw = raw[:si] + story_head_new + raw[sj:]
-
-          story_block = 'r==="story"&&m.jsxs(m.Fragment,{children:[m.jsx(F3,{limit:3}),m.jsx("div",{className:"mb-2 pb-2 border-b border-stone-800",children:m.jsx(Y3,{})}),$]})'
-          if story_block not in raw:
-              raise SystemExit("STORY_BLOCK_GUARD")
-          story_block_new = 'r==="story"&&m.jsxs(m.Fragment,{children:[m.jsxs("div",{className:"mobile-location-section",children:[m.jsx("div",{className:"mobile-section-title",children:"장소 이동"}),m.jsx(ple,{})]}),m.jsx(F3,{limit:3}),m.jsx("div",{className:"mb-2 pb-2 border-b border-stone-800",children:m.jsx(Y3,{})}),$]})'
-          raw = raw.replace(story_block,story_block_new,1)
-
-          # Existing compact mobile header/body insertion point.
-          insert_before = 'const kle=["story","house","focus"];'
-          component = (
-            'function MobileStatusSummary(){'
-            'const e=ue(A=>A.state),t=g(e),o=ue(A=>A.state.primaryCharacterId),[n,s]=X.useState(null),'
-            'r=so(e),a=Ns(e,o),i=w3(e),h=Math.round(e.player?.stats?.energy??0),c=Math.round(t.stats?.energy??0),'
-            'u=Math.round(t.stats?.mood??0),f=Math.round(i.trust??0),_=jae(t.currentTask||"idle"),'
-            'y=e.phase==="prep"?(Ga(e)?t.name+"은(는) 쉬고 있습니다.":t.name+"은(는) 영업 준비를 돕고 있습니다."):t.name+"은(는) "+_+"입니다.",'
-            'w={prep:"준비 중",service:"영업 중",last_call:"마감 주문",closed:"영업 종료",bedroom:"취침"}[e.phase]??e.phase,'
-            'k=A=>s(n===A?null:A),v=(A,C)=>n===A?m.jsx("div",{className:"mobile-status-detail",children:C}):null;'
-            'return m.jsxs("section",{className:"mobile-status-summary",children:['
-            'm.jsx("div",{className:"mobile-status-title",children:"현재 상태"}),'
-            'm.jsxs("div",{className:"mobile-status-grid",children:['
-            'm.jsxs("button",{type:"button","aria-expanded":n==="location",onClick:()=>k("location"),className:"mobile-status-row",children:['
-            'm.jsx("span",{className:"mobile-status-label",children:"현재 위치"}),m.jsx("span",{className:"mobile-status-value",children:rr(r)})]}),'
-            'v("location",m.jsx("span",{children:["당신은 현재 ",rr(r),"에 있습니다."]})),'
-            'm.jsxs("button",{type:"button","aria-expanded":n==="player",onClick:()=>k("player"),className:"mobile-status-row",children:['
-            'm.jsx("span",{className:"mobile-status-label",children:"당신"}),m.jsxs("span",{className:"mobile-status-value",children:[w," · 기력 ",h]})]}),'
-            'v("player",m.jsxs("span",{children:["현재 단계: ",w," · 기력 ",h," · 소지금 ",e.economy?.gold??0,"골드"]})),'
-            'm.jsxs("button",{type:"button","aria-expanded":n==="bedroom",onClick:()=>k("bedroom"),className:"mobile-status-row",children:['
-            'm.jsx("span",{className:"mobile-status-label",children:"침실"}),m.jsx("span",{className:"mobile-status-value",children:"1"})]}),'
-            'v("bedroom",m.jsx("span",{children:"기본 침실입니다. 장소 이동은 기존 이동 기능을 사용합니다."})),'
-            'm.jsxs("button",{type:"button","aria-expanded":n==="wife",onClick:()=>k("wife"),className:"mobile-status-row mobile-status-row-wide",children:['
-            'm.jsx("span",{className:"mobile-status-label",children:t.name}),m.jsxs("span",{className:"mobile-status-value",children:[_, " · 기력 ",c," · 기분 ",u," · 신뢰도 ",f]})]}),'
-            'v("wife",m.jsxs("div",{children:['
-            'm.jsx("div",{className:"mb-2",children:["현재 위치: ",rr(a)," · 현재 행동: ",_]}),'
-            'm.jsx(R3,{inline:!0})'
-            ']}))]}),'
-            'm.jsxs("div",{className:"mobile-live-status",children:['
-            'm.jsx("span",{className:"mobile-live-status-label",children:"현재 행동"}),m.jsx("span",{children:y}),'
-            'e.phase==="prep"&&m.jsxs("span",{className:"mobile-live-status-meta",children:["준비된 음식: ",e.readyFood??0,"인분"]})'
-            ']})]})}'
-          );
-          raw = raw.replace(insert_before,component+"\n"+insert_before,1);
-
-          # Insert status summary in the existing mobile main column.
-          compact_header = 'children:[!y&&m.jsx("div",{className:"shrink-0 border-b border-stone-700",children:m.jsx(M0,{compact:!0})}),m.jsxs("div",{className:"flex-1'
-          if compact_header not in raw:
-              raise SystemExit("HEADER_GUARD")
-          raw = raw.replace(
-              compact_header,
-              'children:[!y&&m.jsx("div",{className:"shrink-0 border-b border-stone-700",children:m.jsx(M0,{compact:!0})}),!y&&m.jsx(MobileStatusSummary,{}),m.jsxs("div",{className:"flex-1',
-              1
-          )
-
-          # Preserve viewport scaling at a normal 1.0 baseline.
-          idx = index.read_text(encoding="utf-8")
-          vp_old = 'content="width=device-width, initial-scale=0.8, maximum-scale=5.0, viewport-fit=cover"'
-          if idx.count(vp_old) != 1:
-              raise SystemExit("VIEWPORT_GUARD")
-          index.write_text(idx.replace(vp_old,'content="width=device-width, initial-scale=1, maximum-scale=5.0, viewport-fit=cover"',1),encoding="utf-8")
-
-          # Portrait/mobile presentation rules. No game-state or action changes.
-          styles = css.read_text(encoding="utf-8")
-          if "/* Wayward mobile portrait UI/UX */" in styles:
-              raise SystemExit("CSS_ALREADY_PRESENT")
-          styles += r'''
-          
-          /* Wayward mobile portrait UI/UX */
-          @media (max-width: 1023px) and (orientation: portrait) {
-            .mobile-layout { flex-direction: column; overflow: hidden; }
-            .mobile-main-panel { order: 1 !important; width: 100% !important; min-width: 0; border-left: 0 !important; border-right: 0 !important; }
-            .mobile-action-panel { order: 2 !important; width: 100% !important; max-width: none !important; flex: 0 0 auto; max-height: 38dvh; overflow-y: auto; border-top: 1px solid rgba(120,113,108,.55); padding-bottom: max(.2rem, env(safe-area-inset-bottom)); }
-            .mobile-location-section { margin: 0 0 .6rem; padding: .55rem; border: 1px solid rgba(120,113,108,.45); border-radius: .55rem; background: rgba(28,25,23,.7); }
-            .mobile-section-title { margin: 0 0 .35rem; font-size: .62rem; font-weight: 700; letter-spacing: .08em; color: rgb(168 162 158); }
-            .mobile-status-summary { padding: .45rem .55rem; border-bottom: 1px solid rgba(68,64,60,.8); background: rgba(28,25,23,.96); }
-            .mobile-status-title { margin-bottom: .3rem; font-size: .58rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: rgb(168 162 158); }
-            .mobile-status-grid { display: grid; grid-template-columns: 1fr; gap: 1px; }
-            .mobile-status-row { width: 100%; display: grid; grid-template-columns: 4.2rem minmax(0,1fr); gap: .35rem; align-items: baseline; padding: .3rem .2rem; border-radius: .3rem; text-align: left; }
-            .mobile-status-row:active, .mobile-status-row[aria-expanded="true"] { background: rgba(120,53,15,.22); }
-            .mobile-status-label { color: rgb(120 113 108); font-size: .68rem; white-space: nowrap; }
-            .mobile-status-value { min-width: 0; color: rgb(231 229 228); font-size: .72rem; line-height: 1.25; white-space: normal; word-break: keep-all; overflow-wrap: normal; }
-            .mobile-status-detail { margin: 0 .2rem .25rem 4.2rem; padding: .45rem .5rem; border-left: 2px solid rgba(120,53,15,.6); background: rgba(12,10,9,.62); color: rgb(168 162 158); font-size: .68rem; line-height: 1.35; overflow-wrap: break-word; }
-            .mobile-live-status { display: flex; flex-wrap: wrap; gap: .3rem .45rem; padding: .4rem .2rem 0; margin-top: .25rem; color: rgb(214 211 209); font-size: .7rem; line-height: 1.35; word-break: keep-all; }
-            .mobile-live-status-label { color: rgb(180 83 9); font-weight: 700; white-space: nowrap; }
-            .mobile-live-status-meta { width: 100%; color: rgb(120 113 108); font-size: .64rem; }
-            .mobile-location-section button, .mobile-action-panel button { word-break: keep-all; overflow-wrap: normal; }
-            #wc2-toggle { left: auto !important; right: max(8px, env(safe-area-inset-right)) !important; bottom: max(8px, env(safe-area-inset-bottom)) !important; opacity: .28 !important; transform: scale(.82) !important; z-index: 30 !important; }
-            #wc2-toggle:active, #wc2-toggle:focus-visible { opacity: .9 !important; transform: scale(1) !important; }
-          }
-          @media (max-width: 430px) and (orientation: portrait) {
-            .mobile-action-panel { max-height: 34dvh; }
-            .mobile-status-row { grid-template-columns: 3.8rem minmax(0,1fr); }
-            .mobile-status-detail { margin-left: 3.8rem; }
-          }
-          '''
-          css.write_text(styles,encoding="utf-8")
-
-          for p in (src,index,css):
-              data=p.read_text(encoding="utf-8")
-              if not data.strip() or not data.endswith("\\n"):
-                  raise SystemExit("EOF_GUARD:" + str(p))
-          src.write_text(raw,encoding="utf-8")
-          print("PATCH_APPLIED")
-          PY
-
-      - name: Validate studio patch
+      - name: Validate active source
         shell: bash
         run: |
           set -euo pipefail
           node --check src/main.js
-          git diff --check
-          git diff --name-only > /tmp/changed.txt
-          test "$(wc -l < /tmp/changed.txt)" -eq 3
-          grep -Fxq 'src/main.js' /tmp/changed.txt
-          grep -Fxq 'index.html' /tmp/changed.txt
-          grep -Fxq 'game_style.css' /tmp/changed.txt
-          test -s src/main.js
-          tail -c 4000 src/main.js > /tmp/main_tail.txt
-          test -s /tmp/main_tail.txt
-          grep -q 'function MobileStatusSummary' <(git diff -- src/main.js)
-          grep -q 'mobile-location-section' <(git diff -- src/main.js)
-          echo "NODE_CHECK=PASS"
-          echo "DIFF_CHECK=PASS"
-          echo "EOF_CHECK=PASS"
-          echo "CHANGE_SCOPE=PASS"
+          python3 - <<'PY'
+          from pathlib import Path
 
-      - name: Commit studio mobile patch
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/main.js index.html game_style.css
-          git commit -m "fix: stabilize studio mobile portrait layout"
-          git push origin "HEAD:$GITHUB_REF_NAME"
+          src = Path("src/main.js").read_text(encoding="utf-8")
+          idx = Path("index.html").read_text(encoding="utf-8")
+          css = Path("game_style.css").read_text(encoding="utf-8")
+
+          checks = {
+              "mobile_layout_owner": 'mobile-layout lg:hidden' in src,
+              "mobile_action_owner": 'mobile-action-panel w-[37%]' in src,
+              "mobile_main_owner": 'mobile-main-panel flex-1' in src,
+              "mobile_location_surface": 'mobile-location-section' in src,
+              "mobile_portrait_surface": 'mobile-status-portrait' in src,
+              "viewport_scale_normal": 'initial-scale=1' in idx,
+              "portrait_rules": 'orientation: portrait' in css,
+              "landscape_rules": 'orientation: landscape' in css,
+              "debug_toggle_mobile": '#wc2-toggle' in css,
+          }
+
+          failed = [k for k, ok in checks.items() if not ok]
+          for k, ok in checks.items():
+              print(f"{k}={'PASS' if ok else 'FAIL'}")
+          if failed:
+              raise SystemExit("FAILED: " + ", ".join(failed))
+
+          if Path("studio/src/main.js").exists():
+              raise SystemExit("FAILED: duplicate studio/src/main.js exists")
+
+          print("DUPLICATE_SOURCE=PASS")
+          PY
+          git diff --check
+          echo "NODE_CHECK=PASS"
+          echo "INVARIANTS=PASS"
+          echo "DIFF_CHECK=PASS"
