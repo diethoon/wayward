@@ -2,14 +2,9 @@ name: Split Wayward HTML for analysis
 
 on:
   push:
-    branches: [main, mobile-redesign-v1, studio]
+    branches: [main]
     paths:
       - "Wayward_MOD_v2.107.html"
-      - "src/main.js"
-      - "index.html"
-      - "game_style.css"
-      - "docs/MOBILE_REDESIGN_LOG.md"
-      - "docs/MOBILE_REDESIGN_RUNBOOK.md"
       - ".github/workflows/main.yml"
   workflow_dispatch:
 
@@ -22,7 +17,6 @@ permissions:
 
 jobs:
   split:
-    # Studio도 대형 실행본을 동일한 compact 분석 파이프라인으로 검증한다.
     runs-on: ubuntu-latest
 
     steps:
@@ -987,52 +981,3 @@ jobs:
           git fetch origin "${GITHUB_REF_NAME}"
           git rebase "origin/${GITHUB_REF_NAME}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
-
-  studio_validate:
-    if: github.ref == 'refs/heads/studio'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout studio
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Validate active source
-        shell: bash
-        run: |
-          set -euo pipefail
-          node --check src/main.js
-          python3 - <<'PY'
-          from pathlib import Path
-
-          src = Path("src/main.js").read_text(encoding="utf-8")
-          idx = Path("index.html").read_text(encoding="utf-8")
-          css = Path("game_style.css").read_text(encoding="utf-8")
-
-          checks = {
-              "mobile_layout_owner": 'mobile-layout lg:hidden' in src,
-              "mobile_action_owner": 'mobile-action-panel w-[37%]' in src,
-              "mobile_main_owner": 'mobile-main-panel flex-1' in src,
-              "mobile_location_surface": 'mobile-location-section' in src,
-              "mobile_portrait_surface": 'mobile-status-portrait' in src,
-              "viewport_scale_normal": 'initial-scale=1' in idx,
-              "portrait_rules": 'orientation: portrait' in css,
-              "landscape_rules": 'orientation: landscape' in css,
-              "debug_toggle_mobile": '#wc2-toggle' in css,
-          }
-
-          failed = [k for k, ok in checks.items() if not ok]
-          for k, ok in checks.items():
-              print(f"{k}={'PASS' if ok else 'FAIL'}")
-          if failed:
-              raise SystemExit("FAILED: " + ", ".join(failed))
-
-          if Path("studio/src/main.js").exists():
-              raise SystemExit("FAILED: duplicate studio/src/main.js exists")
-
-          print("DUPLICATE_SOURCE=PASS")
-          PY
-          git diff --check
-          echo "NODE_CHECK=PASS"
-          echo "INVARIANTS=PASS"
-          echo "DIFF_CHECK=PASS"
