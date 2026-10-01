@@ -1395,30 +1395,32 @@ m.jsx("div",{className:"mobile-stock-up-hint",children:u?"식료품 저장고가
 ]})
 }
 function WaywardPersistentStatus(){
-const e=ue(a=>a.state),t=ue(a=>a.state.primaryCharacterId),o=g(e),n=so(e),s=Oe(e),[r,a]=X.useState(""),i=cle(e,t,o,!0,!1)??jae(o.currentTask),h=Math.round(o.stats.energy??0),c=Math.round(o.stats.mood??0),u=Math.round(o.relationship.trust??0),f=As(o),d=Math.round(e.player?.stats?.energy??0),p=Je(o,"devotion"),l=ire(),k=v=>a(r===v?"":v);
-return m.jsxs("section",{className:"mb-2 mobile-status-block",children:[
-l&&m.jsx("div",{className:"mobile-status-portrait",children:m.jsx(M0,{compact:!1})}),
-l?m.jsxs("div",{className:"mobile-status-summary",children:[
-m.jsxs("div",{className:"mobile-status-location-row",children:[
-m.jsx("span",{className:"mobile-status-location-name",children:rr(n)}),
-m.jsx("span",{className:"mobile-status-location-hint",children:"현재 위치"})
+const e=ue(a=>a.state),t=ue(a=>a.state.primaryCharacterId),o=g(e),n=so(e),s=Oe(e),[r,a]=X.useState(""),[tab,setTab]=X.useState("image"),i=cle(e,t,o,!0,!1)??jae(o.currentTask),h=Math.round(o.stats.energy??0),c=Math.round(o.stats.mood??0),u=Math.round(o.relationship.trust??0),f=As(o),d=Math.round(e.player?.stats?.energy??0),p=Je(o,"devotion"),l=ire(),k=v=>a(r===v?"":v);
+return l?m.jsxs("section",{className:"mb-2 mobile-status-block",children:[
+m.jsxs("div",{className:"mobile-status-tabs",children:[
+m.jsx("button",{type:"button",onClick:()=>setTab("image"),className:`mobile-status-tab ${tab==="image"?"is-active":""}`,children:"초상화"}),
+m.jsx("button",{type:"button",onClick:()=>setTab("stats"),className:`mobile-status-tab ${tab==="stats"?"is-active":""}`,children:"상태"})
 ]}),
-m.jsxs("button",{type:"button","aria-expanded":r==="player",onClick:()=>k("player"),className:"mobile-status-summary-row",children:[
+tab==="image"?m.jsx("div",{className:"mobile-status-portrait",children:m.jsx(M0,{compact:!1})}):m.jsx("div",{className:"mobile-status-tab-panel",children:m.jsx(R3,{inline:!0})}),
+m.jsxs("div",{className:"mobile-status-summary",children:[
+m.jsxs("div",{className:"mobile-status-location-row",children:[
+m.jsxs("span",{className:"mobile-status-location-item",children:[m.jsx("b",{children:rr(n)}),m.jsx("span",{children:"현재 위치"})]}),
+m.jsxs("span",{className:"mobile-status-location-item",children:[m.jsx("b",{children:"침실"}),m.jsx("span",{children:"1"})]})
+]}),
+m.jsx("button",{type:"button","aria-expanded":r==="player",onClick:()=>k("player"),className:"mobile-status-summary-row",children:[
 m.jsx("span",{className:"mobile-status-summary-label",children:"당신"}),
 m.jsxs("span",{className:"mobile-status-summary-value",children:[e.phase==="prep"?"준비 중":dle(e)," · 기력 ",d]}),
 m.jsx("span",{className:"mobile-status-summary-chevron","aria-hidden":!0,children:r==="player"?"▾":"▸"})
 ]}),
 r==="player"&&m.jsx("div",{className:"mobile-status-summary-detail",children:m.jsxs("span",{children:["현재 상태: ",e.phase==="prep"?"준비 중":dle(e)," · 기력 ",d," · 소지금 ",e.economy?.gold??0,"골드"]})}),
-m.jsxs("button",{type:"button","aria-expanded":r==="wife",onClick:()=>k("wife"),className:"mobile-status-summary-row mobile-status-summary-row-wife",children:[
-m.jsx("span",{className:"mobile-status-summary-label",children:"피파"}),
-m.jsxs("span",{className:"mobile-status-summary-value mobile-status-summary-wife-value",children:[i," · 헌신 ",p," · 기력 ",h," · 기분 ",c," · 신뢰도 ",u," · 매혹 ",f]}),
-m.jsx("span",{className:"mobile-status-summary-chevron","aria-hidden":!0,children:r==="wife"?"▾":"▸"})
-]}),
-r==="wife"&&m.jsx("div",{className:"mobile-status-summary-detail",children:m.jsxs("span",{children:["현재 위치: ",rr(s)," · 현재 행동: ",i," · 헌신 ",p," · 기력 ",h," · 기분 ",c," · 신뢰도 ",u," · 매혹 ",f]})})
-]}):null
+m.jsx("button",{type:"button","aria-expanded":r==="wife",onClick:()=>k("wife"),className:"mobile-status-summary-row mobile-status-summary-row-wife",children:m.jsxs("div",{className:"mobile-status-wife-grid",children:[
+m.jsxs("div",{className:"mobile-status-wife-head",children:[m.jsx("span",{className:"mobile-status-summary-label",children:"피파"}),m.jsx("span",{className:"mobile-status-summary-value",children:i}),m.jsx("span",{className:"mobile-status-summary-chevron","aria-hidden":!0,children:r==="wife"?"▾":"▸"})]}),
+m.jsxs("div",{className:"mobile-status-wife-stats",children:[m.jsxs("span",{children:["헌신 ",p]}),m.jsxs("span",{children:["기력 ",h]}),m.jsxs("span",{children:["기분 ",c]}),m.jsxs("span",{children:["신뢰도 ",u]}),m.jsxs("span",{children:["매혹 ",f]})]})
+]})}),
+r==="wife"&&m.jsx("div",{className:"mobile-status-summary-detail",children:m.jsxs("span",{children:["현재 위치: ",rr(s)," · 현재 행동: ",i]})})
 ]})
-}
-function WaywardCurrentActivity(){
+]}):null
+}function WaywardCurrentActivity(){
 const e=ue(a=>a.state),t=g(e),o=Oe(e),n=cle(e,e.primaryCharacterId,t,!0,!1)??jae(t.currentTask),s=e.readyFood??0,r=e.phase==="prep"?t.name+"은(는) 영업 준비를 돕고 있습니다.":t.name+"은(는) "+n+".",a=e.phase==="prep"?"준비된 음식: "+s+"인분 · 위치: "+rr(o):"현재 위치: "+rr(o)+" · "+n;
 return m.jsxs("section",{className:"mobile-current-activity mb-2 rounded-lg border border-amber-900/50 bg-amber-950/20 px-3 py-2",children:[
 m.jsx("div",{className:"text-[0.62rem] uppercase tracking-widest text-amber-500/70 mb-0.5",children:"현재 상황"}),
