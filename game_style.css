@@ -329,7 +329,7 @@ body[data-wayward-theme="ivory"] [class~="text-yellow-600"]{color:#854d0e!import
     color:#fff !important;
   }
 }
-@media (max-width:1023px) and (orientation:portrait) {
+@media (max-width:1023px) and (orientation: portrait) {
   .mobile-layout {
     display:grid !important;
     grid-template-columns:minmax(0,42%) minmax(0,58%);
@@ -369,14 +369,14 @@ body[data-wayward-theme="ivory"] [class~="text-yellow-600"]{color:#854d0e!import
   .mobile-action-location { flex:0 0 auto; max-height:34dvh; overflow-y:auto; }
   .mobile-action-scroll { overflow-y:auto; overflow-x:hidden; }
 }
-@media (max-width:360px) and (orientation:portrait) {
+@media (max-width:360px) and (orientation: portrait) {
   .mobile-layout { grid-template-columns:minmax(0,44%) minmax(0,56%); }
   .mobile-action-location { max-height:30dvh; }
 }
-@media (min-width:361px) and (max-width:1023px) and (orientation:portrait) {
+@media (min-width:361px) and (max-width:1023px) and (orientation: portrait) {
   .mobile-layout { grid-template-columns:minmax(0,40%) minmax(0,60%); }
 }
-@media (max-width:1023px) and (orientation:landscape) {
+@media (max-width:1023px) and (orientation: landscape) {
   .mobile-layout { display:flex !important; flex-direction:row !important; }
   .mobile-main-panel { order:1; min-width:0; min-height:0; }
   .mobile-action-panel { order:2; width:min(37%,17rem) !important; max-width:17rem !important; min-width:min(12rem,37vw); min-height:0; overflow:hidden; padding-bottom:max(.25rem,env(safe-area-inset-bottom)) !important; }
