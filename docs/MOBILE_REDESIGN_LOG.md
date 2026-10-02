@@ -102,3 +102,14 @@
 - 대용량 source를 직접 Contents API로 다시 업로드하는 방식은 요청 본문 연결 오류가 발생해 사용하지 않았고, 작은 workflow 수정 → Draft PR CI → bot commit 경로로 source patch를 반영했다.
 - 따라서 portrait status와 portrait movement map은 작업 브랜치 source에 실제 반영된 상태다.
 - GitHub API의 현재 check-runs 조회에는 별도 Check Run이 노출되지 않았으므로, 'GitHub UI의 체크 아이콘 PASS'까지는 주장하지 않는다. 대신 source patch가 commit 단계까지 진행된 흔적과 최종 blob 내용을 확인했다.
+
+
+## 2026-10-01 — Studio mobile UI baseline cleanup
+- 실제 실행 entrypoint는 `index.html -> /src/main.js -> /game_style.css`로 확정했다.
+- `original/`은 원본 단일 HTML을 분할해 보관한 참고/분석 자료이며 실행 소스가 아니다.
+- 기존 `WaywardPersistentStatus` / `WaywardCurrentActivity`를 유지하면서 mobile owner class를 추가했다.
+- 기존 `ple()` 장소 이동 surface를 모바일 story 화면에 노출해 세로 화면에서도 홀/침실/뒷방/목욕탕/객실 이동에 직접 접근하도록 했다. 새 이동 로직은 만들지 않았다.
+- portrait에서는 메인 화면을 위, 행동 패널을 아래로 배치하고 landscape에서는 메인 화면과 행동 패널을 좌우로 배치한다.
+- 모바일 viewport `initial-scale`을 1로 조정했다.
+- 모바일 버튼의 짧은 한국어 라벨이 불필요하게 끊기지 않도록 keep-all과 44px 터치 타깃을 적용했다.
+- 게임 진행 규칙은 이번 UI 커밋에서 변경하지 않았다. 현재 HEAD의 `Zne()`은 원래 구현으로 확인했다.

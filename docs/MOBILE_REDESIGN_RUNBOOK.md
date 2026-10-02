@@ -86,3 +86,13 @@
 3. 동일한 모바일 리디자인 브랜치에서 무조건 기존 patch를 재적용하지 말고, **target function/context가 여전히 존재하는지 먼저 검증**한다.
 4. target context가 바뀌었으면 patch를 실패시키고 수동 검토 상태로 남긴다.
 5. 성공한 경우에만 UI patch → syntax check → diff guard 순으로 진행한다.
+
+
+## 2026-10-01 — Studio 현재 운영 기준
+- 실행 소스는 루트 `src/main.js` 하나다.
+- `original/`의 분할 파일은 원본 시스템 대조용이며 실행 파일로 취급하지 않는다.
+- 모바일 변경은 UI/레이아웃/접근성에만 적용한다.
+- 장소 이동은 기존 `ple()`을 재사용하며 새 이동 시스템을 만들지 않는다.
+- portrait와 landscape는 동일한 게임 상태/행동을 공유하고 화면 배치만 바꾼다.
+- 짧은 한국어 라벨은 keep-all을 사용해 한 글자씩 강제 줄바꿈하지 않는다.
+- studio push에서는 `node --check src/main.js`와 mobile invariant 검사를 수행한다.
