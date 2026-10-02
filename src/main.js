@@ -1720,7 +1720,7 @@ const kle=["story","focus"];function vle(){var M;const e=ue(A=>A.state),t=ue(A=>
     m.jsxs("div",{className:"mobile-layout lg:hidden flex-1 flex min-h-0",children:[
       n&&$I,
       m.jsxs("div",{className:`mobile-main-panel flex-1 min-w-0 flex flex-col min-h-0 ${n?"border-l border-stone-700":"border-r border-stone-700"}`,children:[m.jsx("div",{className:"shrink-0 bg-stone-950 border-b border-stone-800",children:m.jsx(M0,{})}),
-        m.jsx(WaywardCurrentActivity,{}),
+        m.jsx("div",{className:"shrink-0",children:m.jsx(WaywardCurrentActivity,{})}),
         m.jsx("div",{className:"flex shrink-0 border-b border-stone-700 bg-stone-800/90 p-0.5 gap-0.5",children:i.map(A=>m.jsx("button",{onClick:()=>a(A),className:`flex-1 py-1 px-2 text-[0.7rem] font-semibold rounded transition-colors ${r===A?"bg-amber-700/80 text-amber-100 shadow-sm":"text-stone-400 hover:text-stone-200 hover:bg-stone-700/50"}`,children:(A==="focus"?u.name:m.koLabel("pane",A))},A))}),
         m.jsxs("div",{className:"flex-1 min-h-0 overflow-y-auto p-2 text-xs",children:[
           r==="story"&&m.jsxs(m.Fragment,{children:[m.jsx(lre,{}),m.jsx(F3,{limit:3})]}),
