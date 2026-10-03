@@ -368,7 +368,6 @@ body[data-wayward-theme="ivory"] [class~="text-yellow-600"]{color:#854d0e!import
 }
 
 @media (max-width:1023px) {
-  .mobile-stock-source { display:none !important; }
   .mobile-stock-up {
     flex:0 0 auto;
     padding:.3rem .35rem .35rem;
