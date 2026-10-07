@@ -14,18 +14,15 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
-          files=["Wayward_MOD_v2.107.html","src/main.js","game_style.css"]
-          needles=["m36-mobile","m36-mobile-store-status-line","M36MobileRoomCustomer","wifeLoc","wifeRoomCount","인사하기","주문받기","서빙","take_order","greet","apologize_out_of_stock","throw_out_patron"]
-          for fn in files:
-            p=Path(fn); s=p.read_text(encoding="utf-8")
-            print(f"\n===== FILE {fn} BYTES={p.stat().st_size} =====")
-            for needle in needles:
-              hits=[m.start() for m in re.finditer(re.escape(needle),s)]
-              if hits:
-                print(f"\n### {needle} HITS={len(hits)} OFFSETS={hits[:30]}")
-                for i in hits[:10]:
-                  print(f"--- OFFSET {i} ---")
-                  print(s[max(0,i-1800):min(len(s),i+4200)])
+          s=Path("src/main.js").read_text(encoding="utf-8")
+          for needle in ["function ","S3(e)","return m.jsx(fp","w=!a&&!u","m.jsx(pb,{compact:!0,label:"]:
+            print("\n###",needle)
+            pos=0; n=0
+            while True:
+              i=s.find(needle,pos)
+              if i<0 or n>=12: break
+              print("OFFSET",i)
+              print(s[max(0,i-5000):min(len(s),i+7000)])
+              pos=i+1; n+=1
           PY
           node --check src/main.js
