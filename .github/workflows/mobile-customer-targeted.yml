@@ -1,6 +1,7 @@
 name: mobile-customer-targeted
 on:
-  workflow_dispatch:
+  push:
+    branches: [mobile-migration-v1]
 permissions:
   contents: read
 jobs:
