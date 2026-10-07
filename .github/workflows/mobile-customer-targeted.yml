@@ -15,26 +15,17 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
-          p=Path("src/main.js")
-          s=p.read_text(encoding="utf-8")
-          needles=[
-            "m36-mobile","wifeLoc","wifeRoomCount","인사하기","주문받기","서빙",
-            "apologize_out_of_stock","throw_out_patron","take_order","greet",
-            "mobile-store-status-line","고객","손님"
-          ]
-          print("MAIN_BYTES",p.stat().st_size)
-          for needle in needles:
-            hits=[m.start() for m in re.finditer(re.escape(needle),s)]
-            print(f"\n### {needle} HITS={len(hits)} OFFSETS={hits[:40]}")
-            for i in hits[:12]:
-              print(f"--- OFFSET {i} ---")
-              print(s[max(0,i-1400):min(len(s),i+3200)])
-          c=Path("game_style.css").read_text(encoding="utf-8")
-          print("\nCSS_BYTES",Path("game_style.css").stat().st_size)
-          for needle in ["m36-mobile","store-status-line","customer","guest"]:
-            hits=[m.start() for m in re.finditer(re.escape(needle),c,re.I)]
-            print(f"\n### CSS {needle} HITS={len(hits)} OFFSETS={hits[:40]}")
-            for i in hits[:10]:
-              print(c[max(0,i-1000):min(len(c),i+2200)])
+          files=["Wayward_MOD_v2.107.html","src/main.js","game_style.css"]
+          needles=["m36-mobile","m36-mobile-store-status-line","M36MobileRoomCustomer","wifeLoc","wifeRoomCount","인사하기","주문받기","서빙","take_order","greet","apologize_out_of_stock","throw_out_patron"]
+          for fn in files:
+            p=Path(fn); s=p.read_text(encoding="utf-8")
+            print(f"\n===== FILE {fn} BYTES={p.stat().st_size} =====")
+            for needle in needles:
+              hits=[m.start() for m in re.finditer(re.escape(needle),s)]
+              if hits:
+                print(f"\n### {needle} HITS={len(hits)} OFFSETS={hits[:30]}")
+                for i in hits[:10]:
+                  print(f"--- OFFSET {i} ---")
+                  print(s[max(0,i-1800):min(len(s),i+4200)])
           PY
           node --check src/main.js
