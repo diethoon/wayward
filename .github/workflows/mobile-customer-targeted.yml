@@ -15,7 +15,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm install --no-audit --no-fund
+          npm install --legacy-peer-deps --no-audit --no-fund
           python3 - <<'PY'
           from pathlib import Path
           p=Path("src/main.js")
