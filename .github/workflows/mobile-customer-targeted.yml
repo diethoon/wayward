@@ -1,28 +1,61 @@
-name: mobile-customer-targeted
+name: mobile-customer-patch
 on:
   push:
     branches: [mobile-migration-v1]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  inspect:
+  patch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Targeted forensic scan
+        with:
+          fetch-depth: 1
+      - name: Patch mobile customer rows
         shell: bash
         run: |
+          set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          s=Path("src/main.js").read_text(encoding="utf-8")
-          for needle in ["function Y3","N5,{customer","m.jsx(N5","patrons:f","className:"+"group flex items-center gap-1.5"]:
-            print("\n###",needle)
-            pos=0; n=0
-            while True:
-              i=s.find(needle,pos)
-              if i<0 or n>=10: break
-              print("OFFSET",i)
-              print(s[max(0,i-2200):min(len(s),i+6500)])
-              pos=i+1; n+=1
+          p=Path("src/main.js")
+          s=p.read_text(encoding="utf-8")
+
+          old_fp='className:"block",content:m.jsx(hle,{customer:e}),children:'
+          new_fp='className:"block w-full",content:m.jsx(hle,{customer:e}),children:'
+          assert s.count(old_fp)==1, f"fp wrapper pattern count={s.count(old_fp)}"
+          s=s.replace(old_fp,new_fp,1)
+
+          old_root='className:`group flex items-center gap-1.5 px-1.5 py-0.5 rounded border cursor-default ${n.isActive("customer",e.id)?"border-stone-600 bg-stone-800/60":"border-transparent hover:border-stone-700 hover:bg-stone-800/60"}`'
+          new_root='className:`group flex w-full min-w-0 items-center gap-1.5 px-1.5 py-0.5 rounded border cursor-default ${n.isActive("customer",e.id)?"border-stone-600 bg-stone-800/60":"border-transparent hover:border-stone-700 hover:bg-stone-800/60"}`'
+          assert s.count(old_root)==1, f"root row pattern count={s.count(old_root)}"
+          s=s.replace(old_root,new_root,1)
+
+          old_actions='w&&e.status==="arrived"&&m.jsx(pb,{compact:!0,label:"인사하기",onClick:()=>o({type:"greet",customerId:e.id})}),w&&(e.status==="greeted"||e.status==="wants_more")&&m.jsx(pb,{compact:!0,label:"주문받기",onClick:()=>o({type:"take_order",customerId:e.id})}),w&&e.status==="ordered"&&m.jsx(Bae,{compact:!0,customer:e,onServe:()=>o({type:"serve",customerId:e.id}),onApologize:()=>o({type:"apologize_out_of_stock",customerId:e.id})})'
+          new_actions='w&&m.jsxs("span",{className:"ml-auto flex items-center gap-1 flex-shrink-0",children:[e.status==="arrived"&&m.jsx(pb,{compact:!0,label:"인사하기",onClick:()=>o({type:"greet",customerId:e.id})}),(e.status==="greeted"||e.status==="wants_more")&&m.jsx(pb,{compact:!0,label:"주문받기",onClick:()=>o({type:"take_order",customerId:e.id})}),e.status==="ordered"&&m.jsx(Bae,{compact:!0,customer:e,onServe:()=>o({type:"serve",customerId:e.id}),onApologize:()=>o({type:"apologize_out_of_stock",customerId:e.id})})]}),'
+          assert s.count(old_actions)==1, f"action pattern count={s.count(old_actions)}"
+          s=s.replace(old_actions,new_actions,1)
+
+          p.write_text(s,encoding="utf-8")
+          print("PATCH_APPLIED")
+          print("MAIN_BYTES",p.stat().st_size)
+          print("HAS_MOBILE_ROW","group flex w-full min-w-0" in s)
+          print("HAS_ACTION_GROUP","ml-auto flex items-center gap-1 flex-shrink-0" in s)
           PY
+
           node --check src/main.js
+          npm run build
+
+          git diff --check
+          git status --short
+          git diff --stat
+
+          if git diff --quiet -- src/main.js; then
+            echo "NO_SOURCE_CHANGE"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.js
+          git commit -m "fix(mobile): keep customer actions visible and rows full-width"
+          git push origin "mobile-migration-v1"
