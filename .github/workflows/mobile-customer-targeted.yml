@@ -15,14 +15,14 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path("src/main.js").read_text(encoding="utf-8")
-          for needle in ["function ","S3(e)","return m.jsx(fp","w=!a&&!u","m.jsx(pb,{compact:!0,label:"]:
+          for needle in ["function Y3","N5,{customer","m.jsx(N5","patrons:f","className:"+"group flex items-center gap-1.5"]:
             print("\n###",needle)
             pos=0; n=0
             while True:
               i=s.find(needle,pos)
-              if i<0 or n>=12: break
+              if i<0 or n>=10: break
               print("OFFSET",i)
-              print(s[max(0,i-5000):min(len(s),i+7000)])
+              print(s[max(0,i-2200):min(len(s),i+6500)])
               pos=i+1; n+=1
           PY
           node --check src/main.js
