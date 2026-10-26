@@ -36,9 +36,10 @@ The script previews the detected packs and destination paths before writing anyt
 - Normalizes ZIP paths that use either `/` or `\\`.
 - Rejects absolute paths and `..` traversal paths.
 - Skips archives that do not contain a recognized Faith image-pack `pack.js`.
-- Skips pack IDs already present in the game's `image-packs` directory rather than overwriting existing content.
-- Does not delete source ZIP files or migrate/delete existing folders.
-- Avoids extracting symbolic links and skips `.image-cache.json`.
+- Uses the ZIP's source-folder name and `wfImagePack` character metadata for the preview; it does not use the pack's generic `name` value (`faith` / `ssff`) as the preview label.
+- Writes basic packs to `image-packs/<maker>-<character>/base/pack.js` and the supporting-cast pack to `image-packs/<maker>-extra/base/pack.js`.
+- Overwrites matching destination files, like normal ZIP/CMD extraction; source ZIP files are retained.
+- Rejects unsafe ZIP paths and skips unsupported pack types.
 
 After installation, open the game and register or refresh the `image-packs` folder in the game's image-pack settings if the game does not detect it automatically.
 
