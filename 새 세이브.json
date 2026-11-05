@@ -1,0 +1,1055 @@
+{
+  "format": 1,
+  "gameVersion": 63,
+  "savedAt": "2026-11-05T21:20:38.675Z",
+  "state": {
+    "slot": 840,
+    "relationshipStartSlot": 840,
+    "phase": "prep",
+    "economy": {
+      "gold": 50,
+      "weeklyRent": 80,
+      "debt": 1000
+    },
+    "supplies": {
+      "food": 3,
+      "beer": 3,
+      "wine": 1
+    },
+    "readyFood": 2,
+    "customers": [],
+    "player": {
+      "stats": {
+        "energy": 100,
+        "mood": 75,
+        "arousal": 0
+      },
+      "fatigue": 0,
+      "personality": {
+        "dominance": 40,
+        "charisma": 40,
+        "cunning": 40
+      },
+      "attributes": {
+        "strength": 50,
+        "deftness": 50,
+        "vigor": 50,
+        "wit": 50,
+        "composure": 50,
+        "charm": 45,
+        "honesty": 50,
+        "libido": 50,
+        "loyalty": 50,
+        "caution": 50,
+        "openness": 50,
+        "confidence": 50
+      },
+      "demeanor": "ask",
+      "magic": {
+        "grimoireFound": false,
+        "understanding": 0,
+        "attunement": 0,
+        "mana": {
+          "current": 30
+        },
+        "spells": {},
+        "sessionsToday": 0
+      }
+    },
+    "log": [
+      {
+        "slot": 840,
+        "text": "오후의 햇살이 웨이워드(Wayward)의 창문을 통해 비쳐듭니다. 이제 당신의 선술집입니다 — 어제 1000골드의 빚을 내어 사들였습니다. 이자는 주당 5%입니다."
+      },
+      {
+        "slot": 840,
+        "text": "집세는 7일마다 80골드씩 내야 합니다. 문 위의 간판이 삐걱거립니다. 마을 사람 중 새 주인이 가게 문을 열었다는 소식을 들은 이는 아직 아무도 없습니다."
+      },
+      {
+        "slot": 840,
+        "text": "당신에게는 금화 50개와 약간의 물자, 그리고 당신의 의붓자매이(가) 있습니다. 어떻게든 해내야 합니다."
+      },
+      {
+        "slot": 840,
+        "text": "[임신 / 출산모드 아침 브리핑] 엘레나의 자궁 상태: 월경기 (1/7일차). 자궁 내 정자량: 0 (단위 : 백만마리).",
+        "eventCategory": "wc2_pregnancy_birth",
+        "important": true
+      }
+    ],
+    "tavernCleanliness": 75,
+    "tavernReputation": {
+      "service": 50,
+      "notoriety": 0,
+      "renown": 12
+    },
+    "patronRecords": [],
+    "namedPatronStates": {},
+    "namedPatronNames": {
+      "aldric": "할바르",
+      "rolf": "마티스",
+      "lord_cedric": "나이얼",
+      "magnus": "페테르",
+      "tormund": "발데마르"
+    },
+    "day": 1,
+    "relationships": [
+      {
+        "pairKey": "char:wife|player",
+        "refs": [
+          {
+            "kind": "character",
+            "id": "wife"
+          },
+          {
+            "kind": "player"
+          }
+        ],
+        "tags": [],
+        "kinship": "step_sibling"
+      }
+    ],
+    "awayEvents": [],
+    "ownedOutfits": [
+      "modest"
+    ],
+    "customersServedToday": 0,
+    "customersLostToday": 0,
+    "goldEarnedToday": 0,
+    "incomeBreakdownToday": {},
+    "eventsTonight": 0,
+    "gameOver": false,
+    "locations": {
+      "taproom": {
+        "occupants": []
+      },
+      "back_room": {
+        "occupants": []
+      },
+      "bedroom": {
+        "occupants": [
+          "player"
+        ]
+      },
+      "elena_room": {
+        "occupants": [
+          "wife"
+        ]
+      },
+      "upstairs_hall": {
+        "occupants": []
+      },
+      "upstairs_room_2": {
+        "occupants": []
+      },
+      "bathhouse": {
+        "occupants": []
+      },
+      "bathroom": {
+        "occupants": []
+      },
+      "kitchen": {
+        "occupants": []
+      },
+      "market": {
+        "occupants": []
+      },
+      "side_job": {
+        "occupants": []
+      },
+      "merchant": {
+        "occupants": []
+      },
+      "wilds": {
+        "occupants": []
+      },
+      "village": {
+        "occupants": []
+      },
+      "festival_brothel": {
+        "occupants": []
+      },
+      "love_hotel": {
+        "occupants": []
+      },
+      "dealer_room": {
+        "occupants": []
+      },
+      "brothel_cellar_1": {
+        "occupants": []
+      },
+      "brothel_cellar_2": {
+        "occupants": []
+      },
+      "brothel_break_room": {
+        "occupants": []
+      },
+      "delivery_site": {
+        "occupants": []
+      },
+      "ct_upper_hall": {
+        "occupants": []
+      },
+      "ct_brewery": {
+        "occupants": []
+      },
+      "ct_guest_room": {
+        "occupants": []
+      },
+      "ct_manager_office": {
+        "occupants": []
+      },
+      "ct_servant_room": {
+        "occupants": []
+      }
+    },
+    "characters": {
+      "wife": {
+        "id": "wife",
+        "name": "엘레나",
+        "archetypeId": "elena_farmgirl",
+        "lean": "custom",
+        "leanMix": {
+          "loyalty": -79,
+          "honesty": -90,
+          "modesty": -85,
+          "wanting": -4
+        },
+        "picks": {},
+        "currentTask": "idle",
+        "busyUntilSlot": 0,
+        "stats": {
+          "energy": 100,
+          "mood": 75,
+          "arousal": 0
+        },
+        "traitsAtGeneration": {
+          "openness": 25,
+          "confidence": 38
+        },
+        "attributes": {
+          "strength": 14,
+          "deftness": 68,
+          "vigor": 70,
+          "wit": 34,
+          "composure": 69,
+          "charm": 46,
+          "honesty": 29,
+          "libido": 51,
+          "loyalty": 16,
+          "caution": 76,
+          "openness": 25,
+          "confidence": 38
+        },
+        "skills": {
+          "cooking": 22,
+          "serving": 10
+        },
+        "outfit": "modest",
+        "annoyance": 0,
+        "relationship": {
+          "trust": 50,
+          "patronInteractionsEncouraged": 0
+        },
+        "selfConcept": {
+          "openness": 27,
+          "confidence": 29
+        },
+        "raising": 0.4,
+        "growthRates": {
+          "openness": {
+            "increase": 1.76,
+            "decrease": 1.37
+          },
+          "confidence": {
+            "increase": 0.8,
+            "decrease": 0.78
+          }
+        },
+        "latentTraits": [
+          "likes_cheating",
+          "latent_submissive",
+          "romance_starved"
+        ],
+        "noticedLatentTraits": [],
+        "affinities": {
+          "romantic": -1.2,
+          "oral": 0.1,
+          "vaginal": -0.7,
+          "anal": -1.4,
+          "breast": 0.2,
+          "exhibition": 0.7,
+          "dominance": -2,
+          "prostitution": 0.1,
+          "drinking": -0.7,
+          "taboo": 0.1
+        },
+        "feelings": [],
+        "notedMoments": [],
+        "intoxication": {
+          "level": 0,
+          "drinksToday": 0,
+          "peakToday": 0
+        },
+        "volatility": 0.54,
+        "latitude": {
+          "byCategory": {},
+          "byPatron": {},
+          "marital": {}
+        },
+        "situationStats": {
+          "version": 23,
+          "totalSexActCount": 0,
+          "dailyInternalEjaculationCount": 0,
+          "dailyCountDay": 1,
+          "driftOffset": 0,
+          "latitudeOffset": 0,
+          "completedActIds": [],
+          "internalCompletionIds": [],
+          "fluidCompletionIds": [],
+          "completionSequence": 0,
+          "eventCounts": {
+            "manualGiven": 0,
+            "manualReceived": 0,
+            "oralGiven": 0,
+            "oralReceived": 0,
+            "vaginalSex": 0,
+            "analSex": 0,
+            "otherSex": 0,
+            "patronMolestation": 0
+          },
+          "patronContactIds": [],
+          "fluidState": {
+            "uterus": 0,
+            "breasts": 0,
+            "thighs": 0,
+            "mouth": 0
+          },
+          "patronHistory": {},
+          "partnerDimensions": {},
+          "jewelryState": {
+            "breasts": {
+              "stage": 0,
+              "type": null,
+              "owner": null
+            },
+            "vulva": {
+              "stage": 0,
+              "type": "clit_piercing",
+              "owner": null
+            },
+            "vibe": {
+              "type": null,
+              "owner": null,
+              "attachedDay": 0,
+              "attachedAtSlot": 0,
+              "urge": 0,
+              "lastFiveMinuteSlot": 0,
+              "locked": false,
+              "forceVisitDay": 0,
+              "pendingPlayerApproach": false,
+              "playerSceneStarted": false,
+              "suspension": null
+            }
+          },
+          "jewelryAttemptIds": [],
+          "jewelryNarrativeIds": [],
+          "sizeNarrativeIds": [],
+          "vibeRefusalCursors": {},
+          "patronVibeWeekIndex": 0,
+          "patronVibeAttachCount": 0,
+          "intrusionDays": {
+            "workRest": 0,
+            "sleepIn": 0,
+            "sleepRoll": 0
+          },
+          "requests": {
+            "avoidHotel": {
+              "active": false,
+              "acceptedDay": 0,
+              "lastAskedDay": 0
+            },
+            "avoidCards": {
+              "active": false,
+              "acceptedDay": 0,
+              "lastAskedDay": 0
+            }
+          },
+          "aphrodisiacCount": 0,
+          "aphrodisiacMerchantDay": 0,
+          "hotelLastDepartureDay": 0,
+          "hotelTripIds": [],
+          "cardFundingIds": [],
+          "hypnosis": 0,
+          "crest": 0,
+          "crestAutonomyDay": 0,
+          "crestAutonomyHour": -1,
+          "statusGainIds": [],
+          "treatmentIds": [],
+          "normalizationRevision": 2,
+          "normalizedHistorySignature": "0:0:0::",
+          "bodyMeasurements": {
+            "version": 1,
+            "bustCm": 88,
+            "waistCm": 58,
+            "hipCm": 86,
+            "source": "appearance-v1"
+          }
+        },
+        "intimateHistory": []
+      }
+    },
+    "primaryCharacterId": "wife",
+    "tavern": {
+      "hasRoom": false,
+      "roomListing": "closed",
+      "backRoomReady": false,
+      "quality": 30,
+      "qualityUpgrades": []
+    },
+    "rngState": 3781128285,
+    "weather": {
+      "day": 1,
+      "sky": "clear",
+      "turn": {
+        "atSlot": 1282,
+        "sky": "snow"
+      }
+    },
+    "circles": {
+      "wife": {
+        "of": "wife",
+        "home": "far",
+        "persons": [
+          {
+            "id": "p1",
+            "name": "로사",
+            "sex": "f",
+            "generation": -1,
+            "attributes": {
+              "strength": 41,
+              "deftness": 57,
+              "vigor": 61,
+              "wit": 62,
+              "composure": 56,
+              "charm": 33,
+              "honesty": 13,
+              "libido": 8,
+              "loyalty": 74,
+              "caution": 67,
+              "openness": 53,
+              "confidence": 50
+            },
+            "lives": "far",
+            "alive": true,
+            "circle": 0.5882704525813461,
+            "warmth": 0.5060582497168797,
+            "strictness": 0.38342509241774675,
+            "past": "strained",
+            "presence": 0.10366528540849684,
+            "belief": {
+              "rung": "nothing",
+              "sinceDay": 0,
+              "thinksHeKnows": false
+            },
+            "regard": 0.051817474915063916
+          },
+          {
+            "id": "p2",
+            "name": "메이빈",
+            "sex": "m",
+            "generation": -1,
+            "attributes": {
+              "strength": 66,
+              "deftness": 46,
+              "vigor": 83,
+              "wit": 25,
+              "composure": 32,
+              "charm": 24,
+              "honesty": 58,
+              "libido": 15,
+              "loyalty": 62,
+              "caution": 97,
+              "openness": 55,
+              "confidence": 50
+            },
+            "lives": "far",
+            "alive": true,
+            "circle": 0.6366238084901125,
+            "warmth": 0.5338076623738743,
+            "strictness": 0.3177709624171257,
+            "past": "good",
+            "presence": 0.13211221667006612,
+            "belief": {
+              "rung": "nothing",
+              "sinceDay": 0,
+              "thinksHeKnows": false
+            },
+            "regard": 0.5338076623738743
+          },
+          {
+            "id": "p8",
+            "name": "페르",
+            "sex": "m",
+            "generation": -1,
+            "attributes": {
+              "strength": 39,
+              "deftness": 27,
+              "vigor": 81,
+              "wit": 33,
+              "composure": 44,
+              "charm": 67,
+              "honesty": 35,
+              "libido": 31,
+              "loyalty": 60,
+              "caution": 40,
+              "openness": 46,
+              "confidence": 50
+            },
+            "lives": "far",
+            "alive": true,
+            "circle": 0.7677818226534874,
+            "warmth": 0.5106446067220531,
+            "strictness": 0.6382218792103231,
+            "past": "good",
+            "presence": 0.14429819704964758,
+            "belief": {
+              "rung": "nothing",
+              "sinceDay": 0,
+              "thinksHeKnows": false
+            },
+            "regard": 0.5106446067220531
+          },
+          {
+            "id": "p3",
+            "name": "오팔",
+            "sex": "f",
+            "generation": -2,
+            "attributes": {
+              "strength": 36,
+              "deftness": 92,
+              "vigor": 68,
+              "wit": 36,
+              "composure": 60,
+              "charm": 48,
+              "honesty": 29,
+              "libido": 43,
+              "loyalty": 22,
+              "caution": 42,
+              "openness": 43,
+              "confidence": 50
+            },
+            "lives": "far",
+            "alive": true,
+            "circle": 0.6570908698812128,
+            "warmth": 0.4390372817753814,
+            "strictness": 0.719969276431948,
+            "past": "good",
+            "presence": 0.02303879288956523,
+            "belief": {
+              "rung": "nothing",
+              "sinceDay": 0,
+              "thinksHeKnows": false
+            },
+            "regard": 0.4390372817753814
+          },
+          {
+            "id": "p4",
+            "name": "토르벤",
+            "sex": "m",
+            "generation": 0,
+            "attributes": {
+              "strength": 59,
+              "deftness": 37,
+              "vigor": 48,
+              "wit": 46,
+              "composure": 49,
+              "charm": 35,
+              "honesty": 33,
+              "libido": 66,
+              "loyalty": 28,
+              "caution": 42,
+              "openness": 53,
+              "confidence": 50
+            },
+            "lives": "far",
+            "alive": true,
+            "circle": 0.4079282503575087,
+            "warmth": 0.6103315336978994,
+            "strictness": 0.41244256068021057,
+            "past": "good",
+            "presence": 0.13003419069573283,
+            "belief": {
+              "rung": "nothing",
+              "sinceDay": 0,
+              "thinksHeKnows": false
+            },
+            "regard": 0.6103315336978994
+          },
+          {
+            "id": "p5",
+            "name": "피아",
+            "sex": "f",
+            "generation": 0,
+            "attributes": {
+              "strength": 62,
+              "deftness": 6,
+              "vigor": 36,
+              "wit": 43,
+              "composure": 72,
+              "charm": 72,
+              "honesty": 31,
+              "libido": 63,
+              "loyalty": 28,
+              "caution": 38,
+              "openness": 56,
+              "confidence": 50
+            },
+            "lives": "far",
+            "alive": true,
+            "circle": 0.8835667644999922,
+            "warmth": 0.8167207568534649,
+            "strictness": 0.2994227173738182,
+            "past": "good",
+            "presence": 0.06132964673452079,
+            "belief": {
+              "rung": "nothing",
+              "sinceDay": 0,
+              "thinksHeKnows": false
+            },
+            "regard": 0.8167207568534649
+          },
+          {
+            "id": "p6",
+            "name": "벤델",
+            "sex": "m",
+            "generation": 0,
+            "attributes": {
+              "strength": 42,
+              "deftness": 13,
+              "vigor": 49,
+              "wit": 46,
+              "composure": 43,
+              "charm": 38,
+              "honesty": 47,
+              "libido": 73,
+              "loyalty": 43,
+              "caution": 44,
+              "openness": 55,
+              "confidence": 50
+            },
+            "lives": "far",
+            "alive": true,
+            "circle": 0.4379632461443544,
+            "warmth": 0.5267366932262666,
+            "strictness": 0.3376128233969212,
+            "past": "strained",
+            "presence": 0.08145977606996893,
+            "belief": {
+              "rung": "nothing",
+              "sinceDay": 0,
+              "thinksHeKnows": false
+            },
+            "regard": 0.058021007967879956
+          },
+          {
+            "id": "p7",
+            "name": "세인",
+            "sex": "m",
+            "generation": 0,
+            "attributes": {
+              "strength": 61,
+              "deftness": 24,
+              "vigor": 27,
+              "wit": 21,
+              "composure": 77,
+              "charm": 55,
+              "honesty": 49,
+              "libido": 37,
+              "loyalty": 71,
+              "caution": 37,
+              "openness": 58,
+              "confidence": 50
+            },
+            "lives": "day_ride",
+            "alive": true,
+            "circle": 0.7520705010741949,
+            "warmth": 0.47808835450559856,
+            "strictness": 0.2390844306908548,
+            "past": "good",
+            "presence": 0.3115925745107233,
+            "belief": {
+              "rung": "nothing",
+              "sinceDay": 0,
+              "thinksHeKnows": false
+            },
+            "regard": 0.47808835450559856
+          }
+        ],
+        "links": [
+          {
+            "kind": "parent_of",
+            "from": "person:p1",
+            "to": "char:wife"
+          },
+          {
+            "kind": "parent_of",
+            "from": "person:p2",
+            "to": "char:wife"
+          },
+          {
+            "kind": "partner_of",
+            "from": "person:p1",
+            "to": "person:p2"
+          },
+          {
+            "kind": "parent_of",
+            "from": "person:p3",
+            "to": "person:p1"
+          },
+          {
+            "kind": "sibling_of",
+            "from": "person:p4",
+            "to": "char:wife"
+          },
+          {
+            "kind": "sibling_of",
+            "from": "person:p5",
+            "to": "char:wife"
+          },
+          {
+            "kind": "sibling_of",
+            "from": "person:p6",
+            "to": "char:wife"
+          },
+          {
+            "kind": "sibling_of",
+            "from": "person:p7",
+            "to": "char:wife"
+          },
+          {
+            "kind": "partner_of",
+            "from": "person:p1",
+            "to": "person:p8"
+          },
+          {
+            "kind": "parent_of",
+            "from": "person:p8",
+            "to": "player"
+          }
+        ]
+      }
+    },
+    "mods": {
+      "imagestudio": {
+        "usageSession": {
+          "id": "b60df090-0882-4635-b0bb-22882506b6ee",
+          "startedAt": "2026-11-05T20:39:55.876Z",
+          "origin": "new-game"
+        }
+      },
+      "festival": {
+        "version": 1,
+        "current": {
+          "id": "festival:15",
+          "festivalDay": 15,
+          "participation": "pending",
+          "invitationQueued": false,
+          "requests": [
+            {
+              "day": 13,
+              "dueSlot": 18479,
+              "queued": false,
+              "completed": false,
+              "who": null
+            },
+            {
+              "day": 14,
+              "dueSlot": 19829,
+              "queued": false,
+              "completed": false,
+              "who": null
+            }
+          ],
+          "stallRevenue": 0,
+          "stallVisitors": 0
+        },
+        "labor": null,
+        "stall": null,
+        "history": [],
+        "totalStallRevenue": 0,
+        "totalStallVisitors": 0
+      },
+      "brothel-compatible-h-status": {
+        "version": 2,
+        "workers": {}
+      },
+      "construction-tool": {
+        "schema": 2,
+        "floors": {
+          "upper": {
+            "expansions": 0
+          },
+          "ground": {
+            "expansions": 0
+          },
+          "basement": {
+            "expansions": 0
+          }
+        },
+        "placements": {
+          "bathroom": {
+            "floor": "upper",
+            "cells": [
+              0,
+              1
+            ]
+          },
+          "bedroom": {
+            "floor": "upper",
+            "cells": [
+              2,
+              3
+            ]
+          },
+          "elena_room": {
+            "floor": "upper",
+            "cells": [
+              6,
+              7
+            ]
+          },
+          "upstairs_hall": {
+            "floor": "upper",
+            "cells": [
+              10,
+              11
+            ]
+          },
+          "upstairs_room_2": {
+            "floor": "upper",
+            "cells": [
+              14,
+              15
+            ]
+          },
+          "ct_upper_hall": {
+            "floor": "upper",
+            "cells": [
+              8,
+              9,
+              12,
+              13
+            ]
+          },
+          "taproom": {
+            "floor": "ground",
+            "cells": [
+              0,
+              1,
+              2,
+              4,
+              5,
+              6,
+              8,
+              9,
+              10,
+              12,
+              13,
+              14
+            ]
+          },
+          "kitchen": {
+            "floor": "ground",
+            "cells": [
+              3,
+              7
+            ]
+          },
+          "back_room": {
+            "floor": "ground",
+            "cells": [
+              11,
+              15
+            ]
+          },
+          "bathhouse": {
+            "floor": "basement",
+            "cells": [
+              2,
+              3,
+              6,
+              7
+            ]
+          },
+          "brothel_cellar_1": {
+            "floor": "basement",
+            "cells": [
+              0,
+              1
+            ]
+          },
+          "brothel_cellar_2": {
+            "floor": "basement",
+            "cells": [
+              4,
+              5
+            ]
+          },
+          "brothel_break_room": {
+            "floor": "basement",
+            "cells": [
+              8,
+              9
+            ]
+          }
+        },
+        "furniture": [
+          {
+            "id": "ct_table_1",
+            "roomId": "taproom",
+            "cells": [
+              2,
+              6
+            ],
+            "premium": false,
+            "active": true
+          },
+          {
+            "id": "ct_table_2",
+            "roomId": "taproom",
+            "cells": [
+              1,
+              5
+            ],
+            "premium": false,
+            "active": true
+          },
+          {
+            "id": "ct_table_3",
+            "roomId": "taproom",
+            "cells": [
+              10,
+              14
+            ],
+            "premium": false,
+            "active": true
+          },
+          {
+            "id": "ct_table_4",
+            "roomId": "taproom",
+            "cells": [
+              9,
+              13
+            ],
+            "premium": false,
+            "active": true
+          }
+        ],
+        "rooms": [],
+        "nextId": 5,
+        "lastWakeDay": 1,
+        "bookingDay": null
+      },
+      "companions": {
+        "roster": {
+          "schema": 2,
+          "nextId": 1,
+          "people": {},
+          "managers": {},
+          "policy": {
+            "maxEmployees": 12,
+            "forbidNewLoversWhenPartnered": false
+          },
+          "nativeServantRoomAvailable": false,
+          "housingVersion": 1
+        }
+      }
+    },
+    "situationEventMod": {
+      "version": 23,
+      "normalizationRevision": 2,
+      "fixtureDamage": {
+        "day": 1,
+        "count": 0,
+        "attempts": {},
+        "queue": []
+      },
+      "toyInventory": {
+        "breastSet": 0,
+        "vulvaDecoration": 0,
+        "eggVibe": 0,
+        "penisVibe": 0
+      },
+      "playerPenis": {
+        "lengthCm": 15,
+        "girthCm": 12
+      },
+      "thugGang": {
+        "phase": "dormant",
+        "leaderKey": "thug-leader-zt9cux",
+        "leaderName": "가죽 조끼를 입은 불량배",
+        "scoutsRequired": 1,
+        "scoutsDone": 0,
+        "scoutAttempted": false,
+        "scoutCompletedOpenSlot": 0,
+        "checkedDay": 0,
+        "scoutMisses": 0,
+        "checkedGroupVisitDay": 0,
+        "groupVisitMisses": 0,
+        "groupVisitRuleVersion": 2,
+        "lastGroupVisitRollSlot": 0,
+        "groupVisitRollCountThisShift": 0,
+        "groupVisitSucceededThisShift": false,
+        "groupCompletedDay": 0,
+        "nextVisitDay": 0,
+        "serviceOpenedAtSlot": 0,
+        "serviceOpenedDay": 0,
+        "rentGold": 57,
+        "satisfaction": 50,
+        "groupSize": 4,
+        "temperament": 0,
+        "wifeDeliveries": 0,
+        "harassmentIntensity": 0,
+        "molestationObserved": false,
+        "molestationSceneIds": [],
+        "lastMolestationDelivery": 0,
+        "lastGroupRollDelivery": 0,
+        "unmetDrink": false,
+        "promptedMissing": false,
+        "observationMode": "",
+        "imageVariant": 1,
+        "memberIds": [],
+        "memberSnapshots": [],
+        "experienceByCharacter": {},
+        "corruptionByCharacter": {},
+        "dialogueCursors": {},
+        "processedIds": []
+      },
+      "vibeSleepOutingSuppressedDay": 0,
+      "suspiciousCheckDay": 0,
+      "suspiciousLastAppearanceDay": 0,
+      "suspiciousSchedule": null,
+      "mageQueue": []
+    },
+    "wc2PregnancyBirthMode265": {
+      "version": 8,
+      "cycleAnchor": null,
+      "pendingCycleMedicine": null,
+      "lastMorningDay": 1,
+      "pausedAtDay": null,
+      "spermDeposits": [],
+      "ejaculationCounts": {
+        "vaginal": 0,
+        "anal": 0
+      },
+      "pregnancy": null,
+      "birthLog": [],
+      "seenFinishes": []
+    },
+    "waywardBrothelPregnancyV1": {
+      "version": 2,
+      "workers": {},
+      "events": []
+    }
+  }
+}
