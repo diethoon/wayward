@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch exact v1.3.12 package and apply single-owner portal fix
+      - name: Fetch exact v1.3.12 package and apply corrected single-owner portal fix
         shell: bash
         run: |
           set -euo pipefail
