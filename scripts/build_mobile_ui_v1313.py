@@ -17,6 +17,7 @@ if 'version: "1.3.12"' not in mod:
     raise SystemExit("Base mod is not v1.3.12")
 mod = mod.replace('version: "1.3.12"', 'version: "1.3.13"', 1)
 mod = mod.replace('version: "1.3.12"', 'version: "1.3.13"')
+mod = mod.replace('description: "4.37MB WML 빌드용: 이야기 탭 알림 제거, 대화 선택지 단일 출력",', 'description: "4.37MB WML 빌드용: 이야기 알림 제거, 반응형 중복 카드의 선택지 단일 출력",', 1)
 mod = mod.replace('version: "1.3.12",', 'version: "1.3.13",')
 mod = mod.replace('version: "1.3.12"', 'version: "1.3.13"')
 
