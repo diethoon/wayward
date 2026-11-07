@@ -1,0 +1,135 @@
+name: Build and validate mobile UI migration 1.3.13
+
+on:
+  push:
+    branches:
+      - fix/mobile-ui-save-compat-1.3.13
+    paths:
+      - ".github/workflows/build-mobile-ui-v1313.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch exact v1.3.12 package and apply corrected single-owner portal fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin fix/mobile-ui-save-compat-1.3.12
+          git show FETCH_HEAD:mobile-ui-migration-437-v1.3.12.zip > /tmp/mobile-ui-v1312.zip
+          python3 scripts/build_mobile_ui_v1313.py
+
+      - name: Install isolated React test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm init -y
+          npm install --no-save --no-audit --no-fund react@18.3.1 react-dom@18.3.1 jsdom@24.1.3
+
+      - name: Syntax-check and test duplicate responsive card portal ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check build/mobile-ui-migration/mod.js
+          node --check scripts/test_mobile_ui_v1313_portal.js
+          node scripts/test_mobile_ui_v1313_portal.js
+
+      - name: Verify exact WML source, byte chunks and package integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, zipfile
+
+          source = Path("Wayward_WML_ko.html")
+          chunks = []
+          digest = hashlib.sha256()
+          offset = 0
+          with source.open("rb") as f:
+              while True:
+                  block = f.read(4096)
+                  if not block:
+                      break
+                  digest.update(block)
+                  chunks.append({
+                      "offset": offset,
+                      "length": len(block),
+                      "sha256": hashlib.sha256(block).hexdigest()
+                  })
+                  offset += len(block)
+
+          expected_size = 4373978
+          expected_sha = "e159fb2002d31559b1ac1936cf6b48cdbbdc4858bfbb0b67e2d7284ca2195d1d"
+          assert offset == expected_size, (offset, expected_size)
+          assert digest.hexdigest() == expected_sha, digest.hexdigest()
+          raw = source.read_bytes()
+          assert b"function Xrt(" in raw
+          assert b"function Jrt(" in raw
+          assert b"u.jsx(Xrt,{...e})" in raw
+          assert b"u.jsx(Jrt,{customerName:" in raw
+
+          mod_path = Path("build/mobile-ui-migration/mod.js")
+          mod = mod_path.read_text(encoding="utf-8")
+          assert 'version: "1.3.13"' in mod
+          assert "patronPortalRegistry" in mod
+          assert "registerPatronPortalInstance" in mod
+          assert "if (!isPortalOwner) return parts.originalWithoutChoices;" in mod
+          assert "React.useLayoutEffect" in mod
+
+          manifest = {
+              "repository": "diethoon/wayward",
+              "branch": "main",
+              "commit": "4babcaff70e65af6c804e126d8ff9af5eb19dc6a",
+              "path": str(source),
+              "bytes": offset,
+              "sha256": digest.hexdigest(),
+              "chunk_bytes": 4096,
+              "chunks": chunks
+          }
+          Path("build/source-chunk-manifest.json").write_text(
+              json.dumps(manifest, indent=2), encoding="utf-8"
+          )
+
+          out = Path("mobile-ui-migration-437-v1.3.13.zip")
+          with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+              z.writestr("mobile-ui-migration/", b"")
+              z.write(mod_path, "mobile-ui-migration/mod.js")
+              z.write("build/mobile-ui-migration/README_ko.md",
+                      "mobile-ui-migration/README_ko.md")
+          with zipfile.ZipFile(out) as z:
+              assert z.testzip() is None
+              entries = {item.filename: item.file_size for item in z.infolist()}
+              assert set(entries) == {
+                  "mobile-ui-migration/",
+                  "mobile-ui-migration/mod.js",
+                  "mobile-ui-migration/README_ko.md"
+              }, entries
+          print("SOURCE", offset, digest.hexdigest(), "chunks", len(chunks))
+          print("PACKAGE", out.stat().st_size,
+                hashlib.sha256(out.read_bytes()).hexdigest())
+          print("ZIP ENTRIES", entries)
+          PY
+
+          git diff --check
+
+      - name: Commit package to isolated fix branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mobile-ui-migration-437-v1.3.13.zip
+          git commit -m "fix: deduplicate responsive patron choice portals (v1.3.13)"
+          git push origin HEAD:fix/mobile-ui-save-compat-1.3.13
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-ui-migration-437-v1.3.13
+          path: mobile-ui-migration-437-v1.3.13.zip
+          if-no-files-found: error
