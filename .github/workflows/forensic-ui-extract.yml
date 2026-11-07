@@ -1,0 +1,93 @@
+name: Forensic mobile UI package extraction
+
+on:
+  push:
+    branches:
+      - forensic/ui-save-compat-20261107
+    paths:
+      - ".github/workflows/forensic-ui-extract.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify original source in 4096-byte chunks and extract packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p forensic-output/pkg-438 forensic-output/pkg-437
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os, subprocess, zipfile
+
+          root = Path(".")
+          source = root / "Wayward_MOD_v2.107.html"
+          data_size = source.stat().st_size
+          chunks = []
+          total = hashlib.sha256()
+          offset = 0
+          with source.open("rb") as f:
+              while True:
+                  b = f.read(4096)
+                  if not b:
+                      break
+                  total.update(b)
+                  chunks.append({"offset": offset, "length": len(b), "sha256": hashlib.sha256(b).hexdigest()})
+                  offset += len(b)
+          assert offset == data_size
+          manifest = {
+              "repository": "diethoon/wayward",
+              "branch": "forensic/ui-save-compat-20261107",
+              "base_commit": "4babcaff70e65af6c804e126d8ff9af5eb19dc6a",
+              "source_path": str(source),
+              "source_bytes": data_size,
+              "source_sha256": total.hexdigest(),
+              "chunk_bytes": 4096,
+              "chunks": chunks,
+          }
+          Path("forensic-output/source-chunk-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+          packages = [
+              ("mobile-ui-migration-438-v1.3.8.zip", Path("forensic-output/pkg-438")),
+              ("mobile-ui-migration-438-v1.3.8.zip", Path("forensic-output/pkg-438")),
+          ]
+          for zip_name, out in packages[:1]:
+              with zipfile.ZipFile(zip_name) as z:
+                  z.extractall(out)
+                  listing = [{"path": x.filename, "size": x.file_size, "crc": f"{x.CRC:08x}"} for x in z.infolist()]
+              (out / "zip-listing.json").write_text(json.dumps(listing, indent=2), encoding="utf-8")
+
+          old_zip = Path("mobile-ui-migration-437-v1.3.10.zip")
+          if old_zip.exists():
+              out = Path("forensic-output/pkg-437")
+              with zipfile.ZipFile(old_zip) as z:
+                  z.extractall(out)
+                  listing = [{"path": x.filename, "size": x.file_size, "crc": f"{x.CRC:08x}"} for x in z.infolist()]
+              (out / "zip-listing.json").write_text(json.dumps(listing, indent=2), encoding="utf-8")
+
+          for p in Path("forensic-output").rglob("*"):
+              if p.is_file():
+                  print(f"{p} {p.stat().st_size} bytes")
+          print("SOURCE", data_size, total.hexdigest(), "chunks", len(chunks))
+          PY
+
+      - name: Syntax-check extracted JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          find forensic-output -type f -name '*.js' -print0 | while IFS= read -r -d '' f; do
+            echo "node --check $f"
+            node --check "$f"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forensic-ui-extract
+          path: forensic-output/
+          if-no-files-found: error
