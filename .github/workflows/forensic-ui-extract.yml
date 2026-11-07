@@ -1,0 +1,44 @@
+name: Extract v1.3.10 mobile UI package
+
+on:
+  push:
+    branches:
+      - forensic/ui-save-compat-20261107-v1310
+    paths:
+      - ".github/workflows/forensic-ui-extract.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract v1.3.10 package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p forensic-output
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, zipfile
+          archive=Path("mobile-ui-migration-437-v1.3.10.zip")
+          out=Path("forensic-output")
+          with zipfile.ZipFile(archive) as z:
+              z.extractall(out)
+              listing=[{"path":x.filename,"size":x.file_size,"crc":f"{x.CRC:08x}"} for x in z.infolist()]
+          (out/"zip-listing.json").write_text(json.dumps(listing,indent=2),encoding="utf-8")
+          for p in out.rglob("*"):
+              if p.is_file(): print(p, p.stat().st_size)
+          PY
+      - name: Syntax check
+        shell: bash
+        run: |
+          set -euo pipefail
+          find forensic-output -name '*.js' -type f -print0 | while IFS= read -r -d '' f; do node --check "$f"; done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forensic-ui-v1310
+          path: forensic-output/
+          if-no-files-found: error
