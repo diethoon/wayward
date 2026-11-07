@@ -159,3 +159,9 @@ jobs:
           print(json.dumps({k:v for k,v in manifest.items() if k!="chunks"}, indent=2))
           print("chunks", len(chunks), "bytes verified", offset)
           PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forensic-ui-wml-source
+          path: forensic-output/wml-source/
+          if-no-files-found: error
