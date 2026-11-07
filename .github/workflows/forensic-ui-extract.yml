@@ -285,3 +285,30 @@ jobs:
           name: forensic-ui-card-callsites
           path: forensic-output/wml-source/interaction-card-call-sites.json
           if-no-files-found: error
+
+      - name: Trace interaction-state component Jrt render sites
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, json
+          raw=Path("Wayward_WML_ko.html").read_bytes()
+          text=raw.decode("utf-8","replace")
+          patterns=[r"function\s+Jrt\s*\(",r"[\w$]+\.(?:jsx|jsxs)\(Jrt\s*,",r"[\w$]+\.(?:jsx|jsxs)\(Jrt,",r"\bJrt\b",r"function\s+\w+\([^)]*\)\s*\{[^}]{0,12000}Jrt"]
+          rows=[]
+          for pat in patterns:
+              for m in list(re.finditer(pat,text))[:100]:
+                  lo=max(0,m.start()-2200); hi=min(len(text),m.end()+4000)
+                  rows.append({"pattern":pat,"offset":m.start(),"line":text.count("\n",0,m.start())+1,"context":text[lo:hi]})
+          out=Path("forensic-output/wml-source/jrt-call-sites.json")
+          out.write_text(json.dumps(rows,ensure_ascii=False,indent=2),encoding="utf-8")
+          for x in rows:
+              print("\\n",x["pattern"],x["offset"],"line",x["line"])
+              print(x["context"][:5000])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forensic-ui-jrt-call-sites
+          path: forensic-output/wml-source/jrt-call-sites.json
+          if-no-files-found: error
