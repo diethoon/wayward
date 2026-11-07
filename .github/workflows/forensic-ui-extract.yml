@@ -91,3 +91,71 @@ jobs:
           name: forensic-ui-extract
           path: forensic-output/
           if-no-files-found: error
+
+      - name: Inspect the exact 4.37 MB WML source in 4096-byte chunks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json
+
+          source = Path("Wayward_WML_ko.html")
+          size = source.stat().st_size
+          total = hashlib.sha256()
+          chunks = []
+          offset = 0
+          with source.open("rb") as f:
+              while True:
+                  b = f.read(4096)
+                  if not b:
+                      break
+                  total.update(b)
+                  chunks.append({"offset": offset, "length": len(b), "sha256": hashlib.sha256(b).hexdigest()})
+                  offset += len(b)
+          assert offset == size
+          raw = source.read_bytes()
+          terms = [
+              b"function vle(", b"function Wre(", b"function lre(",
+              b"function hoe(", b"function itt(", b"function cst(",
+              b"function Xrt(", b"function SB(", b"function sB(",
+              b"function qoe(", b"function loe(",
+              "당신의 대응이 필요한 상황".encode(),
+              "대화에 끼기".encode(),
+          ]
+          hits = {}
+          for term in terms:
+              offsets = []
+              start = 0
+              while len(offsets) < 8:
+                  pos = raw.find(term, start)
+                  if pos < 0:
+                      break
+                  offsets.append(pos)
+                  start = pos + len(term)
+              hits[term.decode("utf-8")] = offsets
+          manifest = {
+              "repository": "diethoon/wayward",
+              "branch": "forensic/ui-save-compat-20261107",
+              "base_commit": "4babcaff70e65af6c804e126d8ff9af5eb19dc6a",
+              "source_path": str(source),
+              "source_git_blob_sha": "d198eacfc127c55dc44bd5d1b8e29ff2bb7d08e6",
+              "source_bytes": size,
+              "source_sha256": total.hexdigest(),
+              "chunk_bytes": 4096,
+              "chunks": chunks,
+              "string_hits": hits,
+          }
+          out = Path("forensic-output/wml-source")
+          out.mkdir(parents=True, exist_ok=True)
+          (out / "source-chunk-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+          contexts=[]
+          for term, offsets in hits.items():
+              for pos in offsets[:2]:
+                  lo=max(0,pos-350)
+                  hi=min(len(raw),pos+(5200 if term.startswith("function ") else 1400))
+                  contexts.append({"term":term,"offset":pos,"context":raw[lo:hi].decode("utf-8","replace")})
+          (out / "targeted-contexts.json").write_text(json.dumps(contexts, ensure_ascii=False, indent=2), encoding="utf-8")
+          print(json.dumps({k:v for k,v in manifest.items() if k!="chunks"}, indent=2))
+          print("chunks", len(chunks), "bytes verified", offset)
+          PY
