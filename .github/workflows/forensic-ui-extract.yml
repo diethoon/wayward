@@ -165,3 +165,43 @@ jobs:
           name: forensic-ui-wml-source
           path: forensic-output/wml-source/
           if-no-files-found: error
+
+      - name: Identify actual response-alert and story-layout component owners
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, re
+          raw=Path("Wayward_WML_ko.html").read_bytes()
+          terms=["당신의 대응이 필요한 상황".encode(), "대화에 끼기".encode()]
+          out=[]
+          for term in terms:
+              starts=[]; p=0
+              while True:
+                  p=raw.find(term,p)
+                  if p<0: break
+                  starts.append(p);p+=len(term)
+              for pos in starts:
+                  lo=max(0,pos-8000); hi=min(len(raw),pos+3000)
+                  window=raw[lo:hi].decode("utf-8","replace")
+                  prefix=raw[:pos].decode("utf-8","replace")
+                  funcs=list(re.finditer(r"function\\s+([A-Za-z_$][\\w$]*)\\s*\\([^)]*\\)\\s*\\{",prefix))
+                  owner=funcs[-1].group(1) if funcs else None
+                  owner_pos=funcs[-1].start() if funcs else None
+                  owner_uses=[]
+                  if owner:
+                      for m in list(re.finditer(r"\\b"+re.escape(owner)+r"\\b",raw.decode("utf-8","replace")))[:20]:
+                          owner_uses.append(m.start())
+                  out.append({"term":term.decode(),"offset":pos,"nearest_function":owner,"function_offset":owner_pos,"name_occurrences":owner_uses,"context":window})
+          target=Path("forensic-output/wml-source/response-alert-owner-contexts.json")
+          target.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          for row in out:
+              print(row["term"],"offset",row["offset"],"owner",row["nearest_function"],"fn_offset",row["function_offset"],"uses",row["name_occurrences"][:10])
+              print(row["context"][:7600])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forensic-ui-response-alert-owners
+          path: forensic-output/wml-source/response-alert-owner-contexts.json
+          if-no-files-found: error
