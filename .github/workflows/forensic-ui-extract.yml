@@ -205,3 +205,47 @@ jobs:
           name: forensic-ui-response-alert-owners
           path: forensic-output/wml-source/response-alert-owner-contexts.json
           if-no-files-found: error
+
+      - name: Trace alert component through story tab owner tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, json
+          raw=Path("Wayward_WML_ko.html").read_bytes()
+          text=raw.decode("utf-8","replace")
+          terms=["function Voe(","m.jsx(Voe","u.jsx(Voe","function WB(","m.jsx(WB","function Xrt(","m.jsx(Xrt","m.jsx(qoe","m.jsx(gat","m.jsx(SB"]
+          out=[]
+          for term in terms:
+              needle=term.encode()
+              pos=[]; at=0
+              while len(pos)<40:
+                  p=raw.find(needle,at)
+                  if p<0: break
+                  pos.append(p);at=p+len(needle)
+              for p in pos:
+                  lo=max(0,p-1000);hi=min(len(raw),p+2300)
+                  out.append({"term":term,"offset":p,"context":raw[lo:hi].decode("utf-8","replace")})
+          for phrase in [b"flex-1 min-h-0 overflow-y-auto p-2 text-[0.78rem]",b"flex-1 min-w-0 flex flex-col min-h-0",b'"story"',b'"house"',b'"focus"']:
+              positions=[];at=0
+              while len(positions)<40:
+                  p=raw.find(phrase,at)
+                  if p<0:break
+                  positions.append(p);at=p+1
+              for p in positions:
+                  if phrase.startswith(b'"') and p<500000: continue
+                  lo=max(0,p-800);hi=min(len(raw),p+1800)
+                  out.append({"term":phrase.decode("utf-8","replace"),"offset":p,"context":raw[lo:hi].decode("utf-8","replace")})
+          dst=Path("forensic-output/wml-source/story-owner-traces.json")
+          dst.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          print("trace rows",len(out))
+          for row in out:
+              print("\n",row["term"],row["offset"])
+              print(row["context"][:3200])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forensic-ui-story-owner-traces
+          path: forensic-output/wml-source/story-owner-traces.json
+          if-no-files-found: error
