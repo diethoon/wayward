@@ -249,3 +249,39 @@ jobs:
           name: forensic-ui-story-owner-traces
           path: forensic-output/wml-source/story-owner-traces.json
           if-no-files-found: error
+
+      - name: Count every interaction-card component instance and adjacent parents
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, json
+          raw=Path("Wayward_WML_ko.html").read_bytes()
+          text=raw.decode("utf-8","replace")
+          terms = [
+              r"function\s+Xrt\s*\(",
+              r"[\w$]+\.(?:jsx|jsxs)\(Xrt\s*,",
+              r"[\w$]+\.(?:jsx|jsxs)\(Xrt,",
+              r"\bXrt\b",
+              r"m36-ui-migration-patron-choices",
+              r"function\s+\w+\s*\([^)]*\)\s*\{[^}]{0,1000}Xrt",
+          ]
+          rows=[]
+          for pat in terms:
+              for m in list(re.finditer(pat,text))[:100]:
+                  lo=max(0,m.start()-2200)
+                  hi=min(len(text),m.end()+2800)
+                  rows.append({"pattern":pat,"offset":m.start(),"line":text.count("\n",0,m.start())+1,"context":text[lo:hi]})
+          out=Path("forensic-output/wml-source/interaction-card-call-sites.json")
+          out.write_text(json.dumps(rows,ensure_ascii=False,indent=2),encoding="utf-8")
+          print("matches",len(rows))
+          for row in rows:
+              print("\\n",row["pattern"],"offset",row["offset"],"line",row["line"])
+              print(row["context"][:3800])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forensic-ui-card-callsites
+          path: forensic-output/wml-source/interaction-card-call-sites.json
+          if-no-files-found: error
