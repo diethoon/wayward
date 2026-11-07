@@ -130,7 +130,6 @@ mod = mod[:start] + replacement + mod[end:]
 # Keep the status/debug metadata and startup log consistent with the package version.
 mod = mod.replace('version: "1.3.12"', 'version: "1.3.13"')
 mod = mod.replace('M36 mobile UI migration 1.3.12 ready', 'M36 mobile UI migration 1.3.13 ready')
-mod = mod.replace("console.info(\\"[WML] M36 mobile UI migration 1.3.12 ready\\"", "console.info(\\"[WML] M36 mobile UI migration 1.3.13 ready\\"")
 
 README_PATH.write_text(readme.replace("1.3.12", "1.3.13").replace(
     "대화 선택지 단일 출력",
