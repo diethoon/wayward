@@ -25,8 +25,8 @@ export function authorized(req, secret = process.env.DIAGNOSTICS_TOKEN) {
 
 export function adminAuthorized(req, secret = process.env.DIAGNOSTICS_ADMIN_TOKEN) {
   if (!secret || String(secret).length < 32) return false;
-  const supplied = Buffer.from(String(req.query?.key || ""));
-  const expected = Buffer.from(String(secret));
+  const supplied = Buffer.from(String(req.headers?.authorization || ""));
+  const expected = Buffer.from("Bearer " + secret);
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 

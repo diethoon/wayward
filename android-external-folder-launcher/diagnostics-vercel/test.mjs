@@ -9,8 +9,9 @@ const req = { headers: { authorization: "Bearer " + secret } };
 assert.equal(authorized(req, secret), true);
 assert.equal(authorized({ headers: {} }, secret), false);
 const adminSecret = "diagnostics-admin-test-secret".padEnd(40, "z");
-assert.equal(adminAuthorized({ query: { key: adminSecret } }, adminSecret), true);
-assert.equal(adminAuthorized({ query: { key: "read" } }, adminSecret), false);
+assert.equal(adminAuthorized({ headers: { authorization: "Bearer " + adminSecret } }, adminSecret), true);
+assert.equal(adminAuthorized({ query: { key: adminSecret } }, adminSecret), false);
+assert.equal(adminAuthorized({ headers: { authorization: "Bearer read" } }, adminSecret), false);
 assert.equal(redact("Authorization: Bearer abcdef123; api_key=secret").includes("abcdef123"), false);
 
 const parsed = parseBody({ body: { events: [{

@@ -759,7 +759,7 @@ public final class MainActivity extends Activity {
     }
     private String msg(Throwable e){return e==null||e.getMessage()==null?"알 수 없는 오류":e.getMessage();}
     private final class HostBridge{
-        @JavascriptInterface public String version(){return "0.3.1";}
+        @JavascriptInterface public String version(){return "0.3.2";}
         @JavascriptInterface public void imageGenProxyFetch(String requestId,String method,String path,String headersJson,String bodyBase64){
             ImageGenProxy.dispatch(web,requestId,method,path,headersJson,bodyBase64);
         }
