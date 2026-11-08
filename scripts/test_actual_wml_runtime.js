@@ -244,6 +244,17 @@ function startServer(root) {
       buttons: await page.locator("#root button").allTextContents()
     }));
 
+    const skipIntro = page.getByRole("button", { name: "건너뛰기", exact: true });
+    if (await skipIntro.isVisible().catch(() => false)) {
+      await skipIntro.click();
+      await page.waitForTimeout(1200);
+    }
+    console.log("AFTER_INTRO_SKIP_REPORT", JSON.stringify({
+      rootText: (await page.locator("#root").innerText()).slice(0, 6000),
+      buttons: await page.locator("#root button").allTextContents()
+    }));
+
+
 
 
 
