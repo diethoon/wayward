@@ -5,6 +5,12 @@ const source = fs.readFileSync(new URL("../app/src/main/java/com/wayward/launche
 const contains = value => assert.ok(source.includes(value), "Missing launcher behavior: " + value);
 
 contains("s.setCacheMode(WebSettings.LOAD_DEFAULT)");
+contains('.setDomain(domain+":"+originPort)');
+contains("FolderHandler.isGameRequestPath(path)");
+contains("folderHandler.serveGamePath(path.substring(6))");
+contains("web.loadUrl(gameUrl);");
+contains("Image Studio is optional: its startup must never gate the game page.");
+assert.equal(source.includes("web.loadUrl(gameUrl);\n            ensureImageGenServer"), false);
 assert.equal(source.includes("WebSettings.LOAD_NO_CACHE"), false);
 contains('h.put("Cache-Control","private, max-age=86400")');
 contains("static boolean cacheableMedia(String path)");
