@@ -330,6 +330,7 @@ function startServer(root) {
 
     console.log("REAL_GAT_DOM_REPORT", JSON.stringify(dom));
 
+    assert.equal(dom.status?.version, "1.3.16", "the loaded module is not release 1.3.16");
     assert.ok(hookReport.hooks.find(item => item.raw === "gat")?.calls > 0,
       "the real game layout hook did not execute");
     assert.ok(hookReport.hooks.find(item => item.raw === "wst")?.calls > 0,
