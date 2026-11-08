@@ -9,6 +9,7 @@ on:
       - "scripts/inspect_wml_archive.js"
       - "scripts/test_actual_wml_runtime.js"
       - "mobile-ui-migration/mod.js"
+      - "mobile-ui-migration/README_ko.md"
       - ".github/workflows/forensic-wml-runtime-gate.yml"
 
 permissions:
@@ -20,6 +21,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -47,6 +50,7 @@ jobs:
           set -euo pipefail
           node --check scripts/test_actual_wml_runtime.js
           node --check mobile-ui-migration/mod.js
+          git diff --check HEAD~4 HEAD
           node scripts/test_actual_wml_runtime.js
       - name: Upload raw forensic evidence
         if: always()
