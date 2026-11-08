@@ -52,6 +52,30 @@ public final class ZipModStoreTest {
             writeZip(ambiguous, ambiguousEntries);
             expectFailure(() -> ZipModStore.inspect(ambiguous), "ambiguous multi-mod ZIP rejected");
 
+            File imageStudioZip = store.temporaryFile("imagestudio-backend");
+            Map<String, String> imageStudioEntries = new LinkedHashMap<>();
+            imageStudioEntries.put("imagestudio-root/mod.js", "WML.define({ id: 'imagestudio', setup(api) {} });");
+            imageStudioEntries.put("imagestudio-root/backend/wayward-imagegen/package.json", "{\"version\":\"0.8.4\"}");
+            imageStudioEntries.put("imagestudio-root/backend/wayward-imagegen/src/cli.ts", "console.log('server');");
+            imageStudioEntries.put("imagestudio-root/backend/wayward-imagegen/src/nested/provider.ts", "export const ok = true;");
+            imageStudioEntries.put("imagestudio-root/other-asset.txt", "not copied");
+            writeZip(imageStudioZip, imageStudioEntries);
+            store.install(imageStudioZip);
+
+            File backend = new File(temp, "private-imagegen-backend");
+            check(store.extractDirectory("imagestudio", "backend", backend), "ImageGen backend folder extracted");
+            check(new File(backend, "wayward-imagegen/package.json").isFile(), "ImageGen package.json extracted");
+            check(new File(backend, "wayward-imagegen/src/cli.ts").isFile(), "ImageGen CLI entrypoint extracted");
+            check(new File(backend, "wayward-imagegen/src/nested/provider.ts").isFile(), "nested ImageGen source extracted");
+            check(!new File(backend, "mod.js").exists(), "Image Studio mod entrypoint not copied into backend");
+            check(!new File(backend, "other-asset.txt").exists(), "non-backend mod asset not copied");
+            check(store.fileFor("imagestudio").isFile(), "original Image Studio ZIP retained");
+
+            File rejectedBackend = new File(temp, "rejected-backend");
+            expectFailure(() -> store.extractDirectory("imagestudio", "../backend", rejectedBackend),
+                    "ImageGen backend path traversal rejected");
+            check(!rejectedBackend.exists(), "failed backend extraction leaves no destination");
+
             System.out.println("ZipModStore tests passed.");
         } finally {
             deleteRecursively(temp);
