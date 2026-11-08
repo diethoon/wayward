@@ -454,13 +454,13 @@ public final class MainActivity extends Activity {
             if(folderText!=null)folderText.setText("선택 폴더: "+tree.rootName()+"\n실행 파일: "+(f==null?"없음":f));
         }catch(Exception e){status("폴더를 읽을 수 없습니다. "+msg(e));}
     }
-    private void refreshGame(){if(web!=null&&web.getVisibility()==View.VISIBLE){web.reload();Toast.makeText(this,"게임과 앱 전용 ZIP 모드를 다시 읽습니다.",Toast.LENGTH_SHORT).show();}else refreshStatus();}
+    private void refreshGame(){if(web!=null&&web.getVisibility()==View.VISIBLE){if(tree!=null)tree.invalidateDirectoryIndex();web.clearCache(true);web.reload();Toast.makeText(this,"게임과 앱 전용 ZIP 모드 및 이미지 캐시를 새로 읽습니다.",Toast.LENGTH_SHORT).show();}else refreshStatus();}
 
     private void createWeb(){
         String domain=sessionDomain(activeProfileId);
         String origin=sessionOrigin(activeProfileId);
         int originPort=sessionPort(activeProfileId);
-        web=new WebView(this);WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setDatabaseEnabled(true);s.setUseWideViewPort(true);s.setLoadWithOverviewMode(true);s.setTextZoom(100);s.setSupportZoom(true);s.setBuiltInZoomControls(false);s.setDisplayZoomControls(false);s.setAllowFileAccess(false);s.setAllowContentAccess(false);s.setCacheMode(WebSettings.LOAD_NO_CACHE);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);web.addJavascriptInterface(new HostBridge(),"WMLHost");
+        web=new WebView(this);WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setDatabaseEnabled(true);s.setUseWideViewPort(true);s.setLoadWithOverviewMode(true);s.setTextZoom(100);s.setSupportZoom(true);s.setBuiltInZoomControls(false);s.setDisplayZoomControls(false);s.setAllowFileAccess(false);s.setAllowContentAccess(false);s.setCacheMode(WebSettings.LOAD_DEFAULT);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);web.addJavascriptInterface(new HostBridge(),"WMLHost");
         installImageGenDocumentStartScript(origin);
         FolderHandler folderHandler=new FolderHandler(tree,getAssets(),zipMods,origin);
         WebViewAssetLoader loader=new WebViewAssetLoader.Builder().setDomain(domain).addPathHandler("/game/",folderHandler).build();
@@ -497,6 +497,7 @@ public final class MainActivity extends Activity {
             }
             @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest r){
                 Uri u=r.getUrl();WebResourceResponse local=loader.shouldInterceptRequest(u);if(local!=null)return local;
+                if(domain.equalsIgnoreCase(u.getHost())&&u.getPort()==originPort&&u.getPath()!=null&&u.getPath().startsWith("/images/"))return folderHandler.serveImagePath(u.getPath().substring(8));
                 if("art.sintention.com".equalsIgnoreCase(u.getHost())&&u.getPath()!=null&&u.getPath().startsWith("/images/"))return folderHandler.serve("images/"+u.getPath().substring(8));
                 return null;
             }
@@ -782,9 +783,15 @@ public final class MainActivity extends Activity {
         private static final String CORE="wml/runtime/wml-core.js";private final SafTree tree;private final android.content.res.AssetManager assets;private final ZipModStore zipMods;private final String origin;
         FolderHandler(SafTree t,android.content.res.AssetManager a,ZipModStore z,String o){tree=t;assets=a;zipMods=z;origin=o;}
         @Override public WebResourceResponse handle(String p){return serve(p);}
+        WebResourceResponse serveImagePath(String relative){
+            String path=normal(relative);
+            if(path==null)return response(400,"Bad Request","text/plain","Invalid local image path");
+            WebResourceResponse result=serve("images/"+path);
+            return result!=null?result:response(404,"Not Found","text/plain","Local image not found");
+        }
         WebResourceResponse serve(String raw){
             if(tree==null)return response(404,"Not Found","text/plain","Not found");
-            try{String p=normal(raw);if(p==null)return response(404,"Not Found","text/plain","Not found");InputStream in=tree==null?null:tree.open(p);if(in==null&&zipMods!=null)in=zipMods.open(p);if(in==null)return null;if(p.toLowerCase(Locale.ROOT).endsWith(".html")||p.toLowerCase(Locale.ROOT).endsWith(".htm"))in=mobileViewport(in);if(CORE.equals(p))in=new SequenceInputStream(assets.open("wml-folder-bootstrap.js"),in);String m=mime(p);return new WebResourceResponse(m,text(m)?"UTF-8":null,200,"OK",headers(),in);}
+            try{String p=normal(raw);if(p==null)return response(404,"Not Found","text/plain","Not found");InputStream in=tree==null?null:tree.open(p);if(in==null&&zipMods!=null)in=zipMods.open(p);if(in==null)return null;if(p.toLowerCase(Locale.ROOT).endsWith(".html")||p.toLowerCase(Locale.ROOT).endsWith(".htm"))in=mobileViewport(in);if(CORE.equals(p))in=new SequenceInputStream(assets.open("wml-folder-bootstrap.js"),in);String m=mime(p);return new WebResourceResponse(m,text(m)?"UTF-8":null,200,"OK",headers(p),in);}
             catch(Exception e){return response(500,"Read Error","text/plain","Read error: "+e.getMessage());}
         }
         static InputStream mobileViewport(InputStream source)throws Exception{
@@ -835,13 +842,27 @@ public final class MainActivity extends Activity {
             return -1;
         }
         static String normal(String raw){if(raw==null||raw.isEmpty())return null;List<String> p=Uri.parse("https://x.invalid/"+raw).getPathSegments();if(p.isEmpty())return null;for(String s:p)if(s==null||s.isEmpty()||s.equals(".")||s.equals("..")||s.indexOf('\\')>=0||s.indexOf('\0')>=0)return null;return String.join("/",p);}
-        java.util.Map<String,String> headers(){java.util.Map<String,String> h=new java.util.HashMap<>();h.put("Cache-Control","no-store, no-cache, must-revalidate");h.put("Pragma","no-cache");h.put("Access-Control-Allow-Origin",origin);h.put("X-Content-Type-Options","nosniff");return h;}
-        WebResourceResponse response(int c,String r,String m,String s){return new WebResourceResponse(m,"UTF-8",c,r,headers(),new ByteArrayInputStream(s.getBytes(StandardCharsets.UTF_8)));}
+        java.util.Map<String,String> headers(String path){
+            java.util.Map<String,String> h=new java.util.HashMap<>();
+            if(cacheableMedia(path))h.put("Cache-Control","private, max-age=86400");
+            else{h.put("Cache-Control","no-store, no-cache, must-revalidate");h.put("Pragma","no-cache");}
+            h.put("Access-Control-Allow-Origin",origin);h.put("X-Content-Type-Options","nosniff");return h;
+        }
+        static boolean cacheableMedia(String path){
+            if(path==null)return false;String p=path.toLowerCase(Locale.ROOT);
+            return p.endsWith(".png")||p.endsWith(".jpg")||p.endsWith(".jpeg")||p.endsWith(".webp")||p.endsWith(".gif")||p.endsWith(".avif")||p.endsWith(".svg")||p.endsWith(".woff")||p.endsWith(".woff2")||p.endsWith(".ttf")||p.endsWith(".otf");
+        }
+        WebResourceResponse response(int c,String r,String m,String s){return new WebResourceResponse(m,"UTF-8",c,r,headers(null),new ByteArrayInputStream(s.getBytes(StandardCharsets.UTF_8)));}
         static boolean text(String m){return m.startsWith("text/")||m.contains("javascript")||m.contains("json")||m.contains("xml")||m.contains("svg");}
         static String mime(String p){p=p.toLowerCase(Locale.ROOT);if(p.endsWith(".html"))return"text/html";if(p.endsWith(".js")||p.endsWith(".mjs"))return"application/javascript";if(p.endsWith(".css"))return"text/css";if(p.endsWith(".json"))return"application/json";if(p.endsWith(".svg"))return"image/svg+xml";if(p.endsWith(".png"))return"image/png";if(p.endsWith(".jpg")||p.endsWith(".jpeg"))return"image/jpeg";if(p.endsWith(".webp"))return"image/webp";if(p.endsWith(".gif"))return"image/gif";if(p.endsWith(".avif"))return"image/avif";if(p.endsWith(".woff2"))return"font/woff2";if(p.endsWith(".ttf"))return"font/ttf";if(p.endsWith(".wasm"))return"application/wasm";if(p.endsWith(".mp4"))return"video/mp4";if(p.endsWith(".webm"))return"video/webm";if(p.endsWith(".mp3"))return"audio/mpeg";if(p.endsWith(".ogg"))return"audio/ogg";if(p.endsWith(".wav"))return"audio/wav";if(p.endsWith(".txt"))return"text/plain";return"application/octet-stream";}
     }
     private final class SafTree{
+        private static final int MAX_CACHED_DIRECTORIES=2048;
+        private static final int MAX_CACHED_CHILDREN=100000;
         private final Uri tree;private final String rootId;
+        private final Object directoryIndexLock=new Object();
+        private final java.util.Map<String,java.util.Map<String,Node>> directoryIndexCache=new java.util.HashMap<>();
+        private int cachedDirectoryChildren=0;
         SafTree(Uri u){tree=u;rootId=DocumentsContract.getTreeDocumentId(u);}
         String rootName(){try{return node(rootId).name;}catch(Exception e){return"Wayward";}}
         List<String> rootHtmlFiles()throws Exception{
@@ -938,8 +959,27 @@ public final class MainActivity extends Activity {
             }catch(Exception e){return null;}
         }
         Node resolve(String path)throws Exception{String p=FolderHandler.normal(path);if(p==null)return null;String parent=rootId;Node n=null;String[] parts=p.split("/");for(int i=0;i<parts.length;i++){n=find(parent,parts[i]);if(n==null)return null;if(i<parts.length-1){if(!n.dir)return null;parent=n.id;}}return n;}
-        Node find(String parent,String name)throws Exception{Uri u=DocumentsContract.buildChildDocumentsUriUsingTree(tree,parent);try(Cursor c=getContentResolver().query(u,new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE},null,null,null)){if(c==null)return null;while(c.moveToNext())if(name.equals(c.getString(1)))return new Node(c.getString(0),c.getString(1),DocumentsContract.Document.MIME_TYPE_DIR.equals(c.getString(2)));}return null;}
-        List<Node> children(String parent)throws Exception{List<Node> out=new ArrayList<>();Uri u=DocumentsContract.buildChildDocumentsUriUsingTree(tree,parent);try(Cursor c=getContentResolver().query(u,new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE},null,null,null)){if(c!=null)while(c.moveToNext())out.add(new Node(c.getString(0),c.getString(1),DocumentsContract.Document.MIME_TYPE_DIR.equals(c.getString(2))));}return out;}
+        Node find(String parent,String name)throws Exception{return childIndex(parent).get(name);}
+        List<Node> children(String parent)throws Exception{return new ArrayList<>(childIndex(parent).values());}
+        java.util.Map<String,Node> childIndex(String parent)throws Exception{
+            synchronized(directoryIndexLock){
+                java.util.Map<String,Node> cached=directoryIndexCache.get(parent);
+                if(cached!=null)return cached;
+                java.util.Map<String,Node> loaded=new java.util.LinkedHashMap<>();
+                Uri u=DocumentsContract.buildChildDocumentsUriUsingTree(tree,parent);
+                try(Cursor c=getContentResolver().query(u,new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE},null,null,null)){
+                    if(c!=null)while(c.moveToNext()){
+                        String name=c.getString(1);if(name==null||name.isEmpty())continue;
+                        loaded.put(name,new Node(c.getString(0),name,DocumentsContract.Document.MIME_TYPE_DIR.equals(c.getString(2))));
+                    }
+                }
+                if(directoryIndexCache.size()<MAX_CACHED_DIRECTORIES&&cachedDirectoryChildren+loaded.size()<=MAX_CACHED_CHILDREN){
+                    directoryIndexCache.put(parent,loaded);cachedDirectoryChildren+=loaded.size();return loaded;
+                }
+                return loaded;
+            }
+        }
+        void invalidateDirectoryIndex(){synchronized(directoryIndexLock){directoryIndexCache.clear();cachedDirectoryChildren=0;}}
         Node node(String id)throws Exception{Uri u=DocumentsContract.buildDocumentUriUsingTree(tree,id);try(Cursor c=getContentResolver().query(u,new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE},null,null,null)){if(c==null||!c.moveToFirst())return new Node(id,"Wayward",true);return new Node(c.getString(0),c.getString(1),DocumentsContract.Document.MIME_TYPE_DIR.equals(c.getString(2)));}}
     }
     private static final class Node{final String id,name;final boolean dir;Node(String i,String n,boolean d){id=i;name=n;dir=d;}}
