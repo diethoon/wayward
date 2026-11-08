@@ -1,6 +1,7 @@
 package com.wayward.launcher;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ContentValues;
 import android.content.Intent;
@@ -22,11 +23,13 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.text.InputType;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
@@ -78,6 +81,8 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle b){
         super.onCreate(b);
+        DiagnosticsLogger.event(this,"INFO","launcher","activity_create",null);
+        DiagnosticsUploader.uploadPending(this);
         zipMods=new ZipModStore(getFilesDir());
         loadProfiles();
         showHome();
@@ -87,6 +92,8 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onResume(){
         super.onResume();
+        DiagnosticsLogger.event(this,"INFO","launcher","activity_resume",null);
+        DiagnosticsUploader.uploadPending(this);
         loadProfiles();
         long revision=getSharedPreferences(PREFS,MODE_PRIVATE).getLong(KEY_ZIP_REV,0);
         if(web!=null&&revision!=loadedZipRevision){loadedZipRevision=revision;web.reload();}
@@ -143,11 +150,48 @@ public final class MainActivity extends Activity {
         imageGenStatus=new TextView(this);imageGenStatus.setTextColor(Color.rgb(245,210,130));imageGenStatus.setTextSize(12);imageGenStatus.setPadding(dp(10),dp(9),dp(10),dp(9));imageGenStatus.setBackgroundColor(Color.rgb(35,48,40));
         LinearLayout.LayoutParams imageStatusParams=new LinearLayout.LayoutParams(-1,-2);imageStatusParams.topMargin=dp(8);imageStatusParams.bottomMargin=dp(7);page.addView(imageGenStatus,imageStatusParams);
         page.addView(button("이미지 생성 서버 중지",false,this::stopImageGenServer),buttonParams());
+        LinearLayout.LayoutParams diagnosticButtonParams=buttonParams();diagnosticButtonParams.topMargin=dp(18);
+        page.addView(button("진단 로그 자동 전송 설정",false,this::showDiagnosticsSettings),diagnosticButtonParams);
 
         TextView help=new TextView(this);help.setText("ZIP 설치 위치: 이 앱의 비공개 files 저장소\n게임 폴더에는 ZIP이나 압축 해제 파일을 쓰지 않습니다. 설치한 모드는 등록된 게임 세션에서 공통으로 사용할 수 있으며, 모드 활성화/순서는 각 게임 세션의 브라우저 저장소에 따로 보관됩니다.");
         help.setTextColor(Color.rgb(151,171,158));help.setTextSize(12);help.setLineSpacing(dp(3),1f);LinearLayout.LayoutParams hl=new LinearLayout.LayoutParams(-1,-2);hl.topMargin=dp(18);page.addView(help,hl);
         home=page;root.addView(scroll,new FrameLayout.LayoutParams(-1,-1));setContentView(root);
         renderProfiles();renderZipMods();refreshImageGenStatus();
+    }
+
+    private void showDiagnosticsSettings(){
+        boolean configured=DiagnosticsTokenStore.has(this);
+        EditText code=new EditText(this);
+        code.setSingleLine(true);
+        code.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        code.setHint("진단 서버 연결 코드 붙여넣기");
+        AlertDialog.Builder builder=new AlertDialog.Builder(this)
+                .setTitle("진단 로그 자동 전송")
+                .setMessage(configured
+                        ? "진단 서버 연결 코드가 저장되어 있습니다. 새 코드로 교체하거나 연결을 해제할 수 있습니다.\n\n런처 오류와 WebView 오류, ImageGen 서버 상태만 전송합니다. 게임 세이브·이미지·프롬프트·요청 본문·인증 헤더는 수집하지 않습니다."
+                        : "연결 코드를 한 번 입력하면 보관된 로그가 앱 실행/복귀 때 자동 전송됩니다. 게임 세이브·이미지·프롬프트·요청 본문·인증 헤더는 수집하지 않습니다.")
+                .setView(code)
+                .setPositiveButton("연결",null)
+                .setNegativeButton("닫기",(dialog,which)->{});
+        if(configured)builder.setNeutralButton("연결 해제",(dialog,which)->{
+            DiagnosticsTokenStore.clear(this);
+            Toast.makeText(this,"진단 로그 자동 전송을 해제했습니다.",Toast.LENGTH_SHORT).show();
+        });
+        AlertDialog dialog=builder.create();
+        dialog.setOnShowListener(ignored->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            String token=code.getText()==null?"":code.getText().toString().trim();
+            if(token.length()<32){code.setError("연결 코드를 확인해 주세요.");return;}
+            Button connect=dialog.getButton(AlertDialog.BUTTON_POSITIVE);connect.setEnabled(false);
+            DiagnosticsUploader.verifyAndSave(this,token,ok->{
+                connect.setEnabled(true);
+                if(ok){
+                    dialog.dismiss();
+                    Toast.makeText(this,"진단 서버 연결 완료 · 보관된 로그 전송을 시작합니다.",Toast.LENGTH_LONG).show();
+                    DiagnosticsUploader.uploadPending(this);
+                }else Toast.makeText(this,"연결 실패 · 코드와 네트워크를 확인해 주세요.",Toast.LENGTH_LONG).show();
+            });
+        }));
+        dialog.show();
     }
 
     private Button compactButton(String label,boolean primary,Runnable action){
@@ -413,6 +457,36 @@ public final class MainActivity extends Activity {
         FolderHandler folderHandler=new FolderHandler(tree,getAssets(),zipMods,origin);
         WebViewAssetLoader loader=new WebViewAssetLoader.Builder().setDomain(domain).addPathHandler("/game/",folderHandler).build();
         web.setWebViewClient(new WebViewClient(){
+            @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){
+                DiagnosticsLogger.event(MainActivity.this,"INFO","webview","page_started",null);
+                super.onPageStarted(view,url,favicon);
+            }
+            @Override public void onPageFinished(WebView view,String url){
+                DiagnosticsLogger.event(MainActivity.this,"INFO","webview","page_finished",null);
+                super.onPageFinished(view,url);
+            }
+            @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error){
+                if(request!=null&&request.isForMainFrame()){
+                    JSONObject details=new JSONObject();
+                    try{details.put("code",error==null?0:error.getErrorCode());}catch(Exception ignored){}
+                    DiagnosticsLogger.event(MainActivity.this,"ERROR","webview","main_frame_load_error",details);
+                }
+                super.onReceivedError(view,request,error);
+            }
+            @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){
+                if(request!=null&&request.isForMainFrame()&&response!=null&&response.getStatusCode()>=400){
+                    JSONObject details=new JSONObject();
+                    try{details.put("status",response.getStatusCode());}catch(Exception ignored){}
+                    DiagnosticsLogger.event(MainActivity.this,"WARN","webview","main_frame_http_error",details);
+                }
+                super.onReceivedHttpError(view,request,response);
+            }
+            @Override public boolean onRenderProcessGone(WebView view,android.webkit.RenderProcessGoneDetail detail){
+                JSONObject details=new JSONObject();
+                try{details.put("didCrash",detail!=null&&detail.didCrash());details.put("priority",detail==null?-1:detail.rendererPriorityAtExit());}catch(Exception ignored){}
+                DiagnosticsLogger.event(MainActivity.this,"ERROR","webview","renderer_process_gone",details);
+                return super.onRenderProcessGone(view,detail);
+            }
             @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest r){
                 Uri u=r.getUrl();WebResourceResponse local=loader.shouldInterceptRequest(u);if(local!=null)return local;
                 if("art.sintention.com".equalsIgnoreCase(u.getHost())&&u.getPath()!=null&&u.getPath().startsWith("/images/"))return folderHandler.serve("images/"+u.getPath().substring(8));
@@ -623,6 +697,7 @@ public final class MainActivity extends Activity {
             imageGenSessionMessage = "Image Studio " + version + " 서버 시작 요청을 전달했습니다.";
             refreshImageGenStatus();
         } catch (Throwable error) {
+            DiagnosticsLogger.error(this,"imagegen","service_start_request_failed",error);
             String message = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
             imageGenSessionMessage = "이미지 서버 시작 요청 실패: " + message;
             try {
@@ -634,6 +709,7 @@ public final class MainActivity extends Activity {
     }
 
     private void stopImageGenServer() {
+        DiagnosticsLogger.event(this,"INFO","imagegen","stop_requested",null);
         Intent intent = new Intent(this, ImageGenService.class).setAction(ImageGenService.ACTION_STOP);
         try {
             startService(intent);
@@ -670,11 +746,12 @@ public final class MainActivity extends Activity {
     @Override public void onBackPressed(){if(web!=null&&web.getVisibility()==View.VISIBLE){if(web.canGoBack())web.goBack();else showHomePanel();return;}super.onBackPressed();}
     @Override protected void onDestroy(){
         String sessionId=sessionProfileId(getIntent());if(sessionId!=null)RUNNING_SESSIONS.remove(sessionId);
+        DiagnosticsLogger.event(this,"INFO","launcher","activity_destroy",null);
         destroyWeb();super.onDestroy();
     }
     private String msg(Throwable e){return e==null||e.getMessage()==null?"알 수 없는 오류":e.getMessage();}
     private final class HostBridge{
-        @JavascriptInterface public String version(){return "0.3.0";}
+        @JavascriptInterface public String version(){return "0.3.1";}
         @JavascriptInterface public void imageGenProxyFetch(String requestId,String method,String path,String headersJson,String bodyBase64){
             ImageGenProxy.dispatch(web,requestId,method,path,headersJson,bodyBase64);
         }

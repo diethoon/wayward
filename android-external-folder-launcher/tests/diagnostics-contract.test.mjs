@@ -1,0 +1,33 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+
+const root = new URL("../", import.meta.url);
+const read = path => fs.readFileSync(new URL(path, root), "utf8");
+const manifest = read("app/src/main/AndroidManifest.xml");
+const application = read("app/src/main/java/com/wayward/launcher/LauncherApplication.java");
+const logger = read("app/src/main/java/com/wayward/launcher/DiagnosticsLogger.java");
+const uploader = read("app/src/main/java/com/wayward/launcher/DiagnosticsUploader.java");
+const tokenStore = read("app/src/main/java/com/wayward/launcher/DiagnosticsTokenStore.java");
+const main = read("app/src/main/java/com/wayward/launcher/MainActivity.java");
+const service = read("app/src/main/java/com/wayward/launcher/ImageGenService.java");
+const chooser = read("app/src/main/java/com/wayward/launcher/WebFileChooser.java");
+const proxy = read("app/src/main/java/com/wayward/launcher/ImageGenProxy.java");
+
+assert.match(manifest, /android:name=".LauncherApplication"/);
+assert.match(application, /setDefaultUncaughtExceptionHandler/);
+assert.match(application, /getHistoricalProcessExitReasons/);
+assert.match(logger, /launcher\.ndjson/);
+assert.match(logger, /MAX_FILE_BYTES/);
+assert.match(logger, /REDACTED/);
+assert.match(uploader, /https:\/\/wayward-launcher-diagnostics\.onrender\.com/);
+assert.match(uploader, /Authorization/);
+assert.match(tokenStore, /AndroidKeyStore/);
+assert.match(tokenStore, /AES\/GCM\/NoPadding/);
+assert.match(main, /진단 로그 자동 전송 설정/);
+assert.match(main, /onRenderProcessGone/);
+assert.match(service, /runtime_start_failed/);
+assert.match(chooser, /javascript_console_error/);
+assert.match(proxy, /api_response/);
+assert.doesNotMatch(proxy, /diagnostic\.put\(["']headers["']/);
+assert.doesNotMatch(proxy, /diagnostic\.put\(["']body["']/);
+console.log("Diagnostics launcher contract tests passed.");

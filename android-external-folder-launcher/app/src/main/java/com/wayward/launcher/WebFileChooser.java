@@ -7,6 +7,7 @@ import android.net.Uri;
 import android.webkit.MimeTypeMap;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.ConsoleMessage;
 import android.webkit.WebView;
 
 import java.util.ArrayList;
@@ -27,6 +28,16 @@ final class WebFileChooser extends WebChromeClient {
 
     WebFileChooser(Activity activity) {
         this.activity = activity;
+    }
+
+    @Override
+    public boolean onConsoleMessage(ConsoleMessage message) {
+        if (message != null && message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+            org.json.JSONObject details = new org.json.JSONObject();
+            try { details.put("line", message.lineNumber()); } catch (Exception ignored) {}
+            DiagnosticsLogger.event(activity, "ERROR", "webview", "javascript_console_error", details);
+        }
+        return super.onConsoleMessage(message);
     }
 
     @Override

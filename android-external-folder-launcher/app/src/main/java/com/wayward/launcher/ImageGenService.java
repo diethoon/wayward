@@ -58,6 +58,7 @@ public final class ImageGenService extends Service {
 
     @Override public void onCreate() {
         super.onCreate();
+        DiagnosticsLogger.event(this,"INFO","imagegen_service","service_created",null);
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager != null && Build.VERSION.SDK_INT >= 26) {
             manager.createNotificationChannel(new NotificationChannel(
@@ -69,6 +70,7 @@ public final class ImageGenService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? ACTION_START : intent.getAction();
         if (ACTION_STOP.equals(action)) {
+            DiagnosticsLogger.event(this,"INFO","imagegen_service","stop_command_received",null);
             stopping = true;
             serverReady = false;
             starting = false;
@@ -91,6 +93,7 @@ public final class ImageGenService extends Service {
         }
 
         if (serverReady || starting) return START_STICKY;
+        DiagnosticsLogger.event(this,"INFO","imagegen_service","start_command_received",null);
         stopping = false;
         starting = true;
         serverReady = false;
@@ -153,6 +156,7 @@ public final class ImageGenService extends Service {
     }
 
     private void recordFailure(Throwable error) {
+        DiagnosticsLogger.error(this,"imagegen_service","runtime_start_failed",error);
         serverReady = false;
         starting = false;
         String message = shortMessage(error);
@@ -221,6 +225,7 @@ public final class ImageGenService extends Service {
         builder.environment().put("TMPDIR", getCacheDir().getAbsolutePath());
         builder.environment().put("BUN_INSTALL", new File(getFilesDir(), "bun-install").getAbsolutePath());
         serverProcess = builder.start();
+        DiagnosticsLogger.event(this,"INFO","imagegen_service","bun_server_process_started",null);
 
         long deadline = System.currentTimeMillis() + 60000L;
         while (!stopping && System.currentTimeMillis() < deadline) {
@@ -406,6 +411,7 @@ public final class ImageGenService extends Service {
         starting = false;
         stopRuntime();
         if (unexpected) {
+            DiagnosticsLogger.event(this,"ERROR","imagegen_service","service_destroyed_unexpectedly",null);
             serverReady = false;
             statusMessage = "이미지 생성 서비스가 예기치 않게 종료되었습니다. 시작 로그를 확인하세요.";
         }
