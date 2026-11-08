@@ -789,6 +789,28 @@ WML.define({
             })
           };
         };
+        const facilityWrapper = children[children.length - 1];
+        const summarizeNode = (node) => {
+          if (!React.isValidElement(node)) {
+            return { type: typeof node, text: String(node).slice(0, 40) };
+          }
+          return {
+            type: typeof node.type === "string" ? node.type :
+              (node.type?.displayName || node.type?.name || String(node.type)),
+            component: componentName(node),
+            className: node.props?.className ?? null,
+            title: node.props?.title ?? null,
+            propKeys: Object.keys(node.props || {}),
+            text: plainTextFromNode(node).slice(0, 60),
+            childCount: React.Children.toArray(node.props?.children).length
+          };
+        };
+        console.warn("[WML mobile-ui-migration] PREP_FACILITY_WRAPPER", JSON.stringify({
+          wrapper: summarizeNode(facilityWrapper),
+          children: React.isValidElement(facilityWrapper)
+            ? React.Children.toArray(facilityWrapper.props?.children).map(summarizeNode)
+            : []
+        }));
         console.warn("[WML mobile-ui-migration] PREP_CHILD_SUMMARY", JSON.stringify({
           childCount: children.length,
           suppliesFound: !!supplies,
