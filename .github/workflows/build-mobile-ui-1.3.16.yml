@@ -1,0 +1,50 @@
+name: Build and verify mobile UI migration 1.3.16
+
+on:
+  push:
+    branches:
+      - release/mobile-ui-migration-1.3.16
+    paths:
+      - "mobile-ui-migration/mod.js"
+      - "mobile-ui-migration/README_ko.md"
+      - ".github/workflows/build-mobile-ui-1.3.16.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify source and whitespace
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check mobile-ui-migration/mod.js
+          grep -F 'version: "1.3.16"' mobile-ui-migration/mod.js
+          grep -F '**모드 버전:** 1.3.16' mobile-ui-migration/README_ko.md
+          git diff --check HEAD~2 HEAD
+      - name: Build the WML mod ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f mobile-ui-migration-437-v1.3.16.zip
+          zip -qr mobile-ui-migration-437-v1.3.16.zip mobile-ui-migration
+          unzip -t mobile-ui-migration-437-v1.3.16.zip
+          unzip -p mobile-ui-migration-437-v1.3.16.zip mobile-ui-migration/mod.js | cmp - mobile-ui-migration/mod.js
+          unzip -p mobile-ui-migration-437-v1.3.16.zip mobile-ui-migration/README_ko.md | cmp - mobile-ui-migration/README_ko.md
+          sha256sum mobile-ui-migration-437-v1.3.16.zip
+          stat -c 'ZIP_BYTES=%s' mobile-ui-migration-437-v1.3.16.zip
+      - name: Upload final package
+        uses: actions/upload-artifact@v4
+        with:
+          name: wayward-mobile-ui-migration-1.3.16
+          path: mobile-ui-migration-437-v1.3.16.zip
+          if-no-files-found: error
