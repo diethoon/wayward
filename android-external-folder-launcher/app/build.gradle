@@ -15,7 +15,7 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
     buildTypes {
-        debug { applicationIdSuffix '.imagegen'; versionNameSuffix '-imagegen-debug' }
+        debug { applicationIdSuffix '.imagegen031'; versionNameSuffix '-imagegen-debug' }
         release { minifyEnabled false }
     }
 }
