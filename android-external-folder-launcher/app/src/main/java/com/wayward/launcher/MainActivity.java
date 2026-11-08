@@ -804,7 +804,7 @@ public final class MainActivity extends Activity {
     private static final class FolderHandler implements WebViewAssetLoader.PathHandler{
         private static final String CORE="wml/runtime/wml-core.js";private final SafTree tree;private final android.content.res.AssetManager assets;private final ZipModStore zipMods;private final String origin;
         FolderHandler(SafTree t,android.content.res.AssetManager a,ZipModStore z,String o){tree=t;assets=a;zipMods=z;origin=o;}
-        @Override public WebResourceResponse handle(String p){return serve(p);}
+        @Override public WebResourceResponse handle(String p){return serveGamePath(p);}
         static boolean isGameRequestPath(String path){
             return path!=null&&path.startsWith("/game/");
         }
