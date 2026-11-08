@@ -191,6 +191,13 @@ function startServer(root) {
         after: hook.after?.map(item => ({ owner: item.owner, where: item.where, errors: item.errors })) || []
       }));
       return { hooks, rootExists: Boolean(document.querySelector("#root")),
+
+    const ageGateButton = page.getByRole("button", { name: "예", exact: true });
+    await ageGateButton.waitFor({ state: "visible", timeout: 30000 });
+    await ageGateButton.click();
+    await page.waitForFunction(() => !String(document.querySelector("#root")?.innerText || "").includes("연령 확인"), { timeout: 30000 });
+    console.log("AGE_GATE_ACCEPTED", JSON.stringify({ rootText: (await page.locator("#root").innerText()).slice(0, 1200) }));
+
         rootText: (document.querySelector("#root")?.innerText || "").slice(0, 7000),
         bodyText: (document.body?.innerText || "").slice(0, 9000) };
     });
