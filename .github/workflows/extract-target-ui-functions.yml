@@ -7,7 +7,7 @@ on:
     paths:
       - ".github/workflows/extract-target-ui-functions.yml"
 
-# Re-run after preserving trailing semicolon in the extracted source range.
+# The source is streamed and only bounded 4096-byte UI windows are exported.
 permissions:
   contents: read
 
@@ -23,16 +23,16 @@ jobs:
           git fetch --no-tags origin fix/mobile-ui-save-compat-1.3.13
           git show FETCH_HEAD:mobile-ui-migration-437-v1.3.13.zip > /tmp/mobile-ui-v1313.zip
           echo "61ccf0f6cbfe00a9f039e466e11f7d3b9ce81e916724002ffd1d8f3f9657bbc6  /tmp/mobile-ui-v1313.zip" | sha256sum -c -
-      - name: Stream-scan source and extract bounded function chunks
+      - name: Stream-scan source and extract bounded UI windows
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/extract_target_ui_functions.py
+          python3 scripts/extract_target_ui_windows.py
           git diff --check
       - uses: actions/upload-artifact@v4
         with:
-          name: target-ui-functions
+          name: target-ui-windows
           path: |
-            target-ui-functions.zip
+            target-ui-windows.zip
             base-mobile-ui-v1313.zip
           if-no-files-found: error
