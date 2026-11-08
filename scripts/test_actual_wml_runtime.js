@@ -323,12 +323,41 @@ function startServer(root) {
         actionText: (prep?.textContent || "").slice(0, 2000),
         storyText: (story?.textContent || "").slice(0, 3000),
         storyContainsPrep: (story?.textContent || "").includes("오후 영업 준비"),
-        storyContainsNarration: (story?.textContent || "").includes("당신은 위층 침실"),
+        storyContainsNarration: (story?.textContent || "").includes("위층 침실에 있습니다"),
         viewport: { width: innerWidth, height: innerHeight },
       };
     });
 
     console.log("REAL_GAT_DOM_REPORT", JSON.stringify(dom));
+
+    assert.ok(hookReport.hooks.find(item => item.raw === "gat")?.calls > 0,
+      "the real game layout hook did not execute");
+    assert.ok(hookReport.hooks.find(item => item.raw === "wst")?.calls > 0,
+      "the real game prep panel hook did not execute");
+    assert.equal(dom.status?.prepPanelInActionScroll, true,
+      "prep panel is not inside the action scroll");
+    assert.equal(dom.status?.prepPanelInStoryPane, false,
+      "prep panel still remains in the story pane");
+    assert.equal(dom.actionScrollFound, true);
+    assert.equal(dom.prepSlotFound, true);
+    assert.equal(dom.prepPanelCount, 1,
+      "prep panel must be moved exactly once");
+    assert.equal(dom.storyContainsPrep, false,
+      "story tab must not contain the prep panel");
+    assert.equal(dom.storyContainsNarration, true,
+      "story tab must retain the original narration");
+    for (const label of ["오후 영업 준비", "대출", "물자 채우기", "시설 업그레이드"]) {
+      assert.ok(dom.actionText.includes(label), "action scroll is missing: " + label);
+    }
+    assert.equal(pageErrors.length, 0,
+      "browser page errors: " + JSON.stringify(pageErrors));
+    console.log("REAL_PREP_PANEL_MOVE_PASS", JSON.stringify({
+      inActionScroll: dom.status.prepPanelInActionScroll,
+      inStoryPane: dom.status.prepPanelInStoryPane,
+      panelCount: dom.prepPanelCount,
+      storyNarrationPreserved: dom.storyContainsNarration,
+      actionItems: ["heading", "debt", "stock-up", "facility-upgrade"]
+    }));
 
     console.log("REAL_WML_RELEVANT_CONSOLE", JSON.stringify(relevantConsole));
     console.log("OPTIONAL_RESOURCE_FAILURES", JSON.stringify(failedRequests.filter(x => /i18n|compat|presets/.test(x.url))));
