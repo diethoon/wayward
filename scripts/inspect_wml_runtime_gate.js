@@ -6,11 +6,14 @@ const sourcePath = "Wayward_WML_ko.html";
 const expectedBytes = 4373978;
 const expectedSha256 = "e159fb2002d31559b1ac1936cf6b48cdbbdc4858bfbb0b67e2d7284ca2195d1d";
 const terms = [
-  "WML.boot", "WML.symbols", "WML.enable", "WML.define",
-  "function gat", "function wst", "function SB", "function yst",
-  "2026-11-01-pre7", "2026-11-01", "2026-10-24-pre7",
-  "const game", "game:", "symbols:", "host.platform",
-  "window.WMLHost", "WMLHost", "wml-core.js", "mods.js"
+  "WML.boot", "__WML__.boot", "__WML__", "WML",
+  "boot({", "boot({game", "game:\\\"2026-11-01\\\"",
+  "2026-11-01-pre7", "2026-11-01", "wml-core.js", "symbols/2026-11-01.js", "mods.js",
+  "function gat", "function wst", "function SB", "function yst", "function PB",
+  "var J=", "let J=", "const J=", "var Fte=", "let Fte=", "const Fte=",
+  "Fte.createPortal", "createPortal", "ReactDOM", "React",
+  "engine:", "engine:{", "render:", "render:()=>", "Object.freeze",
+  "window.WML", "globalThis.WML", "WMLHost"
 ];
 
 function sha256(value) {
