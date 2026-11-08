@@ -959,12 +959,134 @@ public final class MainActivity extends Activity {
         }
         boolean exists(String p){try{Node n=resolve(p);return n!=null&&!n.dir;}catch(Exception e){return false;}}
         InputStream open(String p)throws Exception{Node n=resolve(p);if(n==null||n.dir)return null;return getContentResolver().openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree,n.id));}
-        InputStream openImage(String p)throws Exception{Node n=resolveImage(p);if(n==null||n.dir)return null;return getContentResolver().openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree,n.id));}
-        private Node resolveImage(String path)throws Exception{
-            String p=FolderHandler.normal(path);if(p==null)return null;
+        private final java.util.concurrent.atomic.AtomicInteger imageLookupDiagnostics = new java.util.concurrent.atomic.AtomicInteger();
+        private final java.util.concurrent.atomic.AtomicInteger imageStreamDiagnostics = new java.util.concurrent.atomic.AtomicInteger();
+
+        InputStream openImage(String p)throws Exception{
+            StringBuilder pathTrace=new StringBuilder();
+            long resolveStarted=System.nanoTime();
+            Node n;
+            try{
+                n=resolveImage(p,pathTrace);
+            }catch(Exception e){
+                long resolveMs=(System.nanoTime()-resolveStarted)/1_000_000L;
+                logImageLookup(p,500,resolveMs,0,pathTrace.toString(),e);
+                throw e;
+            }
+            long resolveMs=(System.nanoTime()-resolveStarted)/1_000_000L;
+            if(n==null||n.dir){
+                logImageLookup(p,404,resolveMs,0,pathTrace.toString(),null);
+                return null;
+            }
+            long openStarted=System.nanoTime();
+            InputStream in;
+            try{
+                in=getContentResolver().openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree,n.id));
+            }catch(Exception e){
+                long openMs=(System.nanoTime()-openStarted)/1_000_000L;
+                logImageLookup(p,500,resolveMs,openMs,pathTrace.toString(),e);
+                throw e;
+            }
+            long openMs=(System.nanoTime()-openStarted)/1_000_000L;
+            if(in==null){
+                logImageLookup(p,404,resolveMs,openMs,pathTrace.toString(),null);
+                return null;
+            }
+            logImageLookup(p,200,resolveMs,openMs,pathTrace.toString(),null);
+            return traceImageStream(in,p,resolveMs,openMs,pathTrace.toString());
+        }
+
+        private void logImageLookup(String path,int status,long resolveMs,long openMs,String pathTrace,Exception error){
+            if(status<400&&resolveMs<350&&openMs<350&&error==null)return;
+            if(imageLookupDiagnostics.getAndIncrement()>=16)return;
+            JSONObject details=new JSONObject();
+            try{
+                details.put("path",path==null?"":path.substring(0,Math.min(path.length(),240)));
+                details.put("status",status);
+                details.put("resolveMs",resolveMs);
+                details.put("openInputStreamMs",openMs);
+                details.put("segments",pathTrace);
+                if(error!=null)details.put("exception",error.getClass().getSimpleName());
+            }catch(Exception ignored){}
+            DiagnosticsLogger.event(MainActivity.this,status>=500?"ERROR":"WARN","webview","image_saf_lookup",details);
+        }
+
+        private InputStream traceImageStream(InputStream source,String path,long resolveMs,long openMs,String pathTrace){
+            return new java.io.FilterInputStream(source){
+                private final long streamStarted=System.nanoTime();
+                private long firstByteAt=-1L;
+                private long bytesRead=0L;
+                private boolean reported=false;
+
+                private void noteBytes(long count){
+                    bytesRead+=count;
+                    if(firstByteAt<0L)firstByteAt=System.nanoTime();
+                }
+
+                private void report(String end,String failure){
+                    if(reported)return;
+                    reported=true;
+                    long streamMs=(System.nanoTime()-streamStarted)/1_000_000L;
+                    long firstByteMs=firstByteAt<0L?-1L:(firstByteAt-streamStarted)/1_000_000L;
+                    if(failure==null&&bytesRead>0&&firstByteMs>=0&&firstByteMs<350&&streamMs<350)return;
+                    if(imageStreamDiagnostics.getAndIncrement()>=16)return;
+                    JSONObject details=new JSONObject();
+                    try{
+                        details.put("path",path==null?"":path.substring(0,Math.min(path.length(),240)));
+                        details.put("status",200);
+                        details.put("resolveMs",resolveMs);
+                        details.put("openInputStreamMs",openMs);
+                        details.put("firstByteMs",firstByteMs);
+                        details.put("streamMs",streamMs);
+                        details.put("bytesRead",bytesRead);
+                        details.put("end",end);
+                        details.put("segments",pathTrace);
+                        if(failure!=null)details.put("exception",failure);
+                    }catch(Exception ignored){}
+                    DiagnosticsLogger.event(MainActivity.this,failure==null?"WARN":"ERROR","webview","image_stream_slow_or_failed",details);
+                }
+
+                @Override public int read()throws java.io.IOException{
+                    try{
+                        int value=super.read();
+                        if(value<0)report("eof",null);else noteBytes(1);
+                        return value;
+                    }catch(java.io.IOException e){
+                        report("read_error",e.getClass().getSimpleName());
+                        throw e;
+                    }
+                }
+
+                @Override public int read(byte[] buffer,int offset,int length)throws java.io.IOException{
+                    try{
+                        int count=super.read(buffer,offset,length);
+                        if(count<0)report("eof",null);else if(count>0)noteBytes(count);
+                        return count;
+                    }catch(java.io.IOException e){
+                        report("read_error",e.getClass().getSimpleName());
+                        throw e;
+                    }
+                }
+
+                @Override public void close()throws java.io.IOException{
+                    try{
+                        super.close();
+                    }catch(java.io.IOException e){
+                        report("close_error",e.getClass().getSimpleName());
+                        throw e;
+                    }
+                    report("close",null);
+                }
+            };
+        }
+
+        private Node resolveImage(String path,StringBuilder trace)throws Exception{
+            String p=FolderHandler.normal(path);
+            if(p==null){trace.append("invalid-path");return null;}
             String parent=rootId;Node n=null;String[] parts=p.split("/");
             for(int i=0;i<parts.length;i++){
-                n=findIgnoreCase(parent,parts[i]);if(n==null)return null;
+                n=findIgnoreCase(parent,parts[i],trace,i);
+                if(n==null)return null;
                 if(i<parts.length-1){if(!n.dir)return null;parent=n.id;}
             }
             return n;
@@ -1077,32 +1199,58 @@ public final class MainActivity extends Activity {
         }
         Node resolve(String path)throws Exception{String p=FolderHandler.normal(path);if(p==null)return null;String parent=rootId;Node n=null;String[] parts=p.split("/");for(int i=0;i<parts.length;i++){n=find(parent,parts[i]);if(n==null)return null;if(i<parts.length-1){if(!n.dir)return null;parent=n.id;}}return n;}
         Node find(String parent,String name)throws Exception{return childIndex(parent).get(name);}
-        private Node findIgnoreCase(String parent,String name)throws Exception{
-            long generation=directoryIndexGeneration.get();
+        private Node findIgnoreCase(String parent,String name,StringBuilder trace,int segmentIndex)throws Exception{
+            long lookupStarted=System.nanoTime();
+            boolean cacheHit;
+            synchronized(directoryIndexLock){cacheHit=directoryIndexCache.containsKey(parent);}
+            boolean joinedLoad=!cacheHit&&directoryLoads.containsKey(parent);
+            long indexStarted=System.nanoTime();
             java.util.Map<String,Node> index=childIndex(parent);
-            Node exact=index.get(name);if(exact!=null)return exact;
-            String key=name.toLowerCase(Locale.ROOT);
-            synchronized(directoryIndexLock){
-                java.util.Map<String,Node> folded=caseInsensitiveDirectoryCache.get(parent);
-                if(folded==null){
-                    java.util.Map<String,Node> built=new java.util.HashMap<>();
-                    Set<String> ambiguous=new HashSet<>();
-                    for(Node candidate:index.values()){
-                        String candidateKey=candidate.name.toLowerCase(Locale.ROOT);
-                        if(ambiguous.contains(candidateKey))continue;
-                        Node previous=built.put(candidateKey,candidate);
-                        if(previous!=null){
-                            built.remove(candidateKey);
-                            ambiguous.add(candidateKey);
+            long indexMs=(System.nanoTime()-indexStarted)/1_000_000L;
+            Node result=index.get(name);
+            String match=result==null?"miss":"exact";
+            long foldMs=0L;
+            if(result==null){
+                long foldStarted=System.nanoTime();
+                long generation=directoryIndexGeneration.get();
+                String key=name.toLowerCase(Locale.ROOT);
+                synchronized(directoryIndexLock){
+                    java.util.Map<String,Node> folded=caseInsensitiveDirectoryCache.get(parent);
+                    if(folded==null){
+                        java.util.Map<String,Node> built=new java.util.HashMap<>();
+                        Set<String> ambiguous=new HashSet<>();
+                        for(Node candidate:index.values()){
+                            String candidateKey=candidate.name.toLowerCase(Locale.ROOT);
+                            if(ambiguous.contains(candidateKey))continue;
+                            Node previous=built.put(candidateKey,candidate);
+                            if(previous!=null){
+                                built.remove(candidateKey);
+                                ambiguous.add(candidateKey);
+                            }
+                        }
+                        folded=built;
+                        if(directoryIndexGeneration.get()==generation&&directoryIndexCache.containsKey(parent)){
+                            caseInsensitiveDirectoryCache.put(parent,folded);
                         }
                     }
-                    folded=built;
-                    if(directoryIndexGeneration.get()==generation&&directoryIndexCache.containsKey(parent)){
-                        caseInsensitiveDirectoryCache.put(parent,folded);
-                    }
+                    result=folded.get(key);
                 }
-                return folded.get(key);
+                foldMs=(System.nanoTime()-foldStarted)/1_000_000L;
+                if(result!=null)match="casefold";
             }
+            long lookupMs=(System.nanoTime()-lookupStarted)/1_000_000L;
+            if(trace!=null){
+                if(trace.length()>0)trace.append(";");
+                trace.append(segmentIndex).append(":").append(name)
+                        .append("{cache=").append(cacheHit?1:0)
+                        .append(",join=").append(joinedLoad?1:0)
+                        .append(",children=").append(index.size())
+                        .append(",match=").append(match)
+                        .append(",indexMs=").append(indexMs)
+                        .append(",foldMs=").append(foldMs)
+                        .append(",lookupMs=").append(lookupMs).append("}");
+            }
+            return result;
         }
         List<Node> children(String parent)throws Exception{return new ArrayList<>(childIndex(parent).values());}
         java.util.Map<String,Node> childIndex(String parent)throws Exception{
