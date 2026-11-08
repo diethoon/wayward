@@ -48,6 +48,8 @@ contains("MAX_CONCURRENT_DIRECTORY_QUERIES");
 contains("cachedModIdsGeneration");
 contains("serveImageRequest(folderHandler,path,imageDiagnostics)");
 contains("image_resource_slow_or_failed");
+contains("image_http_error");
+contains("isImageResourcePath(failedPath)");
 contains("zipMods.close()");
 
 console.log("Image resource cache, strict local-only generated characters, other-image CDN fallback and preconnect tests passed.");
