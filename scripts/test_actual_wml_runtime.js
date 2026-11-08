@@ -131,7 +131,7 @@ function startServer(root) {
     userAgent: "Mozilla/5.0 (Linux; Android 15; SM-S938N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36"
   });
 
-  const page = await context.newPage();
+  await context.addInitScript(() => localStorage.setItem("wml.dev", "true"));\n  const page = await context.newPage();
   const pageErrors = [];
   const failedRequests = [];
   const relevantConsole = [];
@@ -217,7 +217,7 @@ function startServer(root) {
     }
     assert.equal(pageErrors.length, 0, "page errors: " + JSON.stringify(pageErrors));
 
-    console.log("REAL_WML_RELEVANT_CONSOLE", JSON.stringify(relevantConsole));
+    const gatHook = hookReport.find(item => item.raw === "gat");\n    assert.ok(gatHook, "WML did not register the gat hook");\n    assert.ok(gatHook.calls > 0, "gat hook never ran after real game render");\n    console.log("REAL_WML_RELEVANT_CONSOLE", JSON.stringify(relevantConsole));
     console.log("OPTIONAL_RESOURCE_FAILURES", JSON.stringify(
       failedRequests.filter(x => /i18n|compat|presets/.test(x.url))
     ));
