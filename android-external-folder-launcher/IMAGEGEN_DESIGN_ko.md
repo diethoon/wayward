@@ -1,7 +1,7 @@
 # Wayward Launcher 이미지 생성 연결 설계
 
 작성 기준: 2026-11-09
-상태: 부분 구현됨(2026-11-09). 작업 브랜치 `feature/android-imagegen-launcher-one-tap`에 내장 Bun 실행, 앱 전용 백엔드 복사, Foreground Service, HTTPS WebView용 제한된 Fetch 프록시가 구현되어 있다. 다만 실제 Android 기기 생성 테스트와 WML 모드의 fetch/XHR/WebSocket 호출 계약 전체 검증 전까지 완료로 표시하지 않는다.
+상태: 제한적 구현/미검증(2026-11-09). 작업 브랜치 `feature/android-imagegen-launcher-one-tap`에 내장 Bun 시작 시도, 앱 전용 백엔드 복사, Foreground Service, HTTPS WebView용 제한된 Fetch 프록시가 구현되어 있다. 실제 CLI 실행 경로, Android 의존성, 토큰 설정, WML 모드의 fetch/XHR/WebSocket 호출 계약을 원본 소스 및 Galaxy S25 Ultra에서 다시 검증하기 전까지 완료로 표시하지 않는다.
 
 ## 목표와 사용자 흐름
 

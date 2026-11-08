@@ -155,14 +155,6 @@ public final class ImageGenService extends Service {
         java.util.List<String> command = new java.util.ArrayList<>();
         command.add(bun.getAbsolutePath());
         command.add("src/cli.ts");
-        command.add("--port");
-        command.add("8189");
-        File config = new File(project, "wayward-imagegen.config.json");
-        if (!config.isFile()) config = new File(backendRoot, "wayward-imagegen.config.json");
-        if (config.isFile()) {
-            command.add("--config");
-            command.add(config.getAbsolutePath());
-        }
 
         updateNotification("이미지 생성 서버 시작 중 · 127.0.0.1:8189");
         ProcessBuilder builder = new ProcessBuilder(command).directory(project).redirectErrorStream(true)

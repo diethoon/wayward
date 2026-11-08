@@ -142,10 +142,7 @@ public final class MainActivity extends Activity {
         imageGenStatus=new TextView(this);imageGenStatus.setTextColor(Color.rgb(245,210,130));imageGenStatus.setTextSize(12);imageGenStatus.setPadding(dp(10),dp(9),dp(10),dp(9));imageGenStatus.setBackgroundColor(Color.rgb(35,48,40));
         LinearLayout.LayoutParams imageStatusParams=new LinearLayout.LayoutParams(-1,-2);imageStatusParams.topMargin=dp(8);imageStatusParams.bottomMargin=dp(7);page.addView(imageGenStatus,imageStatusParams);
         page.addView(button("이미지 생성 서버 시작 / 연결",true,()->startImageGenServer(true)),buttonParams());
-        LinearLayout imageActions=new LinearLayout(this);imageActions.setOrientation(LinearLayout.HORIZONTAL);
-        Button imageSettings=compactButton("NovelAI 설정 열기",false,this::openImageGenSettings);imageActions.addView(imageSettings,new LinearLayout.LayoutParams(0,dp(46),1f));
-        Button imageStop=compactButton("서버 중지",false,this::stopImageGenServer);LinearLayout.LayoutParams imageStopParams=new LinearLayout.LayoutParams(0,dp(46),1f);imageStopParams.leftMargin=dp(6);imageActions.addView(imageStop,imageStopParams);
-        LinearLayout.LayoutParams imageActionsParams=new LinearLayout.LayoutParams(-1,-2);imageActionsParams.topMargin=dp(6);page.addView(imageActions,imageActionsParams);
+        page.addView(button("이미지 생성 서버 중지",false,this::stopImageGenServer),buttonParams());
 
         TextView help=new TextView(this);help.setText("ZIP 설치 위치: 이 앱의 비공개 files 저장소\n게임 폴더에는 ZIP이나 압축 해제 파일을 쓰지 않습니다. 설치한 모드는 등록된 게임 세션에서 공통으로 사용할 수 있으며, 모드 활성화/순서는 각 게임 세션의 브라우저 저장소에 따로 보관됩니다.");
         help.setTextColor(Color.rgb(151,171,158));help.setTextSize(12);help.setLineSpacing(dp(3),1f);LinearLayout.LayoutParams hl=new LinearLayout.LayoutParams(-1,-2);hl.topMargin=dp(18);page.addView(help,hl);
@@ -586,19 +583,6 @@ public final class MainActivity extends Activity {
         else if (ImageGenService.starting) imageGenStatus.setText(ImageGenService.statusMessage);
         else if (imageGenCopying) imageGenStatus.setText("Image Studio 백엔드 준비 중…");
         else imageGenStatus.setText(ImageGenService.statusMessage);
-    }
-
-    private void openImageGenSettings() {
-        if (!ImageGenService.serverReady) {
-            Toast.makeText(this, "먼저 이미지 생성 서버를 시작해 주세요.", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        try {
-            startActivity(new Intent(Intent.ACTION_VIEW,
-                    Uri.parse("http://127.0.0.1:8189/?panel=anima")));
-        } catch (Exception e) {
-            Toast.makeText(this, "설정 화면을 열지 못했습니다: " + msg(e), Toast.LENGTH_LONG).show();
-        }
     }
 
     private static void deleteFileTree(File file) {
