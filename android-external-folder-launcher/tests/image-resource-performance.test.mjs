@@ -13,7 +13,7 @@ contains("WebResourceResponse serveExternalImagePath(String relative)");
 contains('return folderHandler.serveExternalImagePath(u.getPath().substring(8))');
 contains("InputStream openImage(String p)throws Exception");
 contains("isImageAssetPath(p)?tree.openImage(p):tree.open(p)");
-contains("path.regionMatches(true,0,\\"images/\\",0,7)");
+contains("isImageAssetPath(String path)");
 contains("private Node resolveImage(String path)");
 contains("private Node findIgnoreCase(String parent,String name)");
 contains("candidate.name.equalsIgnoreCase(name)");
