@@ -205,12 +205,22 @@ function startServer(root) {
     }));
 
     await page.getByRole("button", { name: "아내", exact: true }).click();
+    await page.waitForTimeout(250);
+    console.log("RELATION_SELECTED_REPORT", JSON.stringify({
+      rootText: (await page.locator("#root").innerText()).slice(0, 4000),
+      buttons: await page.locator("#root button").evaluateAll(nodes => nodes.map((node, index) => ({
+        index, text: node.innerText, aria: node.getAttribute("aria-label"),
+        title: node.title, disabled: node.disabled, html: node.outerHTML.slice(0, 500)
+      })))
+    }));
     await page.getByText("피파", { exact: true }).click();
-    await page.getByRole("button", { name: "계속할 캐릭터를 고르세요" }).click();
-    await page.waitForTimeout(1200);
+    await page.waitForTimeout(600);
     console.log("WIFE_PROFILE_SELECTED_REPORT", JSON.stringify({
-      rootText: (await page.locator("#root").innerText()).slice(0, 6000),
-      buttons: await page.locator("#root button").allTextContents()
+      rootText: (await page.locator("#root").innerText()).slice(0, 5000),
+      buttons: await page.locator("#root button").evaluateAll(nodes => nodes.map((node, index) => ({
+        index, text: node.innerText, aria: node.getAttribute("aria-label"),
+        title: node.title, disabled: node.disabled, html: node.outerHTML.slice(0, 500)
+      })))
     }));
 
 
