@@ -1,0 +1,29 @@
+name: Focused story and action pane forensic contexts
+
+on:
+  push:
+    branches:
+      - forensic/focused-story-actions-20261108
+    paths:
+      - ".github/workflows/focused-story-actions.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run exact 4096-byte source scans
+        run: |
+          set -euo pipefail
+          python3 scripts/forensic_move_supply_upgrade.py
+          python3 scripts/forensic_ui_owner_details.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: focused-story-actions
+          path: |
+            forensic-move-supply-upgrade.zip
+            focused-ui-owner.zip
+          if-no-files-found: error
