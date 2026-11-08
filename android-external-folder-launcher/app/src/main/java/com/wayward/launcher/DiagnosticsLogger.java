@@ -51,9 +51,11 @@ final class DiagnosticsLogger {
             event.put("model", clean(Build.MANUFACTURER + " " + Build.MODEL, 80));
             event.put("process", clean(Application.getProcessName(), 80));
             event.put("pid", Process.myPid());
-            event.put("details", details == null ? "" : redact(details.toString()));
-            append(app, redact(event.toString()) + "\n");
-            if ("ERROR".equalsIgnoreCase(level) || "WARN".equalsIgnoreCase(level)) {
+            String safeDetails = details == null ? "" : redact(details.toString());
+            event.put("details", safeDetails.substring(0, Math.min(4200, safeDetails.length())));
+            boolean urgent = "ERROR".equalsIgnoreCase(level) || "WARN".equalsIgnoreCase(level);
+            append(app, redact(event.toString()) + "\n", urgent);
+            if (urgent) {
                 DiagnosticsUploader.uploadPending(app);
             }
         } catch (Throwable ignored) {
@@ -171,7 +173,7 @@ final class DiagnosticsLogger {
         }
     }
 
-    private static void append(Context context, String line) throws Exception {
+    private static void append(Context context, String line, boolean durable) throws Exception {
         byte[] bytes = line.getBytes(StandardCharsets.UTF_8);
         synchronized (LOCK) {
             withFileLock(context, () -> {
@@ -185,7 +187,7 @@ final class DiagnosticsLogger {
                 try (FileOutputStream out = new FileOutputStream(active, true)) {
                     out.write(bytes);
                     out.flush();
-                    out.getFD().sync();
+                    if (durable) out.getFD().sync();
                 }
             });
         }

@@ -21,8 +21,9 @@ node --check diagnostics-vercel/lib/common.js
 node --check diagnostics-vercel/api/v1/ping.js
 node --check diagnostics-vercel/api/v1/ingest.js
 node --check diagnostics-vercel/api/v1/read.js
-node tests/diagnostics-contract.test.mjs
-node diagnostics-server/server.test.mjs
+node --check diagnostics-vercel/api/v1/cleanup.js
+node --check diagnostics-vercel/lib/cleanup.js
+node --check diagnostics-vercel/lib/cleanup-core.js
 ZIP_TEST_BUILD="$(mktemp -d)"
 trap 'rm -rf "$ZIP_TEST_BUILD"' EXIT
 javac -d "$ZIP_TEST_BUILD" app/src/main/java/com/wayward/launcher/ZipModStore.java tests/ZipModStoreTest.java

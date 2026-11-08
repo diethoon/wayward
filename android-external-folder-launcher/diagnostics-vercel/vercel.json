@@ -3,5 +3,11 @@
     "api/**/*.js": {
       "maxDuration": 15
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/v1/cleanup",
+      "schedule": "0 4 * * *"
+    }
+  ]
 }
