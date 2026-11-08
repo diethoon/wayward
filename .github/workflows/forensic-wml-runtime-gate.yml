@@ -6,6 +6,7 @@ on:
       - forensic/mobile-ui-runtime-gate-20261108
     paths:
       - "scripts/inspect_wml_runtime_gate.js"
+      - "scripts/probe_wml095_download.js"
       - ".github/workflows/forensic-wml-runtime-gate.yml"
 
 permissions:
@@ -26,6 +27,12 @@ jobs:
           set -euo pipefail
           node --check scripts/inspect_wml_runtime_gate.js
           node scripts/inspect_wml_runtime_gate.js
+      - name: Retrieve official WML 0.9.5 runtime package
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/probe_wml095_download.js
+          node scripts/probe_wml095_download.js
       - name: Upload raw forensic evidence
         if: always()
         uses: actions/upload-artifact@v4
