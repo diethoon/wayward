@@ -35,9 +35,9 @@ function snippets(text, regex, limit = 50) {
     if (!response.ok) throw new Error("KIO returned HTTP " + response.status);
 
     console.log("KIO_HTML_LINKS", JSON.stringify(snippets(html, /<a\\b[^>]*>/gi)));
-    console.log("KIO_HTML_SCRIPTS", JSON.stringify(snippets(html, /<script\\b[^>]*>/gi)));
+    console.log("KIO_HTML_SCRIPTS", JSON.stringify(snippets(html, /<script[^>]*src[^>]*>/gi)));
     console.log("KIO_HTML_META", JSON.stringify(snippets(html, /<meta\\b[^>]*>/gi)));
-    console.log("KIO_URLS", JSON.stringify(snippets(html, /(?:https?:\\/\\/|\\/api\\/|\\/_app\\/|\\/download)[^\\s"'<>\\\\]+/gi, 100)));
+    console.log("KIO_URLS", JSON.stringify(snippets(html, /https?:[^ "'<>]+/gi, 100)));
 
     const keys = ["download", "file", "share", "filename", "fileName", "fileId", "token", "api", "presign", "object", "storage", "expires", "wml", "zip", "data"];
     const contexts = {};
