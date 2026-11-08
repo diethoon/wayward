@@ -28,6 +28,13 @@ public final class ZipModStoreTest {
             check(store.listModIds().equals(List.of("sample-mod")), "registered root ZIP mod");
             check(read(store.open("wml/mods/sample-mod/mod.js")).contains("sample-mod"), "root mod.js served");
             check("{\"ok\":true}".equals(read(store.open("wml/mods/sample-mod/assets/config.json"))), "root ZIP asset served");
+            int rootOpenCount = store.archiveOpenCountForTesting();
+            for (int i = 0; i < 20; i++) {
+                check("{\"ok\":true}".equals(read(store.open("wml/mods/sample-mod/assets/config.json"))),
+                        "repeated ZIP asset request remains readable");
+            }
+            check(store.archiveOpenCountForTesting() == rootOpenCount,
+                    "repeated requests reuse the open ZIP central directory");
             check(store.open("wml/mods/sample-mod/../../outside.txt") == null, "request traversal rejected");
             check(!new File(temp, "wml-zip-mods/sample-mod/mod.js").exists(), "ZIP not extracted");
             check(store.fileFor("sample-mod").isFile(), "original ZIP retained in app store");
@@ -75,6 +82,27 @@ public final class ZipModStoreTest {
             expectFailure(() -> store.extractDirectory("imagestudio", "../backend", rejectedBackend),
                     "ImageGen backend path traversal rejected");
             check(!rejectedBackend.exists(), "failed backend extraction leaves no destination");
+
+            for (int i = 0; i < 6; i++) {
+                String id = "cache-mod-" + (i + 1);
+                File cacheZip = store.temporaryFile("cache-" + i);
+                writeZip(cacheZip, Map.of(
+                        "mod.js", "WML.define({ id: '" + id + "', setup(api) {} });",
+                        "asset.txt", "cache-" + i));
+                store.install(cacheZip);
+                check(("cache-" + i).equals(read(store.open("wml/mods/" + id + "/asset.txt"))),
+                        "LRU ZIP cache serves installed mod assets");
+            }
+            check(store.cachedArchiveCountForTesting() <= 4,
+                    "open ZIP handles remain bounded");
+            int beforeReopen = store.archiveOpenCountForTesting();
+            check(read(store.open("wml/mods/sample-mod/mod.js")).contains("sample-mod"),
+                    "evicted ZIP can be reopened");
+            check(store.archiveOpenCountForTesting() == beforeReopen + 1,
+                    "an evicted ZIP is reopened only on the next request");
+            store.close();
+            check(store.cachedArchiveCountForTesting() == 0,
+                    "closing the store releases cached archives");
 
             System.out.println("ZipModStore tests passed.");
         } finally {
