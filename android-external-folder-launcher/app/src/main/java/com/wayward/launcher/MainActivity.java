@@ -150,48 +150,11 @@ public final class MainActivity extends Activity {
         imageGenStatus=new TextView(this);imageGenStatus.setTextColor(Color.rgb(245,210,130));imageGenStatus.setTextSize(12);imageGenStatus.setPadding(dp(10),dp(9),dp(10),dp(9));imageGenStatus.setBackgroundColor(Color.rgb(35,48,40));
         LinearLayout.LayoutParams imageStatusParams=new LinearLayout.LayoutParams(-1,-2);imageStatusParams.topMargin=dp(8);imageStatusParams.bottomMargin=dp(7);page.addView(imageGenStatus,imageStatusParams);
         page.addView(button("이미지 생성 서버 중지",false,this::stopImageGenServer),buttonParams());
-        LinearLayout.LayoutParams diagnosticButtonParams=buttonParams();diagnosticButtonParams.topMargin=dp(18);
-        page.addView(button("진단 로그 자동 전송 설정",false,this::showDiagnosticsSettings),diagnosticButtonParams);
 
         TextView help=new TextView(this);help.setText("ZIP 설치 위치: 이 앱의 비공개 files 저장소\n게임 폴더에는 ZIP이나 압축 해제 파일을 쓰지 않습니다. 설치한 모드는 등록된 게임 세션에서 공통으로 사용할 수 있으며, 모드 활성화/순서는 각 게임 세션의 브라우저 저장소에 따로 보관됩니다.");
         help.setTextColor(Color.rgb(151,171,158));help.setTextSize(12);help.setLineSpacing(dp(3),1f);LinearLayout.LayoutParams hl=new LinearLayout.LayoutParams(-1,-2);hl.topMargin=dp(18);page.addView(help,hl);
         home=page;root.addView(scroll,new FrameLayout.LayoutParams(-1,-1));setContentView(root);
         renderProfiles();renderZipMods();refreshImageGenStatus();
-    }
-
-    private void showDiagnosticsSettings(){
-        boolean configured=DiagnosticsTokenStore.has(this);
-        EditText code=new EditText(this);
-        code.setSingleLine(true);
-        code.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        code.setHint("진단 서버 연결 코드 붙여넣기");
-        AlertDialog.Builder builder=new AlertDialog.Builder(this)
-                .setTitle("진단 로그 자동 전송")
-                .setMessage(configured
-                        ? "진단 서버 연결 코드가 저장되어 있습니다. 새 코드로 교체하거나 연결을 해제할 수 있습니다.\n\n런처 오류와 WebView 오류, ImageGen 서버 상태만 전송합니다. 게임 세이브·이미지·프롬프트·요청 본문·인증 헤더는 수집하지 않습니다."
-                        : "연결 코드를 한 번 입력하면 보관된 로그가 앱 실행/복귀 때 자동 전송됩니다. 게임 세이브·이미지·프롬프트·요청 본문·인증 헤더는 수집하지 않습니다.")
-                .setView(code)
-                .setPositiveButton("연결",null)
-                .setNegativeButton("닫기",(dialog,which)->{});
-        if(configured)builder.setNeutralButton("연결 해제",(dialog,which)->{
-            DiagnosticsTokenStore.clear(this);
-            Toast.makeText(this,"진단 로그 자동 전송을 해제했습니다.",Toast.LENGTH_SHORT).show();
-        });
-        AlertDialog dialog=builder.create();
-        dialog.setOnShowListener(ignored->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
-            String token=code.getText()==null?"":code.getText().toString().trim();
-            if(token.length()<32){code.setError("연결 코드를 확인해 주세요.");return;}
-            Button connect=dialog.getButton(AlertDialog.BUTTON_POSITIVE);connect.setEnabled(false);
-            DiagnosticsUploader.verifyAndSave(this,token,ok->{
-                connect.setEnabled(true);
-                if(ok){
-                    dialog.dismiss();
-                    Toast.makeText(this,"진단 서버 연결 완료 · 보관된 로그 전송을 시작합니다.",Toast.LENGTH_LONG).show();
-                    DiagnosticsUploader.uploadPending(this);
-                }else Toast.makeText(this,"연결 실패 · 코드와 네트워크를 확인해 주세요.",Toast.LENGTH_LONG).show();
-            });
-        }));
-        dialog.show();
     }
 
     private Button compactButton(String label,boolean primary,Runnable action){
@@ -367,18 +330,15 @@ public final class MainActivity extends Activity {
             if(home!=null)home.setVisibility(View.GONE);
             loadedZipRevision=getZipRevision();
             createWeb();web.setVisibility(View.VISIBLE);
-            String origin=sessionOrigin(activeProfileId)+"/game/";
-            TextView loading=new TextView(this);
-            loading.setText("현재 세션의 Image Studio 모드를 확인하고 있습니다…\n모드가 없거나 서버 시작에 실패해도 게임은 계속 열립니다.");
-            loading.setTextColor(Color.WHITE);loading.setTextSize(14);loading.setGravity(android.view.Gravity.CENTER);
-            loading.setBackgroundColor(Color.rgb(16,25,21));
-            root.addView(loading,new FrameLayout.LayoutParams(-1,-1));
-            String gameUrl=origin+Uri.encode(file)+"?launcher="+System.currentTimeMillis();
-            ensureImageGenServer(tree,()->{
+            String gameUrl=sessionOrigin(activeProfileId)+"/game/"+Uri.encode(file)+"?launcher="+System.currentTimeMillis();
+            SafTree sessionTree=tree;
+            web.setVisibility(View.VISIBLE);
+            DiagnosticsLogger.event(this,"INFO","launcher","game_webview_load_requested",null);
+            web.loadUrl(gameUrl);
+            // Image Studio is optional: its startup must never gate the game page.
+            ensureImageGenServer(sessionTree,()->{
                 if(web==null||!activeProfileId.equals(id))return;
-                if(loading.getParent()==root)root.removeView(loading);
-                DiagnosticsLogger.event(this,"INFO","launcher","game_webview_load_requested",null);
-                web.loadUrl(gameUrl);
+                refreshImageGenStatus();
             });
         }catch(Exception e){DiagnosticsLogger.error(this,"launcher","game_session_open_failed",e);status("게임 실행 실패: "+msg(e));}
     }
@@ -463,7 +423,7 @@ public final class MainActivity extends Activity {
         web=new WebView(this);WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setDatabaseEnabled(true);s.setUseWideViewPort(true);s.setLoadWithOverviewMode(true);s.setTextZoom(100);s.setSupportZoom(true);s.setBuiltInZoomControls(false);s.setDisplayZoomControls(false);s.setAllowFileAccess(false);s.setAllowContentAccess(false);s.setCacheMode(WebSettings.LOAD_DEFAULT);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);web.addJavascriptInterface(new HostBridge(),"WMLHost");
         installImageGenDocumentStartScript(origin);
         FolderHandler folderHandler=new FolderHandler(tree,getAssets(),zipMods,origin);
-        WebViewAssetLoader loader=new WebViewAssetLoader.Builder().setDomain(domain).addPathHandler("/game/",folderHandler).build();
+        WebViewAssetLoader loader=new WebViewAssetLoader.Builder().setDomain(domain+":"+originPort).addPathHandler("/game/",folderHandler).build();
         web.setWebViewClient(new WebViewClient(){
             @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){
                 DiagnosticsLogger.event(MainActivity.this,"INFO","webview","page_started",null);
@@ -496,8 +456,21 @@ public final class MainActivity extends Activity {
                 return super.onRenderProcessGone(view,detail);
             }
             @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest r){
-                Uri u=r.getUrl();WebResourceResponse local=loader.shouldInterceptRequest(u);if(local!=null)return local;
-                if(domain.equalsIgnoreCase(u.getHost())&&u.getPort()==originPort&&FolderHandler.isImageRequestPath(u.getPath()))return folderHandler.serveImagePath(u.getPath().substring(8));
+                Uri u=r.getUrl();
+                WebResourceResponse local=loader.shouldInterceptRequest(u);
+                if(local!=null)return local;
+                if(domain.equalsIgnoreCase(u.getHost())&&u.getPort()==originPort){
+                    String path=u.getPath();
+                    if(FolderHandler.isGameRequestPath(path)){
+                        if(r.isForMainFrame()){
+                            JSONObject details=new JSONObject();
+                            try{details.put("authority",u.getAuthority());details.put("path",path);}catch(Exception ignored){}
+                            DiagnosticsLogger.event(MainActivity.this,"WARN","webview","asset_loader_direct_fallback",details);
+                        }
+                        return folderHandler.serveGamePath(path.substring(6));
+                    }
+                    if(FolderHandler.isImageRequestPath(path))return folderHandler.serveImagePath(path.substring(8));
+                }
                 if("art.sintention.com".equalsIgnoreCase(u.getHost())&&FolderHandler.isImageRequestPath(u.getPath()))return folderHandler.serveExternalImagePath(u.getPath().substring(8));
                 return null;
             }
@@ -783,6 +756,13 @@ public final class MainActivity extends Activity {
         private static final String CORE="wml/runtime/wml-core.js";private final SafTree tree;private final android.content.res.AssetManager assets;private final ZipModStore zipMods;private final String origin;
         FolderHandler(SafTree t,android.content.res.AssetManager a,ZipModStore z,String o){tree=t;assets=a;zipMods=z;origin=o;}
         @Override public WebResourceResponse handle(String p){return serve(p);}
+        static boolean isGameRequestPath(String path){
+            return path!=null&&path.startsWith("/game/");
+        }
+        WebResourceResponse serveGamePath(String relative){
+            WebResourceResponse result=serve(relative);
+            return result!=null?result:response(404,"Not Found","text/plain","Game resource not found");
+        }
         static boolean isImageRequestPath(String path){
             return path!=null&&path.regionMatches(true,0,"/images/",0,8);
         }
