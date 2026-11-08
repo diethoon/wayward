@@ -3,7 +3,24 @@ import { timingSafeEqual } from "node:crypto";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RATE_WINDOW_MS = 60_000;
 const MAX_BATCHES_PER_MINUTE = 30;
+const MAX_IP_BATCHES_PER_MINUTE = 90;
 const rate = new Map();
+const ipRate = new Map();
+
+function withinRateLimit(map, key, limit, now) {
+  if (map.size > 4096) {
+    for (const [entry, bucket] of map) {
+      if (now - bucket.start > RATE_WINDOW_MS * 2) map.delete(entry);
+    }
+  }
+  let bucket = map.get(key);
+  if (!bucket || now - bucket.start > RATE_WINDOW_MS) {
+    bucket = { start: now, count: 0 };
+  }
+  bucket.count += 1;
+  map.set(key, bucket);
+  return bucket.count <= limit;
+}
 
 function bounded(value, max = 3000) {
   return String(value ?? "").replace(/[\r\n]/g, " ").slice(0, max);
