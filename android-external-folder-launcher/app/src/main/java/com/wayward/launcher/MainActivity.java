@@ -1201,6 +1201,7 @@ public final class MainActivity extends Activity {
         Node find(String parent,String name)throws Exception{return childIndex(parent).get(name);}
         private Node findIgnoreCase(String parent,String name,StringBuilder trace,int segmentIndex)throws Exception{
             long lookupStarted=System.nanoTime();
+            long generation=directoryIndexGeneration.get();
             boolean cacheHit;
             synchronized(directoryIndexLock){cacheHit=directoryIndexCache.containsKey(parent);}
             boolean joinedLoad=!cacheHit&&directoryLoads.containsKey(parent);
@@ -1212,7 +1213,6 @@ public final class MainActivity extends Activity {
             long foldMs=0L;
             if(result==null){
                 long foldStarted=System.nanoTime();
-                long generation=directoryIndexGeneration.get();
                 String key=name.toLowerCase(Locale.ROOT);
                 synchronized(directoryIndexLock){
                     java.util.Map<String,Node> folded=caseInsensitiveDirectoryCache.get(parent);
