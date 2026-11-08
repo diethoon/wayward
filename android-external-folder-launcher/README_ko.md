@@ -58,7 +58,7 @@ ZIP 1개는 WML 모드 1개를 포함해야 합니다. mod.js가 없거나, WML.
 
 ## 5. 설치 패키지
 
-이번 Image Studio 빌드는 `com.wayward.launcher.imagegen` 패키지를 사용합니다. 기존 0.2.1 `.zipmulti.filepicker` 앱과 동시에 설치할 수 있으며, 기존 앱을 삭제하거나 덮어쓰지 않습니다. Android 앱 데이터 공간은 패키지별로 분리되므로 새 앱에서 게임 폴더를 다시 선택해야 하고, 이전 앱의 WebView localStorage/IndexedDB·WML 설정은 자동 이전되지 않습니다. 기존 앱은 세이브 데이터 확인 전까지 삭제하지 마세요.
+이번 0.3.1 테스트 빌드는 `com.wayward.launcher.imagegen031` 패키지로 설치됩니다. 기존 0.3.0 `com.wayward.launcher.imagegen`과 별도 앱으로 공존하므로 기존 앱을 삭제하거나 덮어쓰지 않습니다. 두 APK의 CI 디버그 서명 인증서도 다르므로 같은 패키지 업데이트를 시도하지 않습니다. Android 앱 데이터 공간은 패키지별로 분리되므로 새 앱에서 게임 폴더를 다시 선택해야 하고, 이전 앱의 WebView localStorage/IndexedDB·WML 설정은 자동 이전되지 않습니다. 기존 앱과 세이브 데이터는 새 버전 확인이 끝날 때까지 그대로 보존하세요.
 
 ## 6. 세션별 Image Studio 자동 감지와 공통 서버
 
