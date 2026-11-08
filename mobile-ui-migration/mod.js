@@ -49,6 +49,17 @@ WML.define({
       return COMPONENT_NAME_ALIASES[name] || name;
     }
 
+    // A hooked component's React type becomes WML's generic dispatcher.
+    // Use the stable marker added by transformPrepPanel() after that point.
+    function isPrepPanelNode(node) {
+      if (!React.isValidElement(node)) return false;
+      const className = typeof node.props?.className === "string"
+        ? node.props.className
+        : "";
+      return componentName(node) === "wst" ||
+        className.split(/\s+/).includes(PREP_PANEL_CLASS);
+    }
+
     function containsComponent(node, name, predicate) {
       if (!React.isValidElement(node)) return false;
       if (componentName(node) === name && (!predicate || predicate(node))) return true;
@@ -108,7 +119,7 @@ WML.define({
 
     function collectPrepPanel(node, found) {
       if (!React.isValidElement(node) || found.node) return;
-      if (componentName(node) === "wst") {
+      if (isPrepPanelNode(node)) {
         found.node = node;
         return;
       }
@@ -142,7 +153,7 @@ WML.define({
       // gat reuses the same story body in its hidden desktop pane and mobile tab.
       // Remove every original wst occurrence, then mount one captured instance
       // in the mobile action scroll so the stateful prep UI cannot appear twice.
-      if (prepPanel?.shouldMove && typeName === "wst") return null;
+      if (prepPanel?.shouldMove && isPrepPanelNode(node)) return null;
 
       if (portraitMode && isOriginalLocationWrapper(node, storyPane)) {
         return null;
