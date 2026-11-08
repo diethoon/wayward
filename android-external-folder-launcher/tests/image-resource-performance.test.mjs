@@ -34,7 +34,7 @@ contains("dns-prefetch");
 contains("preconnect");
 contains("https://art.sintention.com");
 contains('if(in==null)return null;');
-contains("FolderHandler.isImageRequestPath(u.getPath())");
+contains("FolderHandler.isImageRequestPath(path)");
 contains('path.regionMatches(true,0,"/images/",0,8)');
 contains("directoryIndexCache");
 contains("childIndex(String parent)");
