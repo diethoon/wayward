@@ -7,7 +7,7 @@ on:
     paths:
       - ".github/workflows/extract-target-ui-functions.yml"
 
-# Re-run after the bounded declaration-boundary extractor revision.
+# Re-run after preserving trailing semicolon in the extracted source range.
 permissions:
   contents: read
 
