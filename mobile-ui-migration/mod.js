@@ -753,70 +753,16 @@ WML.define({
         child.props.className.trim() === "mb-4" &&
         hasButtonLabel(child, "물자 채우기")
       );
+      // WML wraps hooked components in a generic dispatcher and erases their function name.
+      // The source-defined title prop survives that wrapper and uniquely identifies this accordion.
       const facilities = children.find((child) =>
-        React.isValidElement(child) && componentName(child) === "yst" &&
+        React.isValidElement(child) &&
+        typeof child.type === "function" &&
         child.props?.title === "시설 업그레이드"
       );
 
-      // Fail closed: if the current WML structure changes, retain the original
-      // prep panel rather than silently deleting its live controls.
+      // Fail closed if the current WML structure changes; preserve every live control.
       if (!supplies || !facilities) {
-        const describe = (node) => {
-          if (!React.isValidElement(node)) {
-            return { type: typeof node, text: String(node).slice(0, 60) };
-          }
-          const type = typeof node.type === "string"
-            ? node.type
-            : (node.type?.displayName || node.type?.name || String(node.type));
-          return {
-            type,
-            className: node.props?.className ?? null,
-            title: node.props?.title ?? null,
-            text: plainTextFromNode(node).slice(0, 80),
-            children: React.Children.toArray(node.props?.children).slice(0, 8).map((child) => {
-              if (!React.isValidElement(child)) {
-                return { type: typeof child, text: String(child).slice(0, 50) };
-              }
-              const childType = typeof child.type === "string"
-                ? child.type
-                : (child.type?.displayName || child.type?.name || String(child.type));
-              return {
-                type: childType,
-                className: child.props?.className ?? null,
-                title: child.props?.title ?? null,
-                text: plainTextFromNode(child).slice(0, 60)
-              };
-            })
-          };
-        };
-        const facilityWrapper = children[children.length - 1];
-        const summarizeNode = (node) => {
-          if (!React.isValidElement(node)) {
-            return { type: typeof node, text: String(node).slice(0, 40) };
-          }
-          return {
-            type: typeof node.type === "string" ? node.type :
-              (node.type?.displayName || node.type?.name || String(node.type)),
-            component: componentName(node),
-            className: node.props?.className ?? null,
-            title: node.props?.title ?? null,
-            propKeys: Object.keys(node.props || {}),
-            text: plainTextFromNode(node).slice(0, 60),
-            childCount: React.Children.toArray(node.props?.children).length
-          };
-        };
-        console.warn("[WML mobile-ui-migration] PREP_FACILITY_WRAPPER", JSON.stringify({
-          wrapper: summarizeNode(facilityWrapper),
-          children: React.isValidElement(facilityWrapper)
-            ? React.Children.toArray(facilityWrapper.props?.children).map(summarizeNode)
-            : []
-        }));
-        console.warn("[WML mobile-ui-migration] PREP_CHILD_SUMMARY", JSON.stringify({
-          childCount: children.length,
-          suppliesFound: !!supplies,
-          facilitiesFound: !!facilities,
-          children: children.map(describe)
-        }));
         console.warn("[WML mobile-ui-migration] prep panel structure was not recognized; preserving original contents");
         return result;
       }
