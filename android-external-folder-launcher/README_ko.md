@@ -58,7 +58,7 @@ ZIP 1개는 WML 모드 1개를 포함해야 합니다. mod.js가 없거나, WML.
 
 ## 5. 설치 패키지
 
-0.3.8 테스트 빌드는 `com.wayward.launcher.imagegen037` 패키지로 설치됩니다. 기존 0.3.6 (`com.wayward.launcher.imagegen036`), 0.3.5 (`com.wayward.launcher.imagegen035`), 0.3.4 (`com.wayward.launcher.imagegen034`) 및 구버전과 별도 앱으로 공존하므로 기존 앱을 삭제하거나 덮어쓰지 않습니다. 앱 데이터는 패키지별로 분리되므로 새 앱에서 게임 폴더를 다시 선택하고, 이전 앱에 보관한 앱 전용 ZIP 모드를 다시 설치해야 합니다. 기존 앱의 WebView localStorage/IndexedDB, 설정, 세이브 데이터는 자동 이전되지 않으며 기존 앱에 그대로 남습니다. 두 버전은 `127.0.0.1:8189` 포트를 공유하므로 다른 런처 앱에서 Image Studio 서버를 중지한 뒤 새 버전을 실행하세요. 기존 앱은 삭제하지 마세요.
+0.3.8 테스트 빌드는 `com.wayward.launcher.imagegen038` 패키지로 설치됩니다. 기존 0.3.6 (`com.wayward.launcher.imagegen036`), 0.3.5 (`com.wayward.launcher.imagegen035`), 0.3.4 (`com.wayward.launcher.imagegen034`) 및 구버전과 별도 앱으로 공존하므로 기존 앱을 삭제하거나 덮어쓰지 않습니다. 앱 데이터는 패키지별로 분리되므로 새 앱에서 게임 폴더를 다시 선택하고, 이전 앱에 보관한 앱 전용 ZIP 모드를 다시 설치해야 합니다. 기존 앱의 WebView localStorage/IndexedDB, 설정, 세이브 데이터는 자동 이전되지 않으며 기존 앱에 그대로 남습니다. 두 버전은 `127.0.0.1:8189` 포트를 공유하므로 다른 런처 앱에서 Image Studio 서버를 중지한 뒤 새 버전을 실행하세요. 기존 앱은 삭제하지 마세요.
 
 ## 6. 세션별 Image Studio 자동 감지와 공통 서버
 
