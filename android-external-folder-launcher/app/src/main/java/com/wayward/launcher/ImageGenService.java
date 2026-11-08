@@ -224,7 +224,7 @@ public final class ImageGenService extends Service {
         builder.environment().put("HOME", getFilesDir().getAbsolutePath());
         builder.environment().put("TMPDIR", getCacheDir().getAbsolutePath());
         builder.environment().put("BUN_INSTALL", new File(getFilesDir(), "bun-install").getAbsolutePath());
-        serverProcess = builder.start();
+        serverProcess = startProcess(builder);
         DiagnosticsLogger.event(this,"INFO","imagegen_service","bun_server_process_started",null);
 
         long deadline = System.currentTimeMillis() + 60000L;
@@ -259,7 +259,27 @@ public final class ImageGenService extends Service {
     private File ensureBun() throws Exception {
         File root = new File(getFilesDir(), "imagegen/runtime");
         File binary = new File(root, "bun");
-        if (binary.isFile() && binary.canExecute()) return binary;
+        File invalidBinary = null;
+        if (binary.isFile()) {
+            try {
+                int existingVersion = runCommand(
+                        new ProcessBuilder(binary.getAbsolutePath(), "--version"),
+                        new File(getFilesDir(), "imagegen/bun-version.log"), 30, TimeUnit.SECONDS);
+                if (existingVersion == 0) {
+                    DiagnosticsLogger.event(this,"INFO","imagegen_service","bun_existing_binary_validated",null);
+                    return binary;
+                }
+                appendDiagnostic("기존 Bun 버전 검증 실패(exit " + existingVersion + "): " + executableDiagnostics(binary));
+            } catch (Exception error) {
+                appendDiagnostic("기존 Bun 실제 실행 검증 실패: " + error + " | " + executableDiagnostics(binary));
+                DiagnosticsLogger.error(this,"imagegen_service","bun_existing_binary_invalid",error);
+            }
+            invalidBinary = new File(root, "bun.invalid." + System.currentTimeMillis());
+            if (!binary.renameTo(invalidBinary)) {
+                if (!binary.delete()) throw new IllegalStateException("검증 실패한 기존 Bun 파일을 격리하지 못했습니다: " + executableDiagnostics(binary));
+                invalidBinary = null;
+            }
+        }
         if (!root.exists() && !root.mkdirs()) throw new IllegalStateException("Bun 저장 폴더를 만들지 못했습니다.");
 
         File archive = new File(getCacheDir(), "bun-android-1.4.4.zip");
@@ -333,8 +353,47 @@ public final class ImageGenService extends Service {
         File installed = new File(root, "bun");
         if (!installed.setExecutable(true, true)) throw new IllegalStateException("Bun 실행 권한을 확인하지 못했습니다.");
         int version = runCommand(new ProcessBuilder(installed.getAbsolutePath(), "--version"), new File(getFilesDir(), "imagegen/bun-version.log"), 30, TimeUnit.SECONDS);
-        if (version != 0) throw new IllegalStateException("이 기기에서 Bun Android 실행 파일을 실행하지 못했습니다.");
+        if (version != 0) throw new IllegalStateException("이 기기에서 Bun Android 실행 파일을 실행하지 못했습니다(exit " + version + "). " + executableDiagnostics(installed));
+        if (invalidBinary != null) deleteTree(invalidBinary);
+        DiagnosticsLogger.event(this,"INFO","imagegen_service","bun_fresh_install_validated",null);
         return installed;
+    }
+
+    private String executableDiagnostics(File executable) {
+        File parent = executable == null ? null : executable.getParentFile();
+        return "path=" + (executable == null ? "" : executable.getAbsolutePath())
+                + "; isFile=" + (executable != null && executable.isFile())
+                + "; canRead=" + (executable != null && executable.canRead())
+                + "; canExecute=" + (executable != null && executable.canExecute())
+                + "; bytes=" + (executable != null && executable.isFile() ? executable.length() : -1)
+                + "; parentCanRead=" + (parent != null && parent.canRead())
+                + "; parentCanWrite=" + (parent != null && parent.canWrite())
+                + "; sdk=" + Build.VERSION.SDK_INT
+                + "; abis=" + java.util.Arrays.toString(Build.SUPPORTED_ABIS);
+    }
+
+    private Process startProcess(ProcessBuilder builder) throws java.io.IOException {
+        try {
+            return builder.start();
+        } catch (java.io.IOException error) {
+            java.util.List<String> command = builder.command();
+            File executable = command == null || command.isEmpty() ? null : new File(command.get(0));
+            String diagnostics = executableDiagnostics(executable);
+            org.json.JSONObject details = new org.json.JSONObject();
+            try {
+                details.put("exception", error.toString());
+                details.put("executable", executable == null ? "" : executable.getAbsolutePath());
+                details.put("isFile", executable != null && executable.isFile());
+                details.put("canRead", executable != null && executable.canRead());
+                details.put("canExecute", executable != null && executable.canExecute());
+                details.put("bytes", executable != null && executable.isFile() ? executable.length() : -1);
+                details.put("sdk", Build.VERSION.SDK_INT);
+                details.put("supportedAbis", java.util.Arrays.toString(Build.SUPPORTED_ABIS));
+            } catch (Exception ignored) {}
+            DiagnosticsLogger.event(this,"ERROR","imagegen_service","process_builder_start_failed",details);
+            appendDiagnostic("ProcessBuilder.start 실패: " + error + " | " + diagnostics);
+            throw new java.io.IOException("Cannot run program: " + error.getMessage() + " | " + diagnostics, error);
+        }
     }
 
     private int runCommand(ProcessBuilder builder, File log, long timeout, TimeUnit unit) throws Exception {
@@ -343,7 +402,7 @@ public final class ImageGenService extends Service {
         builder.redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(log));
         builder.environment().put("HOME", getFilesDir().getAbsolutePath());
         builder.environment().put("TMPDIR", getCacheDir().getAbsolutePath());
-        Process process = builder.start();
+        Process process = startProcess(builder);
         if (!process.waitFor(timeout, unit)) {
             process.destroyForcibly();
             throw new IllegalStateException("Bun 명령 실행 시간이 초과됐습니다.");
