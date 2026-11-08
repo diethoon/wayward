@@ -1,7 +1,7 @@
 WML.define({
   id: "mobile-ui-migration",
   name: "M36 모바일 UI 마이그레이션",
-  version: "1.3.14",
+  version: "1.3.15",
   game: "2026-11-01",
   platform: "mobile",
   description: "4.37MB WML 빌드용: 이야기 탭 나레이션 전용화, 영업 준비·시설 업그레이드 선택지 패널 이동",
@@ -31,14 +31,17 @@ WML.define({
     const PATRON_CHOICES_TARGET_ID = "m36-ui-migration-patron-choices-portal";
     const STYLE_ID = "m36-mobile-ui-migration-style";
     const MOBILE_PORTRAIT = window.matchMedia("(max-width: 1023px) and (orientation: portrait)");
+    const MOBILE_VIEWPORT = window.matchMedia("(max-width: 1023px)");
     // React component names were minified differently in the 2026-11-01 build.
     // Normalize only the three UI components that this migration inspects by name.
-    const COMPONENT_NAME_ALIASES = api.game === "2026-11-01"
+    const COMPONENT_NAME_ALIASES = String(api.game || "").includes("2026-11-01")
       ? { qoe: "loe", wb: "fb", snt: "utt" }
       : {};
     const hostPlatform = api.host?.platform || "unknown";
-    const mobileHost = hostPlatform === "mobile" ||
-      /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
+    const mobileHost =
+      /mobile|android|ios|tablet/i.test(hostPlatform) ||
+      /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent || "") ||
+      MOBILE_VIEWPORT.matches;
 
     function componentName(node) {
       if (!React.isValidElement(node) || typeof node.type !== "function") return "";
@@ -1151,18 +1154,29 @@ WML.define({
     Object.defineProperty(window, "__M36_MOBILE_UI_MIGRATION__", {
       configurable: true,
       value: {
-        version: "1.3.14",
+        version: "1.3.15",
         game: api.game,
         hostPlatform,
         getStatus: () => ({
-          version: "1.3.14",
+          version: "1.3.15",
           game: api.game,
           hostPlatform,
           mobileHost,
+          mobileViewport: MOBILE_VIEWPORT.matches,
           portrait: MOBILE_PORTRAIT.matches,
           actionPanel: !!document.querySelector(GAME_SELECTOR + " ." + ACTION_PANEL_CLASS),
           actionScroll: !!document.querySelector(GAME_SELECTOR + " ." + ACTION_SCROLL_CLASS),
           prepActionPanel: !!document.querySelector(GAME_SELECTOR + " ." + PREP_PANEL_CLASS),
+          prepPanelInActionScroll: !!document.querySelector(
+            GAME_SELECTOR + " ." + ACTION_SCROLL_CLASS + " ." + PREP_PANEL_CLASS
+          ),
+          prepPanelInStoryPane: Array.from(
+            document.querySelectorAll(GAME_SELECTOR + " div")
+          ).some((element) =>
+            String(element.className || "").includes(
+              "flex-1 min-h-0 overflow-y-auto p-2 text-[0.78rem]"
+            ) && !!element.querySelector("." + PREP_PANEL_CLASS)
+          ),
           prepPanelButtons: document.querySelectorAll(GAME_SELECTOR + " ." + PREP_PANEL_CLASS + " button").length,
           prepFacilityUpgrade: !!document.querySelector(GAME_SELECTOR + " ." + FACILITY_UPGRADE_CLASS),
           pinnedPanel: !!document.querySelector(GAME_SELECTOR + " ." + PINNED_PANEL_CLASS),
@@ -1207,14 +1221,15 @@ WML.define({
       }
     });
 
-    console.info("[WML] M36 mobile UI migration 1.3.14 ready", {
+    console.info("[WML] M36 mobile UI migration 1.3.15 ready", {
       game: api.game,
       hostPlatform,
       mobileHost,
+      mobileViewport: MOBILE_VIEWPORT.matches,
       layoutHook: api.has("layout"),
-      prepPanelHook: true,
-      facilityAccordionHook: true,
-      patronInteractionCardHook: true,
+      prepPanelHook: api.has("prepPanel"),
+      facilityAccordionHook: api.has("facilityAccordion"),
+      patronInteractionCardHook: api.has("patronInteractionCard"),
       patronPortal: typeof ReactDOM?.createPortal === "function"
     });
   }
