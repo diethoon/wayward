@@ -22,6 +22,19 @@ public final class ImageGenStatusStoreTest {
             check(ready.isReady(), "ready state persisted and fresh");
             check(!ready.isStarting(), "ready is not starting");
 
+            java.util.Properties stale = new java.util.Properties();
+            File statusFile = new File(root, "imagegen-status.properties");
+            try (java.io.FileInputStream in = new java.io.FileInputStream(statusFile)) {
+                stale.load(in);
+            }
+            stale.setProperty("ready", "false");
+            stale.setProperty("starting", "true");
+            stale.setProperty("updatedAt", Long.toString(System.currentTimeMillis() - 60_000L));
+            try (java.io.FileOutputStream out = new java.io.FileOutputStream(statusFile)) {
+                stale.store(out, "stale test");
+            }
+            check(!ImageGenStatusStore.read(root).isStarting(), "dead service heartbeat expires startup state");
+
             ImageGenStatusStore.write(root, false, false, "설치 실패", "0.8.4");
             ImageGenStatusStore.State failed = ImageGenStatusStore.read(root);
             check(!failed.isReady() && !failed.isStarting(), "failure state persisted");
