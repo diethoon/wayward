@@ -172,6 +172,16 @@ function startServer(root) {
     const ageGateButton = page.getByRole("button", { name: "예", exact: true });
     await ageGateButton.waitFor({ state: "visible", timeout: 30000 });
     await ageGateButton.click();
+    const adultNoticeButton = page.getByRole("button", { name: "이해하고 동의합니다", exact: true });
+    await adultNoticeButton.waitFor({ state: "visible", timeout: 30000 });
+    await adultNoticeButton.click();
+    await page.waitForFunction(() => {
+      const text = String(document.querySelector("#root")?.innerText || "");
+      return !text.includes("연령 확인") && !text.includes("성인 콘텐츠 안내");
+    }, { timeout: 30000 });
+    console.log("ADULT_NOTICE_ACCEPTED", JSON.stringify({
+      rootText: (await page.locator("#root").innerText()).slice(0, 1600)
+    }));
     await page.waitForFunction(
       () => !String(document.querySelector("#root")?.innerText || "").includes("연령 확인"),
       { timeout: 30000 }
@@ -246,7 +256,6 @@ function startServer(root) {
         storyContainsPrep: (story?.textContent || "").includes("오후 영업 준비"),
         storyContainsNarration: (story?.textContent || "").includes("당신은 위층 침실"),
         viewport: { width: innerWidth, height: innerHeight },
-        pageErrors
       };
     });
 
