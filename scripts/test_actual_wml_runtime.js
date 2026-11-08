@@ -190,6 +190,21 @@ function startServer(root) {
       rootText: (await page.locator("#root").innerText()).slice(0, 1200)
     }));
 
+    const missingImagesClose = page.getByRole("button", { name: "닫기", exact: true });
+    if (await missingImagesClose.isVisible().catch(() => false)) {
+      await missingImagesClose.click();
+      await page.waitForTimeout(300);
+    }
+    const newGameButton = page.getByRole("button", { name: "새 게임", exact: true });
+    await newGameButton.waitFor({ state: "visible", timeout: 30000 });
+    await newGameButton.click();
+    await page.waitForTimeout(1200);
+    console.log("NEW_GAME_ENTRY_REPORT", JSON.stringify({
+      rootText: (await page.locator("#root").innerText()).slice(0, 5000),
+      buttons: await page.locator("#root button").allTextContents()
+    }));
+
+
     const stateResult = await page.evaluate(testState => {
       const api = window.WML.dev();
       const before = api.store.game();
