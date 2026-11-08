@@ -318,7 +318,7 @@ public final class MainActivity extends Activity {
             createWeb();web.setVisibility(View.VISIBLE);
             String origin=sessionOrigin(activeProfileId)+"/game/";
             TextView loading=new TextView(this);
-            loading.setText("Image Studio 서버 연결을 준비하고 있습니다…\n서버가 없는 경우에는 바로 게임을 엽니다.");
+            loading.setText("현재 세션의 Image Studio 모드를 확인하고 있습니다…\n모드가 없거나 서버 시작에 실패해도 게임은 계속 열립니다.");
             loading.setTextColor(Color.WHITE);loading.setTextSize(14);loading.setGravity(android.view.Gravity.CENTER);
             loading.setBackgroundColor(Color.rgb(16,25,21));
             root.addView(loading,new FrameLayout.LayoutParams(-1,-1));
@@ -650,6 +650,7 @@ public final class MainActivity extends Activity {
         if (state.isReady()) imageGenStatus.setText("연결됨 · 공통 이미지 생성 서버 127.0.0.1:8189 · Image Studio " + safeVersion(state.backendVersion));
         else if (state.isStarting()) imageGenStatus.setText(state.message.isEmpty() ? "이미지 생성 서버 시작 중…" : state.message);
         else if (imageGenCopying) imageGenStatus.setText("현재 세션 Image Studio 백엔드 준비 중…");
+        else if (state.ready && !state.isFresh()) imageGenStatus.setText("이미지 생성 서비스 heartbeat가 끊겼습니다. 현재 세션을 다시 열면 서버를 재시작합니다.");
         else if (imageGenSessionMessage != null && !imageGenSessionMessage.isEmpty()) imageGenStatus.setText(imageGenSessionMessage);
         else if (!state.message.isEmpty()) imageGenStatus.setText(state.message);
         else imageGenStatus.setText("서버가 실행되지 않았습니다.");
