@@ -468,7 +468,13 @@ public final class MainActivity extends Activity {
                     }
                     if(FolderHandler.isImageRequestPath(path))return folderHandler.serveImagePath(path.substring(8));
                 }
-                if("art.sintention.com".equalsIgnoreCase(u.getHost())&&FolderHandler.isImageRequestPath(u.getPath()))return folderHandler.serveExternalImagePath(u.getPath().substring(8));
+                if("art.sintention.com".equalsIgnoreCase(u.getHost())){
+                    String path=u.getPath();
+                    // Generated WML character images are local-only; never fall back to the CDN.
+                    if(FolderHandler.isLocalOnlyCharacterImagePath(path))return folderHandler.serveImagePath(path.substring(8));
+                    // Preserve the existing CDN fallback for all other image resources.
+                    if(FolderHandler.isImageRequestPath(path))return folderHandler.serveExternalImagePath(path.substring(8));
+                }
                 return null;
             }
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){
@@ -762,6 +768,10 @@ public final class MainActivity extends Activity {
         }
         static boolean isImageRequestPath(String path){
             return path!=null&&path.regionMatches(true,0,"/images/",0,8);
+        }
+        static boolean isLocalOnlyCharacterImagePath(String path){
+            String prefix="/images/illustrious/characters/";
+            return path!=null&&path.regionMatches(true,0,prefix,0,prefix.length());
         }
         static boolean isImageAssetPath(String path){
             return path!=null&&path.regionMatches(true,0,"images/",0,7);
