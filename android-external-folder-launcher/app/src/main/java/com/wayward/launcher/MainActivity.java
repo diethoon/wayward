@@ -290,8 +290,13 @@ public final class MainActivity extends Activity {
         String id=u.getLastPathSegment();return id!=null&&id.matches("[a-f0-9]{32}")?id:null;
     }
     private String sessionDomain(String id){
-        String safe=id==null?"default":id.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9-]","");
-        return "session-"+safe+".appassets.androidplatform.net";
+        return "localhost";
+    }
+    private int sessionPort(String id){
+        return 10000 + Math.floorMod((id == null ? "default" : id).hashCode(), 50000);
+    }
+    private String sessionOrigin(String id){
+        return "https://" + sessionDomain(id) + ":" + sessionPort(id);
     }
 
     private void launchProfileSession(String id){
@@ -311,7 +316,7 @@ public final class MainActivity extends Activity {
             if(home!=null)home.setVisibility(View.GONE);
             loadedZipRevision=getZipRevision();
             createWeb();web.setVisibility(View.VISIBLE);
-            String origin="https://"+sessionDomain(activeProfileId)+"/game/";
+            String origin=sessionOrigin(activeProfileId)+"/game/";
             TextView loading=new TextView(this);
             loading.setText("Image Studio 서버 연결을 준비하고 있습니다…\n서버가 없는 경우에는 바로 게임을 엽니다.");
             loading.setTextColor(Color.WHITE);loading.setTextSize(14);loading.setGravity(android.view.Gravity.CENTER);
@@ -401,9 +406,11 @@ public final class MainActivity extends Activity {
 
     private void createWeb(){
         String domain=sessionDomain(activeProfileId);
+        String origin=sessionOrigin(activeProfileId);
+        int originPort=sessionPort(activeProfileId);
         web=new WebView(this);WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setDatabaseEnabled(true);s.setUseWideViewPort(true);s.setLoadWithOverviewMode(true);s.setTextZoom(100);s.setSupportZoom(true);s.setBuiltInZoomControls(false);s.setDisplayZoomControls(false);s.setAllowFileAccess(false);s.setAllowContentAccess(false);s.setCacheMode(WebSettings.LOAD_NO_CACHE);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);web.addJavascriptInterface(new HostBridge(),"WMLHost");
-        installImageGenDocumentStartScript(domain);
-        FolderHandler folderHandler=new FolderHandler(tree,getAssets(),zipMods,"https://"+domain);
+        installImageGenDocumentStartScript(origin);
+        FolderHandler folderHandler=new FolderHandler(tree,getAssets(),zipMods,origin);
         WebViewAssetLoader loader=new WebViewAssetLoader.Builder().setDomain(domain).addPathHandler("/game/",folderHandler).build();
         web.setWebViewClient(new WebViewClient(){
             @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest r){
@@ -412,14 +419,14 @@ public final class MainActivity extends Activity {
                 return null;
             }
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){
-                Uri u=r.getUrl();if(domain.equalsIgnoreCase(u.getHost()))return false;
+                Uri u=r.getUrl();if(domain.equalsIgnoreCase(u.getHost())&&u.getPort()==originPort)return false;
                 String p=u.getScheme();if("https".equalsIgnoreCase(p)||"http".equalsIgnoreCase(p)||"mailto".equalsIgnoreCase(p)){try{startActivity(new Intent(Intent.ACTION_VIEW,u));return true;}catch(Exception ignored){return false;}}return true;
             }
         });
         webFileChooser=new WebFileChooser(this);web.setWebChromeClient(webFileChooser);root.addView(web,new FrameLayout.LayoutParams(-1,-1));web.setVisibility(View.GONE);
     }
 
-    private void installImageGenDocumentStartScript(String domain) {
+    private void installImageGenDocumentStartScript(String origin) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             if (imageGenStatus != null) imageGenStatus.setText("이 Android System WebView는 이미지 서버 연결 스크립트를 지원하지 않습니다. WebView 업데이트가 필요합니다.");
             return;
@@ -434,7 +441,7 @@ public final class MainActivity extends Activity {
             }
             String source = new String(out.toByteArray(), StandardCharsets.UTF_8);
             WebViewCompat.addDocumentStartJavaScript(
-                    web, source, Collections.singleton("https://" + domain));
+                    web, source, Collections.singleton(origin));
         } catch (Exception e) {
             if (imageGenStatus != null) imageGenStatus.setText("ImageGen 연결 스크립트를 준비하지 못했습니다: " + msg(e));
         }

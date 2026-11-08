@@ -13,7 +13,7 @@ Android SAF 폴더 실행기입니다. 게임 원본 폴더는 직접 읽고, ZI
 
 게임 파일명은 Wayward_WML_ko.html, Wayward_WML.html, index.html을 우선하고, 그 외에는 루트의 Wayward_Faith*.html 또는 Wayward*.html을 탐색합니다.
 
-각 폴더는 안정적인 프로필 ID를 사용하고, WebView 출처도 프로필마다 다르게 만들어 localStorage·IndexedDB·WML 모드 on/off·로드 순서를 분리합니다. Android가 백그라운드 세션의 프로세스를 종료할 수는 있지만, 최근 앱에서 다시 열면 같은 폴더와 같은 세션 저장소로 복구됩니다.
+각 폴더는 안정적인 프로필 ID를 사용하고, WebView 출처는 `https://localhost:<프로필별 고정 포트>`로 구성해 localStorage·IndexedDB·WML 모드 on/off·로드 순서를 프로필별로 분리합니다. `localhost` 출처는 게임의 기존 이미지 백엔드 자동 탐색 조건도 만족시키며, HTTPS AssetLoader로 게임 파일을 제공합니다. Android가 백그라운드 세션의 프로세스를 종료할 수는 있지만, 최근 앱에서 다시 열면 같은 폴더와 같은 세션 저장소로 복구됩니다.
 
 ## 2. WML ZIP 모드 설치
 
