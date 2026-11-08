@@ -241,7 +241,7 @@ assert.equal(updated.length, previousUpdates, "Hidden cards should not trigger r
 windowListeners.pagehide();
 assert.equal(unsubscribed, true);
 assert.equal(document.body.children.length, 0);
-assert.equal(document.head.children.length, 0);
+assert.equal(document.head.children.length, 2, "Existing document images must remain in place after adapter cleanup.");
 assert.deepEqual(destroyed, ["a", "b"]);
 
 console.log("Companions mobile adapter contract tests passed.");
