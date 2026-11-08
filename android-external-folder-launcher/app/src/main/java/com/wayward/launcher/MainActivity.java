@@ -9,6 +9,8 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
@@ -26,6 +28,8 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.webkit.WebViewAssetLoader;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.ByteArrayInputStream;
@@ -63,7 +67,11 @@ public final class MainActivity extends Activity {
     private long loadedZipRevision=-1;
     private FrameLayout root;
     private LinearLayout home, profileList, zipModList;
-    private TextView status, folderText, profileSummary, zipSummary;
+    private TextView status, folderText, profileSummary, zipSummary, imageGenStatus;
+    private boolean imageGenCopying = false;
+    private final Handler imageGenHandler = new Handler(Looper.getMainLooper());
+    private final List<Runnable> imageGenReadyCallbacks = new ArrayList<>();
+    private Runnable imageGenPollRunnable;
     private WebView web;
     private WebFileChooser webFileChooser;
 
@@ -81,7 +89,7 @@ public final class MainActivity extends Activity {
         loadProfiles();
         long revision=getSharedPreferences(PREFS,MODE_PRIVATE).getLong(KEY_ZIP_REV,0);
         if(web!=null&&revision!=loadedZipRevision){loadedZipRevision=revision;web.reload();}
-        if(home!=null&&home.getVisibility()==View.VISIBLE){renderProfiles();renderZipMods();refreshStatus();}
+        if(home!=null&&home.getVisibility()==View.VISIBLE){renderProfiles();renderZipMods();refreshStatus();refreshImageGenStatus();}
     }
     @Override protected void onNewIntent(Intent intent){
         super.onNewIntent(intent);setIntent(intent);
@@ -128,10 +136,21 @@ public final class MainActivity extends Activity {
         zipSummary=new TextView(this);zipSummary.setTextColor(Color.rgb(160,180,166));zipSummary.setTextSize(12);LinearLayout.LayoutParams zsl=new LinearLayout.LayoutParams(-1,-2);zsl.topMargin=dp(7);page.addView(zipSummary,zsl);
         zipModList=new LinearLayout(this);zipModList.setOrientation(LinearLayout.VERTICAL);LinearLayout.LayoutParams zpl=new LinearLayout.LayoutParams(-1,-2);zpl.topMargin=dp(6);page.addView(zipModList,zpl);
 
+        TextView imageTitle=new TextView(this);imageTitle.setText("이미지 생성 · Image Studio");imageTitle.setTextColor(Color.WHITE);imageTitle.setTextSize(16);imageTitle.setTypeface(null,1);
+        LinearLayout.LayoutParams imageTitleParams=new LinearLayout.LayoutParams(-1,-2);imageTitleParams.topMargin=dp(24);imageTitleParams.bottomMargin=dp(7);page.addView(imageTitle,imageTitleParams);
+        TextView imageDesc=new TextView(this);imageDesc.setText("설치된 imagestudio 모드의 wayward-imagegen 서버를 휴대폰에서 실행합니다. NovelAI는 휴대폰에서 직접 연결하며 PC나 Termux가 필요하지 않습니다.");imageDesc.setTextColor(Color.rgb(174,194,181));imageDesc.setTextSize(12);imageDesc.setLineSpacing(dp(2),1f);page.addView(imageDesc);
+        imageGenStatus=new TextView(this);imageGenStatus.setTextColor(Color.rgb(245,210,130));imageGenStatus.setTextSize(12);imageGenStatus.setPadding(dp(10),dp(9),dp(10),dp(9));imageGenStatus.setBackgroundColor(Color.rgb(35,48,40));
+        LinearLayout.LayoutParams imageStatusParams=new LinearLayout.LayoutParams(-1,-2);imageStatusParams.topMargin=dp(8);imageStatusParams.bottomMargin=dp(7);page.addView(imageGenStatus,imageStatusParams);
+        page.addView(button("이미지 생성 서버 시작 / 연결",true,()->startImageGenServer(true)),buttonParams());
+        LinearLayout imageActions=new LinearLayout(this);imageActions.setOrientation(LinearLayout.HORIZONTAL);
+        Button imageSettings=compactButton("NovelAI 설정 열기",false,this::openImageGenSettings);imageActions.addView(imageSettings,new LinearLayout.LayoutParams(0,dp(46),1f));
+        Button imageStop=compactButton("서버 중지",false,this::stopImageGenServer);LinearLayout.LayoutParams imageStopParams=new LinearLayout.LayoutParams(0,dp(46),1f);imageStopParams.leftMargin=dp(6);imageActions.addView(imageStop,imageStopParams);
+        LinearLayout.LayoutParams imageActionsParams=new LinearLayout.LayoutParams(-1,-2);imageActionsParams.topMargin=dp(6);page.addView(imageActions,imageActionsParams);
+
         TextView help=new TextView(this);help.setText("ZIP 설치 위치: 이 앱의 비공개 files 저장소\n게임 폴더에는 ZIP이나 압축 해제 파일을 쓰지 않습니다. 설치한 모드는 등록된 게임 세션에서 공통으로 사용할 수 있으며, 모드 활성화/순서는 각 게임 세션의 브라우저 저장소에 따로 보관됩니다.");
         help.setTextColor(Color.rgb(151,171,158));help.setTextSize(12);help.setLineSpacing(dp(3),1f);LinearLayout.LayoutParams hl=new LinearLayout.LayoutParams(-1,-2);hl.topMargin=dp(18);page.addView(help,hl);
         home=page;root.addView(scroll,new FrameLayout.LayoutParams(-1,-1));setContentView(root);
-        renderProfiles();renderZipMods();
+        renderProfiles();renderZipMods();refreshImageGenStatus();
     }
 
     private Button compactButton(String label,boolean primary,Runnable action){
@@ -296,7 +315,17 @@ public final class MainActivity extends Activity {
             loadedZipRevision=getZipRevision();
             createWeb();web.setVisibility(View.VISIBLE);
             String origin="https://"+sessionDomain(activeProfileId)+"/game/";
-            web.loadUrl(origin+Uri.encode(file)+"?launcher="+System.currentTimeMillis());
+            TextView loading=new TextView(this);
+            loading.setText("Image Studio 서버 연결을 준비하고 있습니다…\n서버가 없는 경우에는 바로 게임을 엽니다.");
+            loading.setTextColor(Color.WHITE);loading.setTextSize(14);loading.setGravity(android.view.Gravity.CENTER);
+            loading.setBackgroundColor(Color.rgb(16,25,21));
+            root.addView(loading,new FrameLayout.LayoutParams(-1,-1));
+            String gameUrl=origin+Uri.encode(file)+"?launcher="+System.currentTimeMillis();
+            ensureImageGenServer(()->{
+                if(web==null||!activeProfileId.equals(id))return;
+                if(loading.getParent()==root)root.removeView(loading);
+                web.loadUrl(gameUrl);
+            });
         }catch(Exception e){status("게임 실행 실패: "+msg(e));}
     }
 
@@ -376,6 +405,7 @@ public final class MainActivity extends Activity {
     private void createWeb(){
         String domain=sessionDomain(activeProfileId);
         web=new WebView(this);WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setDatabaseEnabled(true);s.setUseWideViewPort(true);s.setLoadWithOverviewMode(true);s.setTextZoom(100);s.setSupportZoom(true);s.setBuiltInZoomControls(false);s.setDisplayZoomControls(false);s.setAllowFileAccess(false);s.setAllowContentAccess(false);s.setCacheMode(WebSettings.LOAD_NO_CACHE);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);web.addJavascriptInterface(new HostBridge(),"WMLHost");
+        installImageGenDocumentStartScript(domain);
         FolderHandler folderHandler=new FolderHandler(tree,getAssets(),zipMods,"https://"+domain);
         WebViewAssetLoader loader=new WebViewAssetLoader.Builder().setDomain(domain).addPathHandler("/game/",folderHandler).build();
         web.setWebViewClient(new WebViewClient(){
@@ -392,6 +422,193 @@ public final class MainActivity extends Activity {
         webFileChooser=new WebFileChooser(this);web.setWebChromeClient(webFileChooser);root.addView(web,new FrameLayout.LayoutParams(-1,-1));web.setVisibility(View.GONE);
     }
 
+    private void installImageGenDocumentStartScript(String domain) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            if (imageGenStatus != null) imageGenStatus.setText("이 Android System WebView는 이미지 서버 연결 스크립트를 지원하지 않습니다. WebView 업데이트가 필요합니다.");
+            return;
+        }
+        try (InputStream in = getAssets().open("imagegen-proxy.js")) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = in.read(buffer)) >= 0) {
+                if (count > 0) out.write(buffer, 0, count);
+                if (out.size() > 64 * 1024) throw new IllegalStateException("ImageGen 연결 스크립트가 너무 큽니다.");
+            }
+            String source = new String(out.toByteArray(), StandardCharsets.UTF_8);
+            WebViewCompat.addDocumentStartJavaScript(
+                    web, source, Collections.singleton("https://" + domain));
+        } catch (Exception e) {
+            if (imageGenStatus != null) imageGenStatus.setText("ImageGen 연결 스크립트를 준비하지 못했습니다: " + msg(e));
+        }
+    }
+
+    private File imageGenBackendRoot() {
+        return new File(getFilesDir(), "imagegen/backend");
+    }
+
+    private boolean ensureImageGenBackend() throws Exception {
+        File backend = imageGenBackendRoot();
+        if (new File(backend, "wayward-imagegen/package.json").isFile()
+                && new File(backend, "wayward-imagegen/src/cli.ts").isFile()) return true;
+        if (new File(backend, "package.json").isFile() && new File(backend, "src/cli.ts").isFile()) return true;
+
+        for (GameProfile profile : profiles) {
+            SafTree candidate = new SafTree(Uri.parse(profile.uri));
+            if (candidate.copyDirectory("wml/mods/imagestudio/backend", backend)) {
+                if (hasImageGenProject(backend)) return true;
+                deleteFileTree(backend);
+            }
+        }
+
+        if (zipMods != null && zipMods.extractDirectory("imagestudio", "backend", backend)) {
+            if (hasImageGenProject(backend)) return true;
+            deleteFileTree(backend);
+        }
+        return false;
+    }
+
+    private boolean hasImageGenProject(File backend) {
+        File nested = new File(backend, "wayward-imagegen");
+        File project = new File(nested, "src/cli.ts").isFile() ? nested : backend;
+        return new File(project, "package.json").isFile() && new File(project, "src/cli.ts").isFile();
+    }
+
+    private void ensureImageGenServer(Runnable afterReady) {
+        startImageGenServer(false, afterReady);
+    }
+
+    private void startImageGenServer(boolean showFeedback) {
+        startImageGenServer(showFeedback, null);
+    }
+
+    private void startImageGenServer(boolean showFeedback, Runnable afterReady) {
+        if (afterReady != null) imageGenReadyCallbacks.add(afterReady);
+        if (ImageGenService.serverReady) {
+            refreshImageGenStatus();
+            finishImageGenCallbacks();
+            if (showFeedback) Toast.makeText(this, "이미지 생성 서버가 이미 실행 중입니다.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (ImageGenService.starting || imageGenCopying) {
+            waitForImageGenReady();
+            return;
+        }
+        imageGenCopying = true;
+        if (imageGenStatus != null) imageGenStatus.setText("Image Studio 백엔드를 확인하고 앱 내부 저장소에 준비하고 있습니다…");
+        new Thread(() -> {
+            String error = null;
+            File backend = imageGenBackendRoot();
+            try {
+                if (!ensureImageGenBackend()) {
+                    throw new IllegalStateException("imagestudio 모드의 backend/wayward-imagegen을 찾지 못했습니다. Image Studio 모드 ZIP을 먼저 설치하세요.");
+                }
+            } catch (Exception e) {
+                error = msg(e);
+            }
+            final String problem = error;
+            runOnUiThread(() -> {
+                imageGenCopying = false;
+                if (problem != null) {
+                    if (imageGenStatus != null) imageGenStatus.setText(problem);
+                    if (showFeedback) Toast.makeText(this, problem, Toast.LENGTH_LONG).show();
+                    finishImageGenCallbacks();
+                    return;
+                }
+                startImageGenService(backend);
+                waitForImageGenReady();
+            });
+        }, "wayward-imagegen-prepare").start();
+    }
+
+    private void waitForImageGenReady() {
+        if (imageGenReadyCallbacks.isEmpty() || imageGenPollRunnable != null) return;
+        final long deadline = System.currentTimeMillis() + 6L * 60L * 1000L;
+        imageGenPollRunnable = new Runnable() {
+            @Override public void run() {
+                boolean finished = ImageGenService.serverReady
+                        || (!ImageGenService.starting && !imageGenCopying)
+                        || System.currentTimeMillis() >= deadline;
+                if (finished) {
+                    imageGenPollRunnable = null;
+                    finishImageGenCallbacks();
+                    refreshImageGenStatus();
+                } else {
+                    imageGenHandler.postDelayed(this, 500);
+                }
+            }
+        };
+        imageGenHandler.post(imageGenPollRunnable);
+    }
+
+    private void finishImageGenCallbacks() {
+        if (imageGenPollRunnable != null) {
+            imageGenHandler.removeCallbacks(imageGenPollRunnable);
+            imageGenPollRunnable = null;
+        }
+        List<Runnable> callbacks = new ArrayList<>(imageGenReadyCallbacks);
+        imageGenReadyCallbacks.clear();
+        for (Runnable callback : callbacks) {
+            try { callback.run(); } catch (Exception ignored) {}
+        }
+    }
+
+    private void startImageGenService(File backend) {
+        Intent intent = new Intent(this, ImageGenService.class);
+        intent.setAction(ImageGenService.ACTION_START);
+        intent.putExtra(ImageGenService.EXTRA_BACKEND_ROOT, backend.getAbsolutePath());
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
+            else startService(intent);
+            if (imageGenStatus != null) imageGenStatus.setText("이미지 생성 서버 시작 중 · 첫 실행은 런타임/패키지 설치로 시간이 걸릴 수 있습니다.");
+        } catch (Exception e) {
+            ImageGenService.starting = false;
+            ImageGenService.statusMessage = "이미지 서버 시작 실패: " + msg(e);
+            if (imageGenStatus != null) imageGenStatus.setText(ImageGenService.statusMessage);
+            finishImageGenCallbacks();
+        }
+    }
+
+    private void stopImageGenServer() {
+        Intent intent = new Intent(this, ImageGenService.class).setAction(ImageGenService.ACTION_STOP);
+        try {
+            startService(intent);
+        } catch (Exception ignored) {
+            stopService(new Intent(this, ImageGenService.class));
+        }
+        if (imageGenStatus != null) imageGenStatus.setText("이미지 생성 서버 중지 요청을 보냈습니다.");
+    }
+
+    private void refreshImageGenStatus() {
+        if (imageGenStatus == null) return;
+        if (ImageGenService.serverReady) imageGenStatus.setText("연결됨 · 휴대폰 이미지 생성 서버 127.0.0.1:8189");
+        else if (ImageGenService.starting) imageGenStatus.setText(ImageGenService.statusMessage);
+        else if (imageGenCopying) imageGenStatus.setText("Image Studio 백엔드 준비 중…");
+        else imageGenStatus.setText(ImageGenService.statusMessage);
+    }
+
+    private void openImageGenSettings() {
+        if (!ImageGenService.serverReady) {
+            Toast.makeText(this, "먼저 이미지 생성 서버를 시작해 주세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("http://127.0.0.1:8189/?panel=anima")));
+        } catch (Exception e) {
+            Toast.makeText(this, "설정 화면을 열지 못했습니다: " + msg(e), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private static void deleteFileTree(File file) {
+        if (file == null || !file.exists()) return;
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) for (File child : children) deleteFileTree(child);
+        }
+        file.delete();
+    }
+
     private void showHomePanel(){runOnUiThread(()->{if(web!=null)web.setVisibility(View.GONE);if(home!=null)home.setVisibility(View.VISIBLE);refreshStatus();});}
     private void destroyWeb(){if(webFileChooser!=null){webFileChooser.cancelPending();webFileChooser=null;}if(web==null)return;web.removeJavascriptInterface("WMLHost");root.removeView(web);web.stopLoading();web.loadUrl("about:blank");web.destroy();web=null;}
     @Override public void onBackPressed(){if(web!=null&&web.getVisibility()==View.VISIBLE){if(web.canGoBack())web.goBack();else showHomePanel();return;}super.onBackPressed();}
@@ -401,7 +618,10 @@ public final class MainActivity extends Activity {
     }
     private String msg(Throwable e){return e==null||e.getMessage()==null?"알 수 없는 오류":e.getMessage();}
     private final class HostBridge{
-        @JavascriptInterface public String version(){return "0.2.0";}
+        @JavascriptInterface public String version(){return "0.3.0";}
+        @JavascriptInterface public void imageGenProxyFetch(String requestId,String method,String path,String headersJson,String bodyBase64){
+            ImageGenProxy.dispatch(web,requestId,method,path,headersJson,bodyBase64);
+        }
         @JavascriptInterface public String listModIds(){
             try{JSONObject r=new JSONObject();JSONArray a=new JSONArray();for(String id:allModIds())a.put(id);r.put("ok",true);r.put("ids",a);return r.toString();}
             catch(Exception e){try{JSONObject r=new JSONObject();r.put("ok",false);r.put("ids",new JSONArray());return r.toString();}catch(Exception ignored){return "{}";}}
@@ -493,6 +713,43 @@ public final class MainActivity extends Activity {
         }
         boolean exists(String p){try{Node n=resolve(p);return n!=null&&!n.dir;}catch(Exception e){return false;}}
         InputStream open(String p)throws Exception{Node n=resolve(p);if(n==null||n.dir)return null;return getContentResolver().openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree,n.id));}
+        boolean copyDirectory(String relativePath,File destination)throws Exception{
+            Node source=resolve(relativePath);if(source==null||!source.dir)return false;
+            deleteFileTree(destination);
+            if(!destination.mkdirs()&&!destination.isDirectory())throw new IllegalStateException("앱 내부 ImageGen 폴더를 만들지 못했습니다.");
+            long[] total={0};int[] count={0};
+            try{copyChildren(source.id,destination,destination.getCanonicalFile(),total,count);}
+            catch(Exception e){deleteFileTree(destination);throw e;}
+            if(count[0]==0){deleteFileTree(destination);return false;}
+            return true;
+        }
+        private void copyChildren(String parentId,File outputRoot,File canonicalRoot,long[] total,int[] count)throws Exception{
+            String rootPath=canonicalRoot.getPath()+File.separator;
+            for(Node child:children(parentId)){
+                String name=child.name;
+                if(name==null||name.isEmpty()||name.equals(".")||name.equals("..")||name.indexOf('/')>=0||name.indexOf(92)>=0||name.indexOf(0)>=0)continue;
+                if(++count[0]>20000)throw new IllegalStateException("ImageGen 파일 수가 20,000개 제한을 초과했습니다.");
+                File out=new File(outputRoot,name).getCanonicalFile();
+                if(!out.getPath().startsWith(rootPath))throw new SecurityException("ImageGen 경로가 앱 내부 저장소를 벗어납니다.");
+                if(child.dir){
+                    if(!out.mkdirs()&&!out.isDirectory())throw new IllegalStateException("ImageGen 폴더 생성 실패");
+                    copyChildren(child.id,out,canonicalRoot,total,count);
+                    continue;
+                }
+                File parent=out.getParentFile();if(parent!=null&&!parent.mkdirs()&&!parent.isDirectory())throw new IllegalStateException("ImageGen 상위 폴더 생성 실패");
+                try(InputStream in=getContentResolver().openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree,child.id));
+                    FileOutputStream output=new FileOutputStream(out)){
+                    if(in==null)throw new IllegalStateException("ImageGen 파일을 읽지 못했습니다: "+name);
+                    byte[] buffer=new byte[32768];long fileBytes=0;int n;
+                    while((n=in.read(buffer))>=0){
+                        if(n==0)continue;fileBytes+=n;total[0]+=n;
+                        if(fileBytes>256L*1024L*1024L||total[0]>512L*1024L*1024L)throw new IllegalStateException("ImageGen 백엔드가 512MB 제한을 초과했습니다.");
+                        output.write(buffer,0,n);
+                    }
+                    output.flush();
+                }
+            }
+        }
         List<String> listModIds()throws Exception{
             List<String> ids=new ArrayList<>();Node mods=resolve("wml/mods");if(mods==null||!mods.dir)return ids;
             for(Node d:children(mods.id)){if(!d.dir||!ID.matcher(d.name).matches())continue;Node f=find(d.id,"mod.js");if(f==null||f.dir)continue;String id=declared(f);if(id!=null&&(id.isEmpty()||id.equals(d.name)))ids.add(d.name);}

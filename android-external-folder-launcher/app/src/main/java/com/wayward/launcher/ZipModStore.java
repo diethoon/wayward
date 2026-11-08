@@ -118,6 +118,88 @@ final class ZipModStore {
         }
     }
 
+    boolean extractDirectory(String modId, String relativeDirectory, File destination) throws IOException {
+        if (modId == null || !ID.matcher(modId).matches()) {
+            throw new IOException("잘못된 WML 모드 ID");
+        }
+        String safeDirectory = safeEntryName(relativeDirectory);
+        if (safeDirectory == null) throw new IOException("백엔드 경로가 안전하지 않습니다.");
+
+        File archive = fileFor(modId);
+        if (!archive.isFile() || archive.length() > MAX_ARCHIVE_BYTES) return false;
+        File root = destination.getCanonicalFile();
+        String rootPath = root.getPath() + File.separator;
+        deleteTree(root);
+        if (!root.mkdirs() && !root.isDirectory()) throw new IOException("앱 내부 백엔드 저장소를 만들지 못했습니다.");
+
+        int copiedFiles = 0;
+        int visited = 0;
+        long totalBytes = 0;
+        try (ZipFile zip = new ZipFile(archive)) {
+            ModInfo info = inspect(zip);
+            if (!modId.equals(info.id)) throw new IOException("ZIP 모드 ID가 일치하지 않습니다.");
+            String prefix = info.prefix + safeDirectory + "/";
+            Enumeration<? extends ZipEntry> entries = zip.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
+                String entryName = safeEntryName(entry.getName());
+                if (entryName == null || !entryName.startsWith(prefix)) continue;
+                String relative = entryName.substring(prefix.length());
+                if (relative.isEmpty()) continue;
+                if (++visited > 20000) throw new IOException("백엔드 파일 수가 20,000개 제한을 초과했습니다.");
+
+                File output = new File(root, relative.replace('/', File.separatorChar)).getCanonicalFile();
+                if (!output.getPath().startsWith(rootPath)) {
+                    throw new IOException("ZIP 백엔드 경로가 저장소를 벗어납니다.");
+                }
+                if (entry.isDirectory()) {
+                    if (!output.mkdirs() && !output.isDirectory()) throw new IOException("백엔드 폴더 생성 실패");
+                    continue;
+                }
+                long declaredSize = entry.getSize();
+                if (declaredSize > MAX_ENTRY_BYTES) throw new IOException("백엔드 파일이 256MB 제한을 초과했습니다.");
+                File parent = output.getParentFile();
+                if (parent != null && !parent.mkdirs() && !parent.isDirectory()) {
+                    throw new IOException("백엔드 상위 폴더 생성 실패");
+                }
+                try (InputStream in = zip.getInputStream(entry);
+                     java.io.FileOutputStream out = new java.io.FileOutputStream(output)) {
+                    byte[] buffer = new byte[32768];
+                    long fileBytes = 0;
+                    int count;
+                    while ((count = in.read(buffer)) >= 0) {
+                        if (count == 0) continue;
+                        fileBytes += count;
+                        totalBytes += count;
+                        if (fileBytes > MAX_ENTRY_BYTES || totalBytes > 512L * 1024L * 1024L) {
+                            throw new IOException("백엔드 압축 해제 용량 제한을 초과했습니다.");
+                        }
+                        out.write(buffer, 0, count);
+                    }
+                    out.flush();
+                }
+                copiedFiles++;
+            }
+        } catch (IOException e) {
+            deleteTree(root);
+            throw e;
+        }
+        if (copiedFiles == 0) {
+            deleteTree(root);
+            return false;
+        }
+        return true;
+    }
+
+    private static void deleteTree(File file) {
+        if (file == null || !file.exists()) return;
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) for (File child : children) deleteTree(child);
+        }
+        file.delete();
+    }
+
     static ModInfo inspect(File archive) throws IOException {
         if (archive == null || !archive.isFile()) throw new IOException("ZIP 파일을 찾을 수 없습니다.");
         if (archive.length() <= 0 || archive.length() > MAX_ARCHIVE_BYTES) {

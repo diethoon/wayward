@@ -1,6 +1,8 @@
-# Wayward Android Launcher 0.2.1 · 파일 선택 수정
+# Wayward Android Launcher 0.3.0 · Image Studio 연결
 
-Android SAF 폴더 실행기입니다. 게임 원본 폴더는 직접 읽고, ZIP 모드는 앱 내부에 압축 파일 그대로 보관해 WML 경로로 가상 제공하며, 여러 게임 폴더를 독립 세션으로 실행합니다.
+Android SAF 폴더 실행기입니다. 게임 원본 폴더는 직접 읽고, ZIP 모드는 앱 내부에 압축 파일 그대로 보관해 WML 경로로 가상 제공하며, 여러 게임 폴더를 독립 세션으로 실행합니다. 기존 0.2.1의 폴더 선택·ZIP 설치·세션 분리는 유지했습니다.
+
+> **설치 주의:** 0.3.0 테스트 APK는 기존 앱 서명키를 확인할 수 없어 `com.wayward.launcher.imagegen` 별도 앱 ID로 빌드합니다. 기존 0.2.1을 삭제하거나 덮어쓰지 않습니다. Android 앱 데이터(WebView의 IndexedDB/localStorage)는 앱 간 자동 공유되지 않으므로 새 앱에서 게임 폴더를 다시 등록해야 하고, 기존 로컬 저장 데이터는 구형 앱에 남습니다. 교체 전에 게임 내보내기 또는 클라우드 세이브를 확인하세요.
 
 ## 1. 게임 폴더 등록과 여러 세션
 
@@ -58,6 +60,14 @@ ZIP 1개는 WML 모드 1개를 포함해야 합니다. mod.js가 없거나, WML.
 
 이번 파일 선택 수정 빌드는 `com.wayward.launcher.zipmulti.filepicker` 패키지를 사용합니다. 기존 0.2.0 `.zipmulti` 앱과 동시에 설치할 수 있으며, 기존 앱을 삭제할 필요가 없습니다. 단, Android 앱 데이터 공간은 패키지별로 분리되므로 새 앱에서 게임 폴더를 다시 선택해야 하고, 이전 앱의 WebView localStorage/IndexedDB·WML 설정은 자동 이전되지 않습니다. 기존 앱은 세이브 데이터 확인 전까지 삭제하지 마세요.
 
-## 6. 검증 범위
+## 6. 휴대폰 이미지 생성
+
+Image Studio ZIP 또는 폴더 모드의 `backend/wayward-imagegen`을 감지하면 게임 실행 전에 서버를 시작하고, 서버 상태가 확인되면 HTML을 엽니다. 백엔드 파일은 앱 전용 저장소에 복사하며 게임 폴더에는 쓰지 않습니다. Bun Android ARM64 v1.4.4 실행 파일은 공식 아카이브를 내려받아 SHA-256을 검증한 뒤 앱 내부에 설치합니다. 서버는 사용자가 게임을 실행할 때 시작하는 Foreground Service로 유지되며 알림에서 중지할 수 있습니다.
+
+처음 실행할 때는 런처 홈의 **NovelAI 설정 열기**에서 Image Studio의 기존 설정 화면을 열고 NovelAI 인증 정보를 설정해야 할 수 있습니다. 다음 실행부터는 서버 시작을 자동으로 시도합니다. 게임의 `http://127.0.0.1:8189/api/*` 요청만 네이티브 브리지로 전달하며, 그 외 외부 요청은 변경하지 않습니다.
+
+**미완료/미검증:** Bun Android는 실험적 지원이므로 Galaxy S25 Ultra에서 실제 실행·종속 패키지 설치·NovelAI 생성까지 아직 검증되지 않았습니다. 현재 브리지는 Fetch 기반 `/api/*` 요청만 처리하며 WebSocket/EventSource/XHR 경로는 확인되지 않았습니다. 집 PC ComfyUI 원격 프로필과 주소 자동 검색은 EasyGen 설정 API 계약 확인 전이라 포함하지 않았습니다.
+
+## 7. 검증 범위
 
 CI에서 Android APK 컴파일·서명 검증을 수행합니다. 실제 Android 기기의 ZIP 선택기, 모드별 자산 로딩, 최근 앱 간 세션 동시 실행은 기기에서 별도 확인해야 합니다. CI 통과를 실기기 동작 검증으로 간주하지 않습니다.
