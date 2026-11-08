@@ -510,6 +510,7 @@ public final class MainActivity extends Activity {
             runOnUiThread(() -> {
                 imageGenCopying = false;
                 if (problem != null) {
+                    ImageGenService.statusMessage = problem;
                     if (imageGenStatus != null) imageGenStatus.setText(problem);
                     if (showFeedback) Toast.makeText(this, problem, Toast.LENGTH_LONG).show();
                     finishImageGenCallbacks();

@@ -1,4 +1,6 @@
-# External-folder launcher forensic basis
+# External-folder launcher forensic basis (historical source provenance)
+
+> 이 문서는 런처 원본 소스를 복원할 때 참조한 과거 조사 기록이다. 현재 게임 HTML의 기준 저장소는 `diethoon/wayward`이며, 아래 `diethoon/3.36` SHA와 파일 크기를 현재 게임 기준으로 사용하지 않는다.
 
 Exact target:
 - Repository: diethoon/3.36

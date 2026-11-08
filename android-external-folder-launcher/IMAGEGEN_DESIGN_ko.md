@@ -1,7 +1,7 @@
 # Wayward Launcher 이미지 생성 연결 설계
 
 작성 기준: 2026-11-09
-상태: 설계안. EasyGen 서버 코드와 WML 클라이언트의 실제 요청 계약을 포렌식 확인하기 전에는 이미지 생성 연결 구현을 완료로 표시하지 않는다.
+상태: 부분 구현됨(2026-11-09). 작업 브랜치 `feature/android-imagegen-launcher-one-tap`에 내장 Bun 실행, 앱 전용 백엔드 복사, Foreground Service, HTTPS WebView용 제한된 Fetch 프록시가 구현되어 있다. 다만 실제 Android 기기 생성 테스트와 WML 모드의 fetch/XHR/WebSocket 호출 계약 전체 검증 전까지 완료로 표시하지 않는다.
 
 ## 목표와 사용자 흐름
 
@@ -137,9 +137,9 @@ ComfyUI의 원시 포트를 인터넷에 직접 공개하지 않는다. ComfyUI 
 1. EasyGen 서버 ZIP과 WML 클라이언트의 실제 코드를 확보해 원격형인지 로컬 실행형인지, API 경로/요청 형식/네이티브 의존성을 확정한다.
 2. Bun v1.4.4 Android ARM64 바이너리를 별도 테스트 앱에서 실행하고 Galaxy S25 Ultra에서 서버·파일·네이티브 모듈 호환성을 검증한다.
 3. Termux 없이 앱 관리 프로세스/서비스, 서버 파일 설치, 상태 확인, 재시작, 알림 기반 중지를 구현한다.
-4. WebView 네이티브 프록시를 통해 모바일 NovelAI 생성 요청부터 게임 내 이미지 표시까지 검증한다.
+4. WebView 네이티브 프록시(Fetch 기반)를 통해 모바일 NovelAI 생성 요청부터 게임 내 이미지 표시까지 검증한다. XHR/EventSource/WebSocket은 아직 지원 여부를 확인하지 않았다.
 5. PC용 Wayward ComfyUI Beacon/custom node와 포트 자동 검색을 구현한다.
-6. 한 줄 서버 주소 대체 입력, Named Tunnel/Access 인증 및 외부 접속을 검증한다.
+6. 한 줄 서버 주소 대체 입력, Named Tunnel/Access 인증 및 외부 접속을 검증한다. 현재 구현 브랜치에는 원격 PC ComfyUI 모드/Beacon과 외부 접속 UI가 아직 들어가지 않았다.
 7. Wayward/Faith 프로필별 설정 분리 및 Android에서 PC 전용 메뉴만 숨기는 동작을 검증한다.
 
 **완료 조건:** NovelAI는 Termux를 열지 않고 런처의 연결/시작 버튼 하나로 서버가 준비되어야 한다. PC ComfyUI는 LAN Beacon 자동 검색 후 포트 지정만으로 연결되어야 하며, Beacon이 없으면 한 줄 주소 입력으로 연결되어야 한다. 양쪽 모두 실제 생성 요청, 작업 상태, 결과 이미지 표시까지 성공해야 한다. 서버 상태 확인 화면이나 단순 ping만 구현된 것은 완료가 아니다.
