@@ -68,10 +68,10 @@ for hit in hits:
     })
 
 # Capture structural anchors for the story pane, layout owner, and likely action surfaces.
-anchors = [
-    b"function gat(", b"function vle(", b"function Jrt(", b"function Xrt(",
-    b"function Ihe(", b"물자", b"시설", b"업그레이드", b"채우기"
-]
+anchors = [x.encode("utf-8") for x in [
+    "function gat(", "function vle(", "function Jrt(", "function Xrt(",
+    "function Ihe(", "물자", "시설", "업그레이드", "채우기"
+]]
 anchor_contexts = []
 for needle in anchors:
     pos = 0
@@ -92,7 +92,7 @@ for needle in anchors:
 
 manifest = {
     "repository": "diethoon/wayward",
-    "branch": "fix/mobile-ui-migration-1.3.13",
+    "branch": "fix/mobile-ui-migration-1.3.14",
     "base_commit": "d80e57258d25261aac0233674a217c7a6cb03aa3",
     "source_path": str(SOURCE),
     "source_git_blob_sha": "d198eacfc127c55dc44bd5d1b8e29ff2bb7d08e6",
