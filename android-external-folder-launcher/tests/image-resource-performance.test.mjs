@@ -29,8 +29,12 @@ assert.ok(localOnlyRoute >= 0 && cdnFallbackRoute > localOnlyRoute,
 contains("InputStream openImage(String p)throws Exception");
 contains("isImageAssetPath(p)?tree.openImage(p):tree.open(p)");
 contains("isImageAssetPath(String path)");
-contains("private Node resolveImage(String path)");
-contains("private Node findIgnoreCase(String parent,String name)");
+contains("private Node resolveImage(String path,StringBuilder trace)");
+contains("private Node findIgnoreCase(String parent,String name,StringBuilder trace,int segmentIndex)");
+contains("image_saf_lookup");
+contains("image_stream_slow_or_failed");
+contains("openInputStreamMs");
+contains("segments");
 contains("candidate.name.toLowerCase(Locale.ROOT)");
 contains("caseInsensitiveDirectoryCache.put(parent,folded)");
 contains("dns-prefetch");
