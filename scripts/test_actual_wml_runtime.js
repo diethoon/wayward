@@ -218,7 +218,10 @@ function startServer(root) {
     }
     assert.equal(pageErrors.length, 0, "page errors: " + JSON.stringify(pageErrors));
 
-    const gatHook = hookReport.find(item => item.raw === "gat");\n    assert.ok(gatHook, "WML did not register the gat hook");\n    assert.ok(gatHook.calls > 0, "gat hook never ran after real game render");\n    console.log("REAL_WML_RELEVANT_CONSOLE", JSON.stringify(relevantConsole));
+    const gatHook = hookReport.find(item => item.raw === "gat");
+    assert.ok(gatHook, "WML did not register the gat hook");
+    assert.ok(gatHook.calls > 0, "gat hook never ran after real game render");
+    console.log("REAL_WML_RELEVANT_CONSOLE", JSON.stringify(relevantConsole));
     console.log("OPTIONAL_RESOURCE_FAILURES", JSON.stringify(
       failedRequests.filter(x => /i18n|compat|presets/.test(x.url))
     ));
