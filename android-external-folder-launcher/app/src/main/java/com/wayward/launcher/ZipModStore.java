@@ -8,7 +8,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -26,6 +29,7 @@ final class ZipModStore {
     private static final long MAX_ARCHIVE_BYTES = 512L * 1024L * 1024L;
     private static final long MAX_ENTRY_BYTES = 256L * 1024L * 1024L;
     private static final int MAX_MOD_JS_BYTES = 65536;
+    private static final int MAX_OPEN_ARCHIVES = 4;
     private static final Pattern ID = Pattern.compile("^[a-z0-9][a-z0-9._-]*$");
     private static final Pattern MOD_ID = Pattern.compile(
             "(?:\\bid\\s*:\\s*|[\"']id[\"']\\s*:\\s*)[\"']([a-z0-9][a-z0-9._-]*)[\"']");
@@ -36,7 +40,28 @@ final class ZipModStore {
         ModInfo(String id, String prefix) { this.id = id; this.prefix = prefix; }
     }
 
+    private static final class ArchiveHandle {
+        final ZipFile zip;
+        final ModInfo info;
+        final long length;
+        final long modifiedAt;
+        int readers;
+        boolean evicted;
+        boolean closed;
+
+        ArchiveHandle(ZipFile zip, ModInfo info, long length, long modifiedAt) {
+            this.zip = zip;
+            this.info = info;
+            this.length = length;
+            this.modifiedAt = modifiedAt;
+        }
+    }
+
     private final File directory;
+    private final Object archiveLock = new Object();
+    private final LinkedHashMap<String, ArchiveHandle> archiveCache =
+            new LinkedHashMap<>(8, 0.75f, true);
+    private int archiveOpenCountForTesting;
 
     ZipModStore(File filesDir) {
         directory = new File(filesDir, "wml-zip-mods");
@@ -61,25 +86,29 @@ final class ZipModStore {
         File destination = fileFor(info.id);
         if (destination.exists()) throw new IOException("이미 설치된 모드 ID입니다: " + info.id);
         if (!stagedZip.renameTo(destination)) throw new IOException("앱 내부 모드 저장소로 이동하지 못했습니다.");
+        invalidateArchive(info.id);
         return true;
     }
 
     boolean uninstall(String id) {
         File f = fileFor(id);
+        invalidateArchive(id);
         return !f.exists() || f.delete();
     }
 
+    /**
+     * Archive names are assigned from a validated mod.js during installation.
+     * Avoid reopening every ZIP and enumerating every entry on each UI refresh.
+     */
     List<String> listModIds() {
         File[] files = directory.listFiles((dir, name) -> name.toLowerCase(Locale.ROOT).endsWith(".zip"));
         if (files == null) return Collections.emptyList();
         List<String> ids = new ArrayList<>();
         for (File file : files) {
-            try {
-                ModInfo info = inspect(file);
-                if (file.getName().equals(info.id + ".zip")) ids.add(info.id);
-            } catch (Exception ignored) {
-                // Ignore incomplete/corrupt staged archives; the game must not load them.
-            }
+            if (!file.isFile() || file.length() <= 0 || file.length() > MAX_ARCHIVE_BYTES) continue;
+            String name = file.getName();
+            String id = name.substring(0, name.length() - 4);
+            if (ID.matcher(id).matches() && name.equals(id + ".zip")) ids.add(id);
         }
         Collections.sort(ids);
         return ids;
@@ -94,28 +123,111 @@ final class ZipModStore {
         if (!ID.matcher(id).matches()) return null;
 
         File archive = fileFor(id);
-        if (!archive.isFile() || archive.length() > MAX_ARCHIVE_BYTES) return null;
-        ZipFile zip = new ZipFile(archive);
+        if (!archive.isFile() || archive.length() <= 0 || archive.length() > MAX_ARCHIVE_BYTES) return null;
+        ArchiveHandle handle = acquireArchive(id, archive);
         boolean handedOff = false;
         try {
-            ModInfo info = inspect(zip);
-            if (!id.equals(info.id)) return null;
-            String entryName = info.prefix + relative.substring(slash + 1);
+            String entryName = handle.info.prefix + relative.substring(slash + 1);
             String safeName = safeEntryName(entryName);
             if (safeName == null) return null;
-            ZipEntry entry = zip.getEntry(safeName);
-            if (entry == null || entry.isDirectory()) return null;
-            if (entry.getSize() > MAX_ENTRY_BYTES) return null;
-            InputStream stream = zip.getInputStream(entry);
+            ZipEntry entry = handle.zip.getEntry(safeName);
+            if (entry == null || entry.isDirectory() || entry.getSize() > MAX_ENTRY_BYTES) return null;
+            InputStream stream = handle.zip.getInputStream(entry);
             handedOff = true;
             return new FilterInputStream(stream) {
+                private boolean released;
                 @Override public void close() throws IOException {
-                    try { super.close(); } finally { zip.close(); }
+                    if (released) return;
+                    released = true;
+                    try { super.close(); } finally { releaseArchive(handle); }
                 }
             };
         } finally {
-            if (!handedOff) zip.close();
+            if (!handedOff) releaseArchive(handle);
         }
+    }
+
+    private ArchiveHandle acquireArchive(String id, File archive) throws IOException {
+        long length = archive.length();
+        long modifiedAt = archive.lastModified();
+        synchronized (archiveLock) {
+            ArchiveHandle cached = archiveCache.get(id);
+            if (cached != null && !cached.closed
+                    && cached.length == length && cached.modifiedAt == modifiedAt) {
+                cached.readers++;
+                return cached;
+            }
+            if (cached != null) {
+                archiveCache.remove(id);
+                evictArchive(cached);
+            }
+
+            ZipFile zip = new ZipFile(archive);
+            try {
+                ModInfo info = inspect(zip);
+                if (!id.equals(info.id)) throw new IOException("ZIP 모드 파일명과 내부 ID가 일치하지 않습니다: " + id);
+                ArchiveHandle opened = new ArchiveHandle(zip, info, length, modifiedAt);
+                opened.readers = 1;
+                archiveCache.put(id, opened);
+                archiveOpenCountForTesting++;
+                trimArchiveCache();
+                return opened;
+            } catch (IOException error) {
+                try { zip.close(); } catch (IOException ignored) {}
+                throw error;
+            }
+        }
+    }
+
+    private void trimArchiveCache() {
+        while (archiveCache.size() > MAX_OPEN_ARCHIVES) {
+            Iterator<Map.Entry<String, ArchiveHandle>> iterator = archiveCache.entrySet().iterator();
+            if (!iterator.hasNext()) return;
+            ArchiveHandle eldest = iterator.next().getValue();
+            iterator.remove();
+            evictArchive(eldest);
+        }
+    }
+
+    private void invalidateArchive(String id) {
+        synchronized (archiveLock) {
+            ArchiveHandle handle = archiveCache.remove(id);
+            if (handle != null) evictArchive(handle);
+        }
+    }
+
+    private void evictArchive(ArchiveHandle handle) {
+        handle.evicted = true;
+        closeIfUnused(handle);
+    }
+
+    private void releaseArchive(ArchiveHandle handle) {
+        synchronized (archiveLock) {
+            if (handle.readers > 0) handle.readers--;
+            closeIfUnused(handle);
+        }
+    }
+
+    private void closeIfUnused(ArchiveHandle handle) {
+        if (handle.evicted && handle.readers == 0 && !handle.closed) {
+            handle.closed = true;
+            try { handle.zip.close(); } catch (IOException ignored) {}
+        }
+    }
+
+    void close() {
+        synchronized (archiveLock) {
+            for (ArchiveHandle handle : archiveCache.values()) evictArchive(handle);
+            archiveCache.clear();
+        }
+    }
+
+    int archiveOpenCountForTesting() {
+        synchronized (archiveLock) { return archiveOpenCountForTesting; }
+    }
+
+    int cachedArchiveCountForTesting() {
+        synchronized (archiveLock) { return archiveCache.size(); }
     }
 
     boolean extractDirectory(String modId, String relativeDirectory, File destination) throws IOException {
