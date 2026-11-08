@@ -1,4 +1,4 @@
-# Wayward Android Launcher 0.3.1 · Image Studio 세션 자동 연결
+# Wayward Android Launcher 0.3.2 · Image Studio 세션 자동 연결
 
 Android SAF 폴더 실행기입니다. 게임 원본 폴더는 직접 읽고, 일반 WML ZIP 모드는 앱 내부에 보관해 가상 제공하며, 여러 게임 폴더를 독립 세션으로 실행합니다. Image Studio 백엔드는 별도 ZIP 설치를 요구하지 않고 각 세션의 실제 WML 모드 폴더에서 감지합니다.
 
@@ -58,7 +58,7 @@ ZIP 1개는 WML 모드 1개를 포함해야 합니다. mod.js가 없거나, WML.
 
 ## 5. 설치 패키지
 
-이번 0.3.1 테스트 빌드는 `com.wayward.launcher.imagegen031` 패키지로 설치됩니다. 기존 0.3.0 `com.wayward.launcher.imagegen`과 별도 앱으로 공존하므로 기존 앱을 삭제하거나 덮어쓰지 않습니다. 두 APK의 CI 디버그 서명 인증서도 다르므로 같은 패키지 업데이트를 시도하지 않습니다. 두 앱은 `127.0.0.1:8189` 포트를 공유하므로 새 버전을 실행하기 전 기존 0.3.0 앱의 이미지 생성 서버를 중지하세요(기존 앱은 삭제하지 않아도 됩니다). Android 앱 데이터 공간은 패키지별로 분리되므로 새 앱에서 게임 폴더를 다시 선택해야 하고, 이전 앱의 WebView localStorage/IndexedDB·WML 설정은 자동 이전되지 않습니다. 기존 앱과 세이브 데이터는 새 버전 확인이 끝날 때까지 그대로 보존하세요.
+이번 0.3.2 테스트 빌드는 `com.wayward.launcher.imagegen032` 패키지로 설치됩니다. 기존 0.3.0 `com.wayward.launcher.imagegen`과 별도 앱으로 공존하므로 기존 앱을 삭제하거나 덮어쓰지 않습니다. 두 APK의 CI 디버그 서명 인증서도 다르므로 같은 패키지 업데이트를 시도하지 않습니다. 두 앱은 `127.0.0.1:8189` 포트를 공유하므로 새 버전을 실행하기 전 기존 0.3.0 앱의 이미지 생성 서버를 중지하세요(기존 앱은 삭제하지 않아도 됩니다). Android 앱 데이터 공간은 패키지별로 분리되므로 새 앱에서 게임 폴더를 다시 선택해야 하고, 이전 앱의 WebView localStorage/IndexedDB·WML 설정은 자동 이전되지 않습니다. 기존 앱과 세이브 데이터는 새 버전 확인이 끝날 때까지 그대로 보존하세요.
 
 ## 6. 세션별 Image Studio 자동 감지와 공통 서버
 

@@ -2,7 +2,6 @@ package com.wayward.launcher;
 
 import android.app.Application;
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Process;
 
@@ -26,8 +25,6 @@ import java.util.regex.Pattern;
 
 /** Bounded, redacted NDJSON journal shared by the main and :imagegen processes. */
 final class DiagnosticsLogger {
-    private static final String PREFS = "wayward_launcher_diagnostics";
-    private static final String DEVICE_ID = "device_id";
     private static final long MAX_FILE_BYTES = 512L * 1024L;
     private static final String ACTIVE = "launcher.ndjson";
     private static final String PREVIOUS = "launcher.previous.ndjson";
@@ -56,6 +53,9 @@ final class DiagnosticsLogger {
             event.put("pid", Process.myPid());
             event.put("details", details == null ? "" : redact(details.toString()));
             append(app, redact(event.toString()) + "\n");
+            if ("ERROR".equalsIgnoreCase(level) || "WARN".equalsIgnoreCase(level)) {
+                DiagnosticsUploader.uploadPending(app);
+            }
         } catch (Throwable ignored) {
             // Diagnostics must never crash or block the launcher.
         }
@@ -68,7 +68,8 @@ final class DiagnosticsLogger {
             if (error != null) {
                 java.io.StringWriter buffer = new java.io.StringWriter();
                 error.printStackTrace(new java.io.PrintWriter(buffer));
-                details.put("stack", redact(buffer.toString()));
+                String stack = redact(buffer.toString());
+                details.put("stack", stack.substring(0, Math.min(3600, stack.length())));
             }
         } catch (Exception ignored) {}
         event(context, "ERROR", component, name, details);
@@ -77,7 +78,8 @@ final class DiagnosticsLogger {
     static String deviceId(Context context) {
         final String[] value = new String[1];
         try {
-            withFileLock(context, () -> {
+            synchronized (LOCK) {
+                withFileLock(context, () -> {
                 File file = new File(new File(context.getFilesDir(), "diagnostics"), "device.id");
                 if (file.isFile()) {
                     try (BufferedReader reader = new BufferedReader(new InputStreamReader(
@@ -95,7 +97,8 @@ final class DiagnosticsLogger {
                     out.flush();
                     out.getFD().sync();
                 }
-            });
+                });
+            }
         } catch (Exception ignored) {
             value[0] = UUID.randomUUID().toString();
         }

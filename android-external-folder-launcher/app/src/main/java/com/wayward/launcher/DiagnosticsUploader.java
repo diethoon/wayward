@@ -21,7 +21,7 @@ import java.util.function.Consumer;
 
 /** Best-effort uploader; failed uploads remain in the local journal for a later retry. */
 final class DiagnosticsUploader {
-    private static final String BASE_URL = "https://wayward-launcher-diagnostics.onrender.com";
+    private static final String BASE_URL = "https://wayward-launcher-diagnostics-hoon-ead4.vercel.app";
     private static final ExecutorService WORKER = Executors.newSingleThreadExecutor();
     private static final AtomicBoolean BUSY = new AtomicBoolean(false);
     private DiagnosticsUploader() {}
@@ -71,7 +71,7 @@ final class DiagnosticsUploader {
         HttpURLConnection connection = null;
         try {
             byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
-            if (bytes.length > 64 * 1024) return false;
+            if (bytes.length > 56 * 1024) return false;
             connection = (HttpURLConnection) new URL(BASE_URL + path).openConnection();
             connection.setConnectTimeout(15000);
             connection.setReadTimeout(20000);

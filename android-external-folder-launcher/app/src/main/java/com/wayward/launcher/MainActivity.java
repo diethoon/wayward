@@ -205,6 +205,7 @@ public final class MainActivity extends Activity {
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
         if(treeUri!=null)i.putExtra(DocumentsContract.EXTRA_INITIAL_URI,treeUri);
         else if(!profiles.isEmpty())try{i.putExtra(DocumentsContract.EXTRA_INITIAL_URI,Uri.parse(profiles.get(profiles.size()-1).uri));}catch(Exception ignored){}
+        DiagnosticsLogger.event(this,"INFO","launcher","folder_picker_opened",null);
         startActivityForResult(i,PICK_TREE);
     }
 
@@ -222,10 +223,14 @@ public final class MainActivity extends Activity {
             return;
         }
         if(req==PICK_TREE){
-            if(result!=RESULT_OK||data==null||data.getData()==null)return;
+            if(result!=RESULT_OK||data==null||data.getData()==null){
+                DiagnosticsLogger.event(this,"WARN","launcher","folder_picker_cancelled",null);
+                return;
+            }
             Uri picked=data.getData();int flags=data.getFlags()&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             try{
                 getContentResolver().takePersistableUriPermission(picked,flags);
+                DiagnosticsLogger.event(this,"INFO","launcher","folder_permission_persisted",null);
                 String value=picked.toString();GameProfile profile=findProfileByUri(value);
                 if(profile==null){
                     String name=new SafTree(picked).rootName();
@@ -234,8 +239,9 @@ public final class MainActivity extends Activity {
                 }
                 activeProfileId=profile.id;treeUri=picked;tree=new SafTree(picked);saveProfiles();
                 refreshStatus();renderProfiles();renderZipMods();
+                DiagnosticsLogger.event(this,"INFO","launcher","game_folder_registered",null);
                 Toast.makeText(this,"게임 폴더를 등록했습니다. 목록에서 실행할 수 있습니다.",Toast.LENGTH_LONG).show();
-            }catch(Exception e){status("폴더 권한 저장 실패: "+msg(e));}
+            }catch(Exception e){DiagnosticsLogger.error(this,"launcher","folder_permission_failed",e);status("폴더 권한 저장 실패: "+msg(e));}
             return;
         }
         if(req==PICK_MOD_ZIP){
@@ -349,12 +355,13 @@ public final class MainActivity extends Activity {
     }
 
     private void openProfileSession(String id){
+        DiagnosticsLogger.event(this,"INFO","launcher","game_session_open_requested",null);
         GameProfile p=findProfile(id);
         if(p==null){status("등록된 게임 폴더를 찾지 못했습니다. 홈에서 다시 등록해 주세요.");return;}
         try{
             if(web!=null)destroyWeb();
             activeProfileId=p.id;treeUri=Uri.parse(p.uri);tree=new SafTree(treeUri);
-            String file=gameFile();if(file==null){status("선택한 폴더에서 Wayward HTML을 찾지 못했습니다: "+p.label);return;}
+            String file=gameFile();if(file==null){DiagnosticsLogger.event(this,"ERROR","launcher","game_html_not_found",null);status("선택한 폴더에서 Wayward HTML을 찾지 못했습니다: "+p.label);return;}
             setTitle("Wayward · "+p.label);
             RUNNING_SESSIONS.add(p.id);
             if(home!=null)home.setVisibility(View.GONE);
@@ -370,9 +377,10 @@ public final class MainActivity extends Activity {
             ensureImageGenServer(tree,()->{
                 if(web==null||!activeProfileId.equals(id))return;
                 if(loading.getParent()==root)root.removeView(loading);
+                DiagnosticsLogger.event(this,"INFO","launcher","game_webview_load_requested",null);
                 web.loadUrl(gameUrl);
             });
-        }catch(Exception e){status("게임 실행 실패: "+msg(e));}
+        }catch(Exception e){DiagnosticsLogger.error(this,"launcher","game_session_open_failed",e);status("게임 실행 실패: "+msg(e));}
     }
 
     private void removeProfile(String id){
