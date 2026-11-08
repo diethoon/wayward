@@ -8,6 +8,7 @@ node --check app/src/main/assets/imagegen-proxy.js
 node tests/imagegen-proxy.test.mjs
 node tests/wml-folder-bootstrap.test.mjs
 node tests/web-file-chooser-contract.test.mjs
+node tests/imagegen-session-contract.test.mjs
 ZIP_TEST_BUILD="$(mktemp -d)"
 trap 'rm -rf "$ZIP_TEST_BUILD"' EXIT
 javac -d "$ZIP_TEST_BUILD" app/src/main/java/com/wayward/launcher/ZipModStore.java tests/ZipModStoreTest.java
