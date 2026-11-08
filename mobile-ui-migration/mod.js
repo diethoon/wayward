@@ -1,7 +1,7 @@
 WML.define({
   id: "mobile-ui-migration",
   name: "M36 모바일 UI 마이그레이션",
-  version: "1.3.15",
+  version: "1.3.16",
   game: "2026-11-01",
   platform: "mobile",
   description: "4.37MB WML 빌드용: 이야기 탭 나레이션 전용화, 영업 준비·시설 업그레이드 선택지 패널 이동",
@@ -1173,11 +1173,11 @@ WML.define({
     Object.defineProperty(window, "__M36_MOBILE_UI_MIGRATION__", {
       configurable: true,
       value: {
-        version: "1.3.15",
+        version: "1.3.16",
         game: api.game,
         hostPlatform,
         getStatus: () => ({
-          version: "1.3.15",
+          version: "1.3.16",
           game: api.game,
           hostPlatform,
           mobileHost,
@@ -1240,7 +1240,7 @@ WML.define({
       }
     });
 
-    console.info("[WML] M36 mobile UI migration 1.3.15 ready", {
+    console.info("[WML] M36 mobile UI migration 1.3.16 ready", {
       game: api.game,
       hostPlatform,
       mobileHost,
