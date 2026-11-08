@@ -2,8 +2,6 @@ package com.wayward.launcher;
 
 import android.app.Application;
 import android.content.Context;
-import android.os.Handler;
-import android.os.Looper;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -17,33 +15,21 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
 
-/** Best-effort uploader; failed uploads remain in the local journal for a later retry. */
+/**
+ * Best-effort, write-only diagnostics uploader.
+ * The server accepts a bounded, normalized, rate-limited event schema; no user-entered token is required.
+ */
 final class DiagnosticsUploader {
     private static final String BASE_URL = "https://wayward-launcher-diagnostics-hoon-ead4.vercel.app";
     private static final ExecutorService WORKER = Executors.newSingleThreadExecutor();
     private static final AtomicBoolean BUSY = new AtomicBoolean(false);
     private DiagnosticsUploader() {}
 
-    static void verifyAndSave(Context context, String token, Consumer<Boolean> callback) {
-        final Context app = context.getApplicationContext();
-        WORKER.execute(() -> {
-            boolean ok = post("/api/v1/ping", token, new JSONObject());
-            if (ok) {
-                try { DiagnosticsTokenStore.save(app, token); }
-                catch (Exception error) { ok = false; }
-            }
-            final boolean result = ok;
-            new Handler(Looper.getMainLooper()).post(() -> callback.accept(result));
-        });
-    }
-
     static void uploadPending(Context context) {
         final Context app = context.getApplicationContext();
         if (!app.getPackageName().equals(Application.getProcessName())) return;
-        final String token = DiagnosticsTokenStore.get(app);
-        if (token.isEmpty() || !BUSY.compareAndSet(false, true)) return;
+        if (!BUSY.compareAndSet(false, true)) return;
         WORKER.execute(() -> {
             try {
                 for (int pass = 0; pass < 6; pass++) {
@@ -51,7 +37,7 @@ final class DiagnosticsUploader {
                     if (events.length() == 0) break;
                     JSONObject payload = new JSONObject();
                     payload.put("events", events);
-                    if (!post("/api/v1/ingest", token, payload)) break;
+                    if (!post("/api/v1/ingest", payload)) break;
                     Set<String> ids = new HashSet<>();
                     for (int i = 0; i < events.length(); i++) {
                         JSONObject event = events.optJSONObject(i);
@@ -60,14 +46,14 @@ final class DiagnosticsUploader {
                     DiagnosticsLogger.acknowledge(app, ids);
                 }
             } catch (Exception ignored) {
-                // Retain the journal and retry on the next activity/process resume.
+                // Keep all unacknowledged events locally and retry on the next activity/process resume.
             } finally {
                 BUSY.set(false);
             }
         });
     }
 
-    private static boolean post(String path, String token, JSONObject body) {
+    private static boolean post(String path, JSONObject body) {
         HttpURLConnection connection = null;
         try {
             byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
@@ -79,7 +65,6 @@ final class DiagnosticsUploader {
             connection.setDoOutput(true);
             connection.setUseCaches(false);
             connection.setInstanceFollowRedirects(false);
-            connection.setRequestProperty("Authorization", "Bearer " + token);
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             connection.setFixedLengthStreamingMode(bytes.length);
             try (OutputStream out = connection.getOutputStream()) {
