@@ -45,7 +45,13 @@ WML.define({
 
     function componentName(node) {
       if (!React.isValidElement(node) || typeof node.type !== "function") return "";
-      const name = node.type.name;
+      // WML 0.9.5 replaces hooked component functions with a generic dispatcher.
+      // Its __wmlOriginal pointer preserves the real component identity before render.
+      const original = typeof node.type.__wmlOriginal === "function"
+        ? node.type.__wmlOriginal
+        : node.type;
+      const name = original.displayName || original.name ||
+        node.type.displayName || node.type.name;
       return COMPONENT_NAME_ALIASES[name] || name;
     }
 
