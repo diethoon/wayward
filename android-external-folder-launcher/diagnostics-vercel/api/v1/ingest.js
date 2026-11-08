@@ -1,11 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { put } from "@vercel/blob";
-import { authorized, parseBody, sendJson } from "../../lib/common.js";
+import { parseBody, sendJson } from "../../lib/common.js";
 
 export const config = { api: { bodyParser: { sizeLimit: "64kb" } } };
 export default async function handler(req, res) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "method not allowed" });
-  if (!authorized(req)) return sendJson(res, 401, { error: "unauthorized" });
   try {
     const { deviceId, events } = parseBody(req);
     const date = new Date().toISOString().slice(0, 10);
