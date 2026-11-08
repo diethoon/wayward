@@ -75,12 +75,31 @@ final class DiagnosticsLogger {
     }
 
     static String deviceId(Context context) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        String current = prefs.getString(DEVICE_ID, "");
-        if (current != null && current.matches("[0-9a-fA-F-]{36}")) return current;
-        String created = UUID.randomUUID().toString();
-        prefs.edit().putString(DEVICE_ID, created).apply();
-        return created;
+        final String[] value = new String[1];
+        try {
+            withFileLock(context, () -> {
+                File file = new File(new File(context.getFilesDir(), "diagnostics"), "device.id");
+                if (file.isFile()) {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                            new FileInputStream(file), StandardCharsets.UTF_8))) {
+                        String existing = reader.readLine();
+                        if (existing != null && existing.matches("[0-9a-fA-F-]{36}")) {
+                            value[0] = existing;
+                            return;
+                        }
+                    }
+                }
+                value[0] = UUID.randomUUID().toString();
+                try (FileOutputStream out = new FileOutputStream(file, false)) {
+                    out.write(value[0].getBytes(StandardCharsets.UTF_8));
+                    out.flush();
+                    out.getFD().sync();
+                }
+            });
+        } catch (Exception ignored) {
+            value[0] = UUID.randomUUID().toString();
+        }
+        return value[0];
     }
 
     static JSONArray readPending(Context context, int maxEvents) throws Exception {

@@ -85,4 +85,4 @@ CI에서 Android APK 컴파일·서명 검증을 수행합니다. 실제 Android
 
 게임 세이브, 이미지, 프롬프트, 요청/응답 본문, 인증 헤더, 쿠키, API 토큰은 수집하지 않습니다. ImageGen API도 요청 헤더와 본문을 기록하지 않습니다. 로그는 앱 비공개 저장소에서 파일당 최대 512KiB로 순환 보관하고, 네트워크 오류 시 삭제하지 않고 다음 실행/복귀 때 재전송합니다.
 
-서버는 업로드 전용으로 읽기 API를 제공하지 않습니다. 수신 이벤트는 Render 서비스 로그에 `WAYWARD_DIAG` 접두사로 기록되며 그 로그를 통해 분석합니다. Render 로그 보관 기간은 플랫폼 정책을 따릅니다. Android 앱은 다른 앱의 logcat이나 OS 내부 로그를 읽을 수 없으므로 런처 프로세스·WebView·ImageGen 서비스와 Android가 공개하는 종료 이력만 수집합니다.
+수신기는 Vercel Serverless Functions이며 로그 원본은 비공개 Vercel Blob에 저장합니다. 실행 로그에도 `WAYWARD_DIAG` 접두사로 기록해 즉시 오류를 조회할 수 있습니다. Blob은 7일이 지난 파일을 다음 업로드 시 정리합니다. APK에는 업로드 전용 연결 코드만 저장하며, 별도 서버 측 읽기 키는 APK에 포함되지 않습니다. Android 앱은 다른 앱의 logcat이나 OS 내부 로그를 읽을 수 없으므로 런처 프로세스·WebView·ImageGen 서비스와 Android가 공개하는 종료 이력만 수집합니다.

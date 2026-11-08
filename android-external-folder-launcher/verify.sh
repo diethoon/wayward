@@ -16,6 +16,9 @@ node tests/web-file-chooser-contract.test.mjs
 node tests/imagegen-session-contract.test.mjs
 node tests/diagnostics-contract.test.mjs
 node diagnostics-server/server.test.mjs
+node diagnostics-vercel/test.mjs
+node tests/diagnostics-contract.test.mjs
+node diagnostics-server/server.test.mjs
 ZIP_TEST_BUILD="$(mktemp -d)"
 trap 'rm -rf "$ZIP_TEST_BUILD"' EXIT
 javac -d "$ZIP_TEST_BUILD" app/src/main/java/com/wayward/launcher/ZipModStore.java tests/ZipModStoreTest.java
