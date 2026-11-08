@@ -763,43 +763,34 @@ WML.define({
       if (!supplies || !facilities) {
         const describe = (node) => {
           if (!React.isValidElement(node)) {
-            return { valid: false, type: typeof node, text: String(node).slice(0, 120) };
+            return { type: typeof node, text: String(node).slice(0, 60) };
           }
           const type = typeof node.type === "string"
             ? node.type
             : (node.type?.displayName || node.type?.name || String(node.type));
           return {
-            valid: true,
             type,
             className: node.props?.className ?? null,
             title: node.props?.title ?? null,
-            propKeys: Object.keys(node.props || {}),
-            text: plainTextFromNode(node).slice(0, 180),
-            children: React.Children.toArray(node.props?.children).slice(0, 12).map((child) => {
+            text: plainTextFromNode(node).slice(0, 80),
+            children: React.Children.toArray(node.props?.children).slice(0, 8).map((child) => {
               if (!React.isValidElement(child)) {
-                return { valid: false, type: typeof child, text: String(child).slice(0, 100) };
+                return { type: typeof child, text: String(child).slice(0, 50) };
               }
               const childType = typeof child.type === "string"
                 ? child.type
                 : (child.type?.displayName || child.type?.name || String(child.type));
               return {
-                valid: true,
                 type: childType,
                 className: child.props?.className ?? null,
                 title: child.props?.title ?? null,
-                propKeys: Object.keys(child.props || {}),
-                text: plainTextFromNode(child).slice(0, 120)
+                text: plainTextFromNode(child).slice(0, 60)
               };
             })
           };
         };
-        console.warn("[WML mobile-ui-migration] PREP_TREE_DIAGNOSTIC", JSON.stringify({
-          resultType: typeof result.type === "string" ? result.type :
-            (result.type?.displayName || result.type?.name || String(result.type)),
-          resultClassName: result.props?.className ?? null,
+        console.warn("[WML mobile-ui-migration] PREP_CHILD_SUMMARY", JSON.stringify({
           childCount: children.length,
-          heading: !!heading,
-          debt: !!debt,
           suppliesFound: !!supplies,
           facilitiesFound: !!facilities,
           children: children.map(describe)
