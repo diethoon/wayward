@@ -993,7 +993,7 @@ public final class MainActivity extends Activity {
                 return null;
             }
             logImageLookup(p,200,resolveMs,openMs,pathTrace.toString(),null);
-            return traceImageStream(in,p,resolveMs,openMs,pathTrace.toString());
+            return traceImageStream(in,p,resolveMs,openMs,pathTrace.toString(),resolveMs>=350||openMs>=350);
         }
 
         private void logImageLookup(String path,int status,long resolveMs,long openMs,String pathTrace,Exception error){
@@ -1011,7 +1011,7 @@ public final class MainActivity extends Activity {
             DiagnosticsLogger.event(MainActivity.this,status>=500?"ERROR":"WARN","webview","image_saf_lookup",details);
         }
 
-        private InputStream traceImageStream(InputStream source,String path,long resolveMs,long openMs,String pathTrace){
+        private InputStream traceImageStream(InputStream source,String path,long resolveMs,long openMs,String pathTrace,boolean traceCompletion){
             return new java.io.FilterInputStream(source){
                 private final long streamStarted=System.nanoTime();
                 private long firstByteAt=-1L;
@@ -1028,7 +1028,7 @@ public final class MainActivity extends Activity {
                     reported=true;
                     long streamMs=(System.nanoTime()-streamStarted)/1_000_000L;
                     long firstByteMs=firstByteAt<0L?-1L:(firstByteAt-streamStarted)/1_000_000L;
-                    if(failure==null&&bytesRead>0&&firstByteMs>=0&&firstByteMs<350&&streamMs<350)return;
+                    if(!traceCompletion&&failure==null&&bytesRead>0&&firstByteMs>=0&&firstByteMs<350&&streamMs<350)return;
                     if(imageStreamDiagnostics.getAndIncrement()>=16)return;
                     JSONObject details=new JSONObject();
                     try{
