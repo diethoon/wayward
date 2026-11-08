@@ -89,12 +89,16 @@ export function parseBody(req) {
   if (deviceIds.size !== 1) throw new Error("mixed devices");
   const deviceId = events[0].deviceId;
   const now = Date.now();
-  const bucket = rate.get(deviceId) || { start: now, count: 0 };
-  if (now - bucket.start > RATE_WINDOW_MS) { bucket.start = now; bucket.count = 0; }
-  bucket.count += 1;
-  rate.set(deviceId, bucket);
-  if (bucket.count > MAX_BATCHES_PER_MINUTE) {
-    const error = new Error("rate limited");
+  if (!withinRateLimit(rate, deviceId, MAX_BATCHES_PER_MINUTE, now)) {
+    const error = new Error("device rate limited");
+    error.statusCode = 429;
+    throw error;
+  }
+  // Use the platform-provided client address only for an in-memory abuse limit; never persist it.
+  const forwarded = req.headers?.["x-forwarded-for"] || req.headers?.["x-real-ip"] || req.socket?.remoteAddress || "unknown";
+  const clientIp = String(forwarded).split(",")[0].trim().slice(0, 64) || "unknown";
+  if (!withinRateLimit(ipRate, clientIp, MAX_IP_BATCHES_PER_MINUTE, now)) {
+    const error = new Error("network rate limited");
     error.statusCode = 429;
     throw error;
   }
