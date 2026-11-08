@@ -47,7 +47,7 @@ jobs:
           echo '/opt/gradle-8.9/bin' >> "$GITHUB_PATH"
       - name: Verify and build
         working-directory: android-external-folder-launcher
-        run: ./verify.sh
+        run: bash ./verify.sh
       - uses: actions/upload-artifact@v4
         with:
           name: WaywardLauncher-imagegen-v0.3.0
