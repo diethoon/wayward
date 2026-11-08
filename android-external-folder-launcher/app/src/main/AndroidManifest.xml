@@ -13,7 +13,7 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <service android:name=".ImageGenService" android:exported="false"
+        <service android:name=".ImageGenService" android:process=":imagegen" android:exported="false"
             android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="사용자가 실행한 WML 이미지 생성 서버 유지"/>
