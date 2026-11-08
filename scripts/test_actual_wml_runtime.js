@@ -115,13 +115,13 @@ function startServer(root) {
   for (const relative of i18nPaths) {
     const destination = path.join(STAGE, relative);
     fs.mkdirSync(path.dirname(destination), { recursive: true });
-    fs.writeFileSync(destination, "/* isolated test shim: absent from archive */\\n");
+    fs.writeFileSync(destination, "/* isolated test shim: absent from archive */\n");
   }
   fs.mkdirSync(path.join(STAGE, "wml/compat"), { recursive: true });
-  fs.writeFileSync(path.join(STAGE, "wml/compat/compat.js"), "/* optional compat omitted */\\n");
+  fs.writeFileSync(path.join(STAGE, "wml/compat/compat.js"), "/* optional compat omitted */\n");
   fs.mkdirSync(path.join(STAGE, "wml/presets"), { recursive: true });
-  fs.writeFileSync(path.join(STAGE, "wml/presets/presets.js"), "/* optional presets omitted */\\n");
-  fs.writeFileSync(path.join(STAGE, "wml/mods/mods.js"), 'WML.enable(["mobile-ui-migration"]);\\n');
+  fs.writeFileSync(path.join(STAGE, "wml/presets/presets.js"), "/* optional presets omitted */\n");
+  fs.writeFileSync(path.join(STAGE, "wml/mods/mods.js"), 'WML.enable(["mobile-ui-migration"]);\n');
 
   const server = await startServer(STAGE);
   const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
@@ -131,7 +131,8 @@ function startServer(root) {
     userAgent: "Mozilla/5.0 (Linux; Android 15; SM-S938N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36"
   });
 
-  await context.addInitScript(() => localStorage.setItem("wml.dev", "true"));\n  const page = await context.newPage();
+  await context.addInitScript(() => localStorage.setItem("wml.dev", "true"));
+  const page = await context.newPage();
   const pageErrors = [];
   const failedRequests = [];
   const relevantConsole = [];
@@ -141,7 +142,7 @@ function startServer(root) {
   }));
   page.on("console", message => {
     const value = message.text();
-    if (/\\[WML|mobile-ui-migration|hook .* threw|setup failed|unknown symbol/i.test(value)) {
+    if (value.includes("[WML]") || /mobile-ui-migration|hook .* threw|setup failed|unknown symbol/i.test(value)) {
       relevantConsole.push({ type: message.type(), text: value.slice(0, 1600) });
     }
   });
