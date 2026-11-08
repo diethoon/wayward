@@ -1,8 +1,185 @@
+function installLocalImageBasePath(api) {
+  const FLAG = "__WML_LOCAL_IMAGE_BASEPATH__";
+  if (window[FLAG]?.installed) return window[FLAG];
+
+  const state = window[FLAG] = {
+    installed: true,
+    rewrites: 0,
+    loaded: 0,
+    failed: 0,
+    lastOriginal: "",
+    lastLocal: "",
+    lastFailed: "",
+    pageUrl: location.href,
+    documentBaseURI: document.baseURI,
+    expectedImagesFolder: new URL("images/", document.baseURI).href
+  };
+
+  const watched = new WeakSet();
+  const imagePrototype = typeof HTMLImageElement !== "undefined" ? HTMLImageElement.prototype : null;
+  const elementPrototype = typeof Element !== "undefined" ? Element.prototype : null;
+  const imgDescriptor = imagePrototype && Object.getOwnPropertyDescriptor(imagePrototype, "src");
+  const originalSetAttribute = elementPrototype && elementPrototype.setAttribute;
+
+  function isImage(node) {
+    return typeof HTMLImageElement !== "undefined" && node instanceof HTMLImageElement;
+  }
+
+  function rewrite(value) {
+    if (typeof value !== "string" || value.length === 0) return value;
+
+    let parsed;
+    let current;
+    try {
+      parsed = new URL(value, document.baseURI);
+      current = new URL(document.baseURI);
+    } catch {
+      return value;
+    }
+
+    const isArtHost = parsed.hostname.toLowerCase() === "art.sintention.com";
+    const isSameOrigin = parsed.origin === current.origin;
+    if (!isArtHost && !isSameOrigin) return value;
+    if (!/^\/images\//i.test(parsed.pathname)) return value;
+
+    // The launcher loads the HTML at /game/<file>. Resolving images/ against
+    // document.baseURI therefore produces /game/images/... which is served
+    // by FolderHandler from the selected SAF game's images/ directory.
+    const relativePath = parsed.pathname.replace(/^\/+/, "");
+    let localUrl;
+    try {
+      localUrl = new URL(relativePath + parsed.search + parsed.hash, document.baseURI).href;
+    } catch {
+      return value;
+    }
+
+    if (localUrl !== value) {
+      state.rewrites++;
+      state.lastOriginal = value;
+      state.lastLocal = localUrl;
+      if (state.rewrites <= 8 || state.rewrites % 100 === 0) {
+        console.info("[Wayward Launcher] local image path", value, "=>", localUrl);
+      }
+    }
+    return localUrl;
+  }
+
+  function watchImage(image) {
+    if (watched.has(image)) return;
+    watched.add(image);
+    image.addEventListener("load", () => { state.loaded++; }, { passive: true });
+    image.addEventListener("error", () => {
+      state.failed++;
+      state.lastFailed = image.currentSrc || image.src || image.getAttribute("src") || "";
+      if (state.failed <= 8 || state.failed % 100 === 0) {
+        console.warn("[Wayward Launcher] local image failed", state.lastFailed);
+      }
+    }, { passive: true });
+  }
+
+  if (imgDescriptor?.get && imgDescriptor?.set && imgDescriptor.configurable) {
+    Object.defineProperty(imagePrototype, "src", {
+      configurable: true,
+      enumerable: imgDescriptor.enumerable,
+      get() {
+        return imgDescriptor.get.call(this);
+      },
+      set(value) {
+        watchImage(this);
+        return imgDescriptor.set.call(this, rewrite(String(value)));
+      }
+    });
+  } else {
+    console.warn("[Wayward Launcher] HTMLImageElement.src could not be wrapped.");
+  }
+
+  if (originalSetAttribute) {
+    elementPrototype.setAttribute = function(name, value) {
+      if (isImage(this) && String(name).toLowerCase() === "src") {
+        watchImage(this);
+        return originalSetAttribute.call(this, name, rewrite(String(value)));
+      }
+      return originalSetAttribute.call(this, name, value);
+    };
+  }
+
+  function rewriteExistingImages(root = document) {
+    if (!root?.querySelectorAll) return;
+    for (const image of root.querySelectorAll("img[src]")) {
+      watchImage(image);
+      const before = image.getAttribute("src");
+      const after = rewrite(before);
+      if (after !== before && originalSetAttribute) {
+        originalSetAttribute.call(image, "src", after);
+      }
+    }
+  }
+
+  rewriteExistingImages();
+
+  if (typeof MutationObserver !== "undefined" && document.documentElement) {
+    const observer = new MutationObserver(records => {
+      for (const record of records) {
+        if (record.type === "attributes" && record.attributeName === "src") {
+          const image = record.target;
+          if (!isImage(image)) continue;
+          watchImage(image);
+          const before = image.getAttribute("src");
+          const after = rewrite(before);
+          if (after !== before && originalSetAttribute) {
+            originalSetAttribute.call(image, "src", after);
+          }
+        }
+        for (const node of record.addedNodes || []) {
+          if (isImage(node)) {
+            watchImage(node);
+            const before = node.getAttribute("src");
+            const after = rewrite(before);
+            if (after && after !== before && originalSetAttribute) {
+              originalSetAttribute.call(node, "src", after);
+            }
+          } else if (node?.querySelectorAll) {
+            rewriteExistingImages(node);
+          }
+        }
+      }
+    });
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["src"]
+    });
+    state.observer = observer;
+  }
+
+  state.getStatus = () => ({
+    installed: state.installed,
+    rewrites: state.rewrites,
+    loaded: state.loaded,
+    failed: state.failed,
+    lastOriginal: state.lastOriginal,
+    lastLocal: state.lastLocal,
+    lastFailed: state.lastFailed,
+    pageUrl: location.href,
+    documentBaseURI: document.baseURI,
+    expectedImagesFolder: new URL("images/", document.baseURI).href,
+    note: "Rewritten images should request /game/images/... and be served from the selected game's images/ folder."
+  });
+
+  console.info("[Wayward Launcher] local image base-path resolver installed", state.getStatus());
+  try {
+    api?.log?.("동료 초상화 로컬 이미지 경로 보정 활성화: /game/images/ 경로를 선택한 게임 폴더에서 불러옵니다.");
+  } catch { /* logging is optional */ }
+
+  return state;
+}
+
 WML.define({
   id: "launcher-mobile-companions",
   name: "Wayward Launcher · 동료 모바일 실시간 창",
   author: "Wayward Launcher",
-  version: "0.1.0",
+  version: "0.1.1",
   game: "2026-11-09",
   lang: "ko",
   tags: ["ui", "mobile"],
@@ -20,6 +197,8 @@ WML.define({
         typeof live.subscribe !== "function") {
       throw new Error("Companions 2.6.0 이상의 실시간 카드 API를 찾지 못했습니다.");
     }
+
+    const imagePathState = installLocalImageBasePath(api);
 
     const host = document.createElement("div");
     host.id = "launcher-mobile-companions";
@@ -161,7 +340,8 @@ WML.define({
       open() { setOpened(true); },
       close() { setOpened(false); },
       refresh: scan,
-      ids: () => Array.from(entries.keys())
+      ids: () => Array.from(entries.keys()),
+      imagePathStatus: () => imagePathState?.getStatus?.() || null
     });
 
     schedule();
