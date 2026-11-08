@@ -12,7 +12,6 @@ import java.util.Properties;
 final class ImageGenStatusStore {
     private static final String FILE_NAME = "imagegen-status.properties";
     private static final long HEARTBEAT_STALE_MS = 20_000L;
-    private static final long START_STALE_MS = 20L * 60L * 1000L;
 
     static final class State {
         final boolean ready;
@@ -36,7 +35,7 @@ final class ImageGenStatusStore {
 
         boolean isStarting() {
             long age = System.currentTimeMillis() - updatedAt;
-            return starting && updatedAt > 0 && age >= 0 && age <= START_STALE_MS;
+            return starting && updatedAt > 0 && age >= 0 && age <= HEARTBEAT_STALE_MS;
         }
 
         boolean isReady() {
