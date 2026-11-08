@@ -1,4 +1,4 @@
-# Wayward Android Launcher 0.3.7 · SAF/ZIP 런타임 최적화
+# Wayward Android Launcher 0.3.8 · SAF/ZIP 런타임 최적화
 
 Android SAF 폴더 실행기입니다. 게임 원본 폴더는 직접 읽고, 일반 WML ZIP 모드는 앱 내부에 보관해 가상 제공하며, 여러 게임 폴더를 독립 세션으로 실행합니다. Image Studio 백엔드는 별도 ZIP 설치를 요구하지 않고 각 세션의 실제 WML 모드 폴더에서 감지합니다.
 
@@ -58,7 +58,7 @@ ZIP 1개는 WML 모드 1개를 포함해야 합니다. mod.js가 없거나, WML.
 
 ## 5. 설치 패키지
 
-0.3.7 테스트 빌드는 `com.wayward.launcher.imagegen037` 패키지로 설치됩니다. 기존 0.3.6 (`com.wayward.launcher.imagegen036`), 0.3.5 (`com.wayward.launcher.imagegen035`), 0.3.4 (`com.wayward.launcher.imagegen034`) 및 구버전과 별도 앱으로 공존하므로 기존 앱을 삭제하거나 덮어쓰지 않습니다. 앱 데이터는 패키지별로 분리되므로 새 앱에서 게임 폴더를 다시 선택하고, 이전 앱에 보관한 앱 전용 ZIP 모드를 다시 설치해야 합니다. 기존 앱의 WebView localStorage/IndexedDB, 설정, 세이브 데이터는 자동 이전되지 않으며 기존 앱에 그대로 남습니다. 두 버전은 `127.0.0.1:8189` 포트를 공유하므로 다른 런처 앱에서 Image Studio 서버를 중지한 뒤 새 버전을 실행하세요. 기존 앱은 삭제하지 마세요.
+0.3.8 테스트 빌드는 `com.wayward.launcher.imagegen037` 패키지로 설치됩니다. 기존 0.3.6 (`com.wayward.launcher.imagegen036`), 0.3.5 (`com.wayward.launcher.imagegen035`), 0.3.4 (`com.wayward.launcher.imagegen034`) 및 구버전과 별도 앱으로 공존하므로 기존 앱을 삭제하거나 덮어쓰지 않습니다. 앱 데이터는 패키지별로 분리되므로 새 앱에서 게임 폴더를 다시 선택하고, 이전 앱에 보관한 앱 전용 ZIP 모드를 다시 설치해야 합니다. 기존 앱의 WebView localStorage/IndexedDB, 설정, 세이브 데이터는 자동 이전되지 않으며 기존 앱에 그대로 남습니다. 두 버전은 `127.0.0.1:8189` 포트를 공유하므로 다른 런처 앱에서 Image Studio 서버를 중지한 뒤 새 버전을 실행하세요. 기존 앱은 삭제하지 마세요.
 
 ## 6. 세션별 Image Studio 자동 감지와 공통 서버
 
@@ -99,7 +99,7 @@ CI에서 Android APK 컴파일·서명 검증을 수행합니다. 실제 Android
 이 변경은 일반 WML의 신캐 이미지 요청 경로에만 적용합니다. Faith 전용 경로 규칙이나 이미지 자동 탐색은 추가하지 않으며, 게임 JS·캐릭터 데이터·세이브·RNG·게임 로직은 수정하지 않습니다.
 
 
-## 10. 런타임 응답성 최적화 (0.3.7)
+## 10. 런타임 응답성 최적화 (0.3.8)
 
 - ZIP 모드 요청마다 ZipFile을 다시 열고 ZIP 전체의 mod.js를 찾아 ID를 재검증하던 동작을 설치 시 검증된 모드 ID와 메타데이터를 재사용하는 방식으로 변경했습니다. 열려 있는 ZIP은 최대 4개까지 LRU 캐시하고, 스트림이 사용 중인 파일은 읽기가 끝난 뒤 닫습니다.
 - 홈 화면 복귀 시 ZIP 목록을 표시하려고 모든 ZIP의 내부 엔트리를 다시 스캔하지 않습니다. 설치 때 검증한 `<mod-id>.zip` 파일명으로 목록을 만듭니다.
@@ -109,3 +109,11 @@ CI에서 Android APK 컴파일·서명 검증을 수행합니다. 실제 Android
 - WebView JavaScript 오류는 발생한 스크립트 경로와 줄 번호만 WebView당 최대 16건 기록합니다. 콘솔 메시지 본문은 게임 대사·세이브 데이터가 섞일 수 있어 수집하지 않습니다.
 
 이번 변경은 런처의 파일 제공·캐시·조회 경로만 최적화합니다. 게임 HTML/JS, WML 모드, 세이브, RNG, ID, Undo, 경제, 공급 및 캐릭터 행동은 수정하지 않습니다. 실제 S25 Ultra의 메뉴 반응성, 썸네일 로딩 시간과 게임 진행 중 이미지 매칭은 새 APK를 기기에서 확인해야 합니다. ImageGen/Bun 실행 환경은 이 변경의 해결 범위에 포함하지 않습니다.
+
+## Companions 동료 초상화 모바일 패널 (0.3.8)
+
+- 런처가 `launcher-mobile-companions` WML 어댑터를 내장 경로로 제공합니다. 별도 ZIP 설치나 UI_customize 모드는 필요하지 않습니다.
+- WML 모드 관리자에서 **Wayward Launcher · 동료 모바일 실시간 창**을 한 번 활성화해야 합니다. Companions 2.6.0 이상이 필요합니다.
+- 화면 우측 아래의 `동료` 버튼으로 패널을 열고 닫습니다. 열었을 때만 Companions 원본 카드 생성·갱신 API를 호출해 초상화를 렌더링합니다.
+- UI_customize의 창 배치·플로팅 레이아웃 코드는 호출하지 않습니다. Companions의 게임 상태·저장 데이터·캐릭터 행동은 변경하지 않습니다.
+- 이 단계는 모바일 WebView에서의 실제 기기 검증 전이며, 실제 Companions 및 이미지팩 조합 검증은 별도로 필요합니다.
