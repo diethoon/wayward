@@ -1,0 +1,31 @@
+name: Forensic extraction for supply and upgrade UI move
+
+on:
+  push:
+    branches:
+      - fix/mobile-ui-migration-1.3.14
+    paths:
+      - ".github/workflows/forensic-move-supply-upgrade.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify source and extract targeted byte contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/forensic_move_supply_upgrade.py
+          git diff --check
+
+      - name: Upload forensic contexts
+        uses: actions/upload-artifact@v4
+        with:
+          name: forensic-move-supply-upgrade
+          path: forensic-move-supply-upgrade.zip
+          if-no-files-found: error
