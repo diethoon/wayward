@@ -421,6 +421,7 @@ public final class MainActivity extends Activity {
         installImageGenDocumentStartScript(origin);
         FolderHandler folderHandler=new FolderHandler(tree,getAssets(),zipMods,origin);
         WebViewAssetLoader loader=new WebViewAssetLoader.Builder().setDomain(domain+":"+originPort).addPathHandler("/game/",folderHandler).build();
+        final java.util.concurrent.atomic.AtomicInteger imageDiagnostics=new java.util.concurrent.atomic.AtomicInteger();
         web.setWebViewClient(new WebViewClient(){
             @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){
                 DiagnosticsLogger.event(MainActivity.this,"INFO","webview","page_started",null);
@@ -439,10 +440,28 @@ public final class MainActivity extends Activity {
                 super.onReceivedError(view,request,error);
             }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){
-                if(request!=null&&request.isForMainFrame()&&response!=null&&response.getStatusCode()>=400){
-                    JSONObject details=new JSONObject();
-                    try{details.put("status",response.getStatusCode());}catch(Exception ignored){}
-                    DiagnosticsLogger.event(MainActivity.this,"WARN","webview","main_frame_http_error",details);
+                if(request!=null&&response!=null&&response.getStatusCode()>=400){
+                    Uri failedUri=request.getUrl();
+                    String failedPath=failedUri==null?null:failedUri.getPath();
+                    boolean imageResource=isImageResourcePath(failedPath);
+                    boolean handledByLocalImageLogger=failedPath!=null&&(
+                            (domain.equalsIgnoreCase(failedUri.getHost())&&FolderHandler.isImageRequestPath(failedPath))
+                            ||("art.sintention.com".equalsIgnoreCase(failedUri.getHost())
+                                &&FolderHandler.isLocalOnlyCharacterImagePath(failedPath)));
+                    if(imageResource&&!handledByLocalImageLogger&&imageDiagnostics.getAndIncrement()<16){
+                        JSONObject details=new JSONObject();
+                        try{
+                            details.put("host",failedUri==null?"":failedUri.getHost());
+                            details.put("path",failedPath.substring(0,Math.min(failedPath.length(),240)));
+                            details.put("status",response.getStatusCode());
+                            details.put("mainFrame",request.isForMainFrame());
+                        }catch(Exception ignored){}
+                        DiagnosticsLogger.event(MainActivity.this,"WARN","webview","image_http_error",details);
+                    }else if(request.isForMainFrame()){
+                        JSONObject details=new JSONObject();
+                        try{details.put("status",response.getStatusCode());}catch(Exception ignored){}
+                        DiagnosticsLogger.event(MainActivity.this,"WARN","webview","main_frame_http_error",details);
+                    }
                 }
                 super.onReceivedHttpError(view,request,response);
             }
@@ -466,12 +485,12 @@ public final class MainActivity extends Activity {
                         }
                         return folderHandler.serveGamePath(path.substring(6));
                     }
-                    if(FolderHandler.isImageRequestPath(path))return folderHandler.serveImagePath(path.substring(8));
+                    if(FolderHandler.isImageRequestPath(path))return serveImageRequest(folderHandler,path,imageDiagnostics);
                 }
                 if("art.sintention.com".equalsIgnoreCase(u.getHost())){
                     String path=u.getPath();
                     // Generated WML character images are local-only; never fall back to the CDN.
-                    if(FolderHandler.isLocalOnlyCharacterImagePath(path))return folderHandler.serveImagePath(path.substring(8));
+                    if(FolderHandler.isLocalOnlyCharacterImagePath(path))return serveImageRequest(folderHandler,path,imageDiagnostics);
                     // Preserve the existing CDN fallback for all other image resources.
                     if(FolderHandler.isImageRequestPath(path))return folderHandler.serveExternalImagePath(path.substring(8));
                 }
@@ -483,6 +502,33 @@ public final class MainActivity extends Activity {
             }
         });
         webFileChooser=new WebFileChooser(this);web.setWebChromeClient(webFileChooser);root.addView(web,new FrameLayout.LayoutParams(-1,-1));web.setVisibility(View.GONE);
+    }
+
+    private static boolean isImageResourcePath(String path){
+        if(path==null)return false;
+        String lower=path.toLowerCase(Locale.ROOT);
+        return FolderHandler.isImageRequestPath(path)
+                ||lower.endsWith(".png")||lower.endsWith(".jpg")||lower.endsWith(".jpeg")
+                ||lower.endsWith(".webp")||lower.endsWith(".gif")||lower.endsWith(".avif")
+                ||lower.endsWith(".svg");
+    }
+
+    private WebResourceResponse serveImageRequest(FolderHandler handler,String path,
+                                                       java.util.concurrent.atomic.AtomicInteger samples){
+        long started=System.nanoTime();
+        WebResourceResponse response=handler.serveImagePath(path.substring(8));
+        long elapsedMs=(System.nanoTime()-started)/1_000_000L;
+        int status=response==null?0:response.getStatusCode();
+        if(response!=null&&(status>=400||elapsedMs>=350)&&samples.getAndIncrement()<16){
+            JSONObject details=new JSONObject();
+            try{
+                details.put("path",path.substring(0,Math.min(path.length(),240)));
+                details.put("status",status);
+                details.put("elapsedMs",elapsedMs);
+            }catch(Exception ignored){}
+            DiagnosticsLogger.event(this,"WARN","webview","image_resource_slow_or_failed",details);
+        }
+        return response;
     }
 
     private void installImageGenDocumentStartScript(String origin) {
@@ -732,7 +778,7 @@ public final class MainActivity extends Activity {
     @Override protected void onDestroy(){
         String sessionId=sessionProfileId(getIntent());if(sessionId!=null)RUNNING_SESSIONS.remove(sessionId);
         DiagnosticsLogger.event(this,"INFO","launcher","activity_destroy",null);
-        destroyWeb();super.onDestroy();
+        destroyWeb();if(zipMods!=null)zipMods.close();super.onDestroy();
     }
     private String msg(Throwable e){return e==null||e.getMessage()==null?"알 수 없는 오류":e.getMessage();}
     private final class HostBridge{
@@ -758,7 +804,7 @@ public final class MainActivity extends Activity {
     private static final class FolderHandler implements WebViewAssetLoader.PathHandler{
         private static final String CORE="wml/runtime/wml-core.js";private final SafTree tree;private final android.content.res.AssetManager assets;private final ZipModStore zipMods;private final String origin;
         FolderHandler(SafTree t,android.content.res.AssetManager a,ZipModStore z,String o){tree=t;assets=a;zipMods=z;origin=o;}
-        @Override public WebResourceResponse handle(String p){return serve(p);}
+        @Override public WebResourceResponse handle(String p){return serveGamePath(p);}
         static boolean isGameRequestPath(String path){
             return path!=null&&path.startsWith("/game/");
         }
@@ -873,8 +919,20 @@ public final class MainActivity extends Activity {
         private static final int MAX_CACHED_DIRECTORIES=2048;
         private static final int MAX_CACHED_CHILDREN=100000;
         private final Uri tree;private final String rootId;
+        private static final int MAX_CONCURRENT_DIRECTORY_QUERIES = 4;
         private final Object directoryIndexLock=new Object();
-        private final java.util.Map<String,java.util.Map<String,Node>> directoryIndexCache=new java.util.HashMap<>();
+        private final java.util.LinkedHashMap<String,java.util.Map<String,Node>> directoryIndexCache =
+                new java.util.LinkedHashMap<>(16, 0.75f, true);
+        private final java.util.Map<String,java.util.Map<String,Node>> caseInsensitiveDirectoryCache = new java.util.HashMap<>();
+        private final java.util.concurrent.ConcurrentHashMap<String,java.util.concurrent.FutureTask<java.util.Map<String,Node>>> directoryLoads =
+                new java.util.concurrent.ConcurrentHashMap<>();
+        private final java.util.concurrent.Semaphore directoryQuerySlots =
+                new java.util.concurrent.Semaphore(MAX_CONCURRENT_DIRECTORY_QUERIES, true);
+        private final java.util.concurrent.atomic.AtomicLong directoryIndexGeneration =
+                new java.util.concurrent.atomic.AtomicLong();
+        private final Object modIdsLock = new Object();
+        private volatile List<String> cachedModIds;
+        private volatile long cachedModIdsGeneration = -1L;
         private int cachedDirectoryChildren=0;
         SafTree(Uri u){tree=u;rootId=DocumentsContract.getTreeDocumentId(u);}
         String rootName(){try{return node(rootId).name;}catch(Exception e){return"Wayward";}}
@@ -973,9 +1031,31 @@ public final class MainActivity extends Activity {
         }
 
         List<String> listModIds()throws Exception{
-            List<String> ids=new ArrayList<>();Node mods=resolve("wml/mods");if(mods==null||!mods.dir)return ids;
-            for(Node d:children(mods.id)){if(!d.dir||!ID.matcher(d.name).matches())continue;Node f=find(d.id,"mod.js");if(f==null||f.dir)continue;String id=declared(f);if(id!=null&&(id.isEmpty()||id.equals(d.name)))ids.add(d.name);}
-            Collections.sort(ids);return ids;
+            long generation=directoryIndexGeneration.get();
+            List<String> cached=cachedModIds;
+            if(cached!=null&&cachedModIdsGeneration==generation)return new ArrayList<>(cached);
+            synchronized(modIdsLock){
+                generation=directoryIndexGeneration.get();
+                cached=cachedModIds;
+                if(cached!=null&&cachedModIdsGeneration==generation)return new ArrayList<>(cached);
+                List<String> ids=new ArrayList<>();
+                Node mods=resolve("wml/mods");
+                if(mods!=null&&mods.dir){
+                    for(Node d:children(mods.id)){
+                        if(!d.dir||!ID.matcher(d.name).matches())continue;
+                        Node f=find(d.id,"mod.js");
+                        if(f==null||f.dir)continue;
+                        String id=declared(f);
+                        if(id!=null&&(id.isEmpty()||id.equals(d.name)))ids.add(d.name);
+                    }
+                }
+                Collections.sort(ids);
+                if(directoryIndexGeneration.get()==generation){
+                    cachedModIds=Collections.unmodifiableList(new ArrayList<>(ids));
+                    cachedModIdsGeneration=generation;
+                }
+                return ids;
+            }
         }
         String declared(Node f){
             try{Uri u=DocumentsContract.buildDocumentUriUsingTree(tree,f.id);byte[] b=new byte[65536];int used=0;try(InputStream in=getContentResolver().openInputStream(u)){if(in==null)return null;while(used<b.length){int n=in.read(b,used,b.length-used);if(n<0)break;used+=n;}}
@@ -985,21 +1065,62 @@ public final class MainActivity extends Activity {
         Node resolve(String path)throws Exception{String p=FolderHandler.normal(path);if(p==null)return null;String parent=rootId;Node n=null;String[] parts=p.split("/");for(int i=0;i<parts.length;i++){n=find(parent,parts[i]);if(n==null)return null;if(i<parts.length-1){if(!n.dir)return null;parent=n.id;}}return n;}
         Node find(String parent,String name)throws Exception{return childIndex(parent).get(name);}
         private Node findIgnoreCase(String parent,String name)throws Exception{
+            long generation=directoryIndexGeneration.get();
             java.util.Map<String,Node> index=childIndex(parent);
             Node exact=index.get(name);if(exact!=null)return exact;
-            Node match=null;
-            for(Node candidate:index.values())if(candidate.name.equalsIgnoreCase(name)){
-                if(match!=null)return null;
-                match=candidate;
+            String key=name.toLowerCase(Locale.ROOT);
+            synchronized(directoryIndexLock){
+                java.util.Map<String,Node> folded=caseInsensitiveDirectoryCache.get(parent);
+                if(folded==null){
+                    java.util.Map<String,Node> built=new java.util.HashMap<>();
+                    Set<String> ambiguous=new HashSet<>();
+                    for(Node candidate:index.values()){
+                        String candidateKey=candidate.name.toLowerCase(Locale.ROOT);
+                        if(ambiguous.contains(candidateKey))continue;
+                        Node previous=built.put(candidateKey,candidate);
+                        if(previous!=null){
+                            built.remove(candidateKey);
+                            ambiguous.add(candidateKey);
+                        }
+                    }
+                    folded=built;
+                    if(directoryIndexGeneration.get()==generation&&directoryIndexCache.containsKey(parent)){
+                        caseInsensitiveDirectoryCache.put(parent,folded);
+                    }
+                }
+                return folded.get(key);
             }
-            return match;
         }
         List<Node> children(String parent)throws Exception{return new ArrayList<>(childIndex(parent).values());}
         java.util.Map<String,Node> childIndex(String parent)throws Exception{
+            long generation;
             synchronized(directoryIndexLock){
                 java.util.Map<String,Node> cached=directoryIndexCache.get(parent);
                 if(cached!=null)return cached;
-                java.util.Map<String,Node> loaded=new java.util.LinkedHashMap<>();
+                generation=directoryIndexGeneration.get();
+            }
+            java.util.concurrent.FutureTask<java.util.Map<String,Node>> task =
+                    new java.util.concurrent.FutureTask<>(() -> loadDirectoryIndex(parent,generation));
+            java.util.concurrent.FutureTask<java.util.Map<String,Node>> active=directoryLoads.putIfAbsent(parent,task);
+            if(active==null){active=task;task.run();}
+            try{
+                return active.get();
+            }catch(InterruptedException error){
+                Thread.currentThread().interrupt();
+                throw error;
+            }catch(java.util.concurrent.ExecutionException error){
+                Throwable cause=error.getCause();
+                if(cause instanceof Exception)throw (Exception)cause;
+                if(cause instanceof Error)throw (Error)cause;
+                throw new IllegalStateException("SAF 디렉터리 조회 실패",cause);
+            }finally{
+                directoryLoads.remove(parent,active);
+            }
+        }
+        private java.util.Map<String,Node> loadDirectoryIndex(String parent,long generation)throws Exception{
+            java.util.Map<String,Node> loaded=new java.util.LinkedHashMap<>();
+            directoryQuerySlots.acquire();
+            try{
                 Uri u=DocumentsContract.buildChildDocumentsUriUsingTree(tree,parent);
                 try(Cursor c=getContentResolver().query(u,new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE},null,null,null)){
                     if(c!=null)while(c.moveToNext()){
@@ -1007,13 +1128,40 @@ public final class MainActivity extends Activity {
                         loaded.put(name,new Node(c.getString(0),name,DocumentsContract.Document.MIME_TYPE_DIR.equals(c.getString(2))));
                     }
                 }
-                if(directoryIndexCache.size()<MAX_CACHED_DIRECTORIES&&cachedDirectoryChildren+loaded.size()<=MAX_CACHED_CHILDREN){
-                    directoryIndexCache.put(parent,loaded);cachedDirectoryChildren+=loaded.size();return loaded;
-                }
-                return loaded;
+            }finally{
+                directoryQuerySlots.release();
             }
+            synchronized(directoryIndexLock){
+                if(directoryIndexGeneration.get()!=generation)return loaded;
+                java.util.Map<String,Node> existing=directoryIndexCache.get(parent);
+                if(existing!=null)return existing;
+                if(loaded.size()<=MAX_CACHED_CHILDREN){
+                    while(directoryIndexCache.size()>=MAX_CACHED_DIRECTORIES
+                            ||cachedDirectoryChildren+loaded.size()>MAX_CACHED_CHILDREN){
+                        java.util.Iterator<java.util.Map.Entry<String,java.util.Map<String,Node>>> iterator=directoryIndexCache.entrySet().iterator();
+                        if(!iterator.hasNext())break;
+                        java.util.Map.Entry<String,java.util.Map<String,Node>> eldest=iterator.next();
+                        iterator.remove();
+                        caseInsensitiveDirectoryCache.remove(eldest.getKey());
+                        cachedDirectoryChildren-=eldest.getValue().size();
+                    }
+                    directoryIndexCache.put(parent,loaded);
+                    cachedDirectoryChildren+=loaded.size();
+                }
+            }
+            return loaded;
         }
-        void invalidateDirectoryIndex(){synchronized(directoryIndexLock){directoryIndexCache.clear();cachedDirectoryChildren=0;}}
+        void invalidateDirectoryIndex(){
+            synchronized(directoryIndexLock){
+                directoryIndexGeneration.incrementAndGet();
+                directoryIndexCache.clear();
+                caseInsensitiveDirectoryCache.clear();
+                cachedDirectoryChildren=0;
+            }
+            directoryLoads.clear();
+            cachedModIds=null;
+            cachedModIdsGeneration=-1L;
+        }
         Node node(String id)throws Exception{Uri u=DocumentsContract.buildDocumentUriUsingTree(tree,id);try(Cursor c=getContentResolver().query(u,new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE},null,null,null)){if(c==null||!c.moveToFirst())return new Node(id,"Wayward",true);return new Node(c.getString(0),c.getString(1),DocumentsContract.Document.MIME_TYPE_DIR.equals(c.getString(2)));}}
     }
     private static final class Node{final String id,name;final boolean dir;Node(String i,String n,boolean d){id=i;name=n;dir=d;}}
