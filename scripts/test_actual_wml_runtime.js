@@ -204,6 +204,16 @@ function startServer(root) {
       buttons: await page.locator("#root button").allTextContents()
     }));
 
+    await page.getByRole("button", { name: "아내", exact: true }).click();
+    await page.getByText("피파", { exact: true }).click();
+    await page.getByRole("button", { name: "계속할 캐릭터를 고르세요" }).click();
+    await page.waitForTimeout(1200);
+    console.log("WIFE_PROFILE_SELECTED_REPORT", JSON.stringify({
+      rootText: (await page.locator("#root").innerText()).slice(0, 6000),
+      buttons: await page.locator("#root button").allTextContents()
+    }));
+
+
 
     const stateResult = await page.evaluate(testState => {
       const api = window.WML.dev();
