@@ -7,6 +7,7 @@ const contains = value => assert.ok(source.includes(value), "Missing launcher be
 contains("s.setCacheMode(WebSettings.LOAD_DEFAULT)");
 contains('.setDomain(domain+":"+originPort)');
 contains("FolderHandler.isGameRequestPath(path)");
+contains("WebResourceResponse handle(String p){return serveGamePath(p);}");
 contains("folderHandler.serveGamePath(path.substring(6))");
 contains("web.loadUrl(gameUrl);");
 contains("Image Studio is optional: its startup must never gate the game page.");
