@@ -1,13 +1,25 @@
 # Wayward Launcher 이미지 생성 연결 설계
 
 작성 기준: 2026-11-09
-상태: 제한적 구현/미검증(2026-11-09). 작업 브랜치 `feature/android-imagegen-launcher-one-tap`에 내장 Bun 시작 시도, 앱 전용 백엔드 복사, Foreground Service, HTTPS WebView용 제한된 Fetch 프록시가 구현되어 있다. 실제 CLI 실행 경로, Android 의존성, 토큰 설정, WML 모드의 fetch/XHR/WebSocket 호출 계약을 원본 소스 및 Galaxy S25 Ultra에서 다시 검증하기 전까지 완료로 표시하지 않는다.
+상태: 제한적 구현/미검증(2026-11-09). 후속 작업 브랜치 `fix/android-imagegen-session-detection`에서 현재 세션의 `wml/mods/imagestudio` 탐지, 세션 백엔드만 복사, 버전이 같은 세션 사이의 단일 공통 서버 재사용, `:imagegen` 별도 프로세스, 파일 기반 heartbeat/진단 로그를 구현했다. 별도 Image Studio ZIP 설치는 사용하지 않는다. 실제 Bun/패키지 실행과 생성 결과 표시는 Galaxy S25 Ultra에서 아직 검증하지 않았다.
 
 ## 목표와 사용자 흐름
 
+## 현재 런처 연결 구조 (0.3.1 후속 브랜치)
+
+- 게임 세션을 열 때 해당 세션의 `wml/mods/imagestudio/mod.js`가 WML ID `imagestudio`를 선언하는지 검사한다.
+- `backend/wayward-imagegen/package.json`과 `src/cli.ts`가 같은 세션에서 확인될 때만 해당 세션의 백엔드를 앱 비공개 저장소로 복사한다. 등록된 다른 세션이나 Image Studio 전용 ZIP을 검색하지 않는다.
+- 서버는 Android 앱 차원의 단일 Foreground Service로 `127.0.0.1:8189`에서 실행한다. 세션별 WebView는 동일한 네이티브 Fetch 프록시를 통해 서버를 사용한다.
+- 서버가 이미 실행 중이면 `package.json`의 버전이 일치하는 세션만 재사용한다. 버전이 다르면 실행 중인 서버를 덮어쓰지 않고 연결을 거부한다.
+- 서비스는 `:imagegen` 프로세스로 분리한다. 서비스 상태는 앱 비공개 파일의 원자적 Properties 스냅샷으로 전달하고 5초마다 heartbeat를 갱신한다. 20초 이상 heartbeat가 끊긴 시작 상태는 종료된 것으로 판단한다.
+- 진단 로그 위치는 앱 내부 `filesDir/imagegen/startup.log` 및 `filesDir/imagegen/server.log`다. 로그는 앱 데이터 안에 있으므로 일반 파일 관리자에서 바로 보이는 경로가 아니다.
+
+**아직 미검증:** Galaxy S25 Ultra 실기기에서 Bun Android 실행, `bun install`, 실제 health 응답, NovelAI 생성 및 결과 이미지 표시. Fetch 외 XHR/EventSource/WebSocket 호출 계약도 확인되지 않았다.
+
+
 런처의 게임 프로필(Wayward/Faith)별 **이미지 생성** 화면에서 백엔드를 고른다.
 
-1. **휴대폰 NovelAI** — 휴대폰의 Termux에서 EasyGen 서버를 실행하고, EasyGen이 NovelAI 인터넷 API를 호출한다. PC와 ComfyUI는 필요하지 않다.
+1. **휴대폰 NovelAI** — 런처가 앱 전용 런타임과 Image Studio 백엔드를 관리해 NovelAI 인터넷 API를 호출한다. 일반 사용자에게 Termux를 요구하지 않는다. 현재 Bun Android 경로는 실험적이며 실기기 검증이 남아 있다.
 2. **집 PC ComfyUI** — 집 PC가 ComfyUI와 Wayward용 이미지 생성 어댑터를 실행한다. 휴대폰은 요청만 보내고 생성 결과를 받는다. 외부 네트워크에서는 Cloudflare Tunnel을 사용한다.
 3. **사용 안 함** — 해당 게임 프로필에서 이미지 생성 연결을 사용하지 않는다.
 
