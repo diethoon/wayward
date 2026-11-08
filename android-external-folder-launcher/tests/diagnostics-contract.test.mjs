@@ -14,7 +14,6 @@ const chooser = read("app/src/main/java/com/wayward/launcher/WebFileChooser.java
 const proxy = read("app/src/main/java/com/wayward/launcher/ImageGenProxy.java");
 const readApi = read("diagnostics-vercel/api/v1/read.js");
 const cleanupApi = read("diagnostics-vercel/api/v1/cleanup.js");
-const readApi = read("diagnostics-vercel/api/v1/read.js");
 
 assert.match(manifest, /android:name=".LauncherApplication"/);
 assert.match(application, /setDefaultUncaughtExceptionHandler/);
@@ -32,17 +31,12 @@ assert.match(main, /onRenderProcessGone/);
 assert.match(main, /folder_picker_opened/);
 assert.match(main, /folder_permission_failed/);
 assert.match(main, /game_session_open_requested/);
-assert.match(main, /folder_picker_opened/);
-assert.match(main, /folder_permission_failed/);
-assert.match(main, /game_session_open_requested/);
 assert.match(service, /runtime_start_failed/);
 assert.match(chooser, /javascript_console_error/);
 assert.match(proxy, /api_response/);
 assert.match(readApi, /adminAuthorized/);
 assert.match(readApi, /access: "private"/);
 assert.match(cleanupApi, /CRON_SECRET/);
-assert.match(readApi, /adminAuthorized/);
-assert.match(readApi, /access: "private"/);
 assert.doesNotMatch(proxy, /diagnostic\.put\(["']headers["']/);
 assert.doesNotMatch(proxy, /diagnostic\.put\(["']body["']/);
 console.log("Diagnostics launcher contract tests passed.");
