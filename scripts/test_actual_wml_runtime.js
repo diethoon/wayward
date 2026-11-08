@@ -223,6 +223,19 @@ function startServer(root) {
       })))
     }));
 
+    const continuePippa = page.getByRole("button", { name: "계속하기 — 피파 →", exact: true });
+    await continuePippa.waitFor({ state: "visible", timeout: 30000 });
+    await continuePippa.click();
+    await page.waitForTimeout(900);
+    console.log("AFTER_PIPPA_PROFILE_REPORT", JSON.stringify({
+      rootText: (await page.locator("#root").innerText()).slice(0, 5000),
+      buttons: await page.locator("#root button").evaluateAll(nodes => nodes.map((node,index) => ({
+        index, text: node.innerText, aria: node.getAttribute("aria-label"),
+        title: node.title, disabled: node.disabled
+      })))
+    }));
+
+
 
 
     const stateResult = await page.evaluate(testState => {
