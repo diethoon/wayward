@@ -6,14 +6,14 @@ const sourcePath = "Wayward_WML_ko.html";
 const expectedBytes = 4373978;
 const expectedSha256 = "e159fb2002d31559b1ac1936cf6b48cdbbdc4858bfbb0b67e2d7284ca2195d1d";
 const terms = [
-  "WML.boot", "__WML__.boot", "__WML__", "WML",
-  "boot({", "boot({game", "game:\\\"2026-11-01\\\"",
-  "2026-11-01-pre7", "2026-11-01", "wml-core.js", "symbols/2026-11-01.js", "mods.js",
+  "globalThis.__WML__.boot", "__wmlE", "Object.defineProperties(__wmlE",
+  '"J":{get:()=>J', '"Fte":{get:()=>Fte', '"Xrt":{get:()=>Xrt',
+  '"gat":{get:()=>gat', '"SB":{get:()=>SB', '"wst":{get:()=>wst',
+  '"yst":{get:()=>yst', '"PB":{get:()=>PB',
   "function gat", "function wst", "function SB", "function yst", "function PB",
-  "var J=", "let J=", "const J=", "var Fte=", "let Fte=", "const Fte=",
-  "Fte.createPortal", "createPortal", "ReactDOM", "React",
-  "engine:", "engine:{", "render:", "render:()=>", "Object.freeze",
-  "window.WML", "globalThis.WML", "WMLHost"
+  "function Xrt", "const Xrt=", "var Xrt=", "function cst", "const cst=", "var cst=",
+  "Fte.createPortal", "createPortal", "2026-11-01", "wml-core.js",
+  "symbols/2026-11-01.js", "mods.js"
 ];
 
 function sha256(value) {
