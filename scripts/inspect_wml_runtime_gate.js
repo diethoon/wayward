@@ -6,14 +6,18 @@ const sourcePath = "Wayward_WML_ko.html";
 const expectedBytes = 4373978;
 const expectedSha256 = "e159fb2002d31559b1ac1936cf6b48cdbbdc4858bfbb0b67e2d7284ca2195d1d";
 const terms = [
-  "globalThis.__WML__.boot", "__wmlE", "Object.defineProperties(__wmlE",
-  '"J":{get:()=>J', '"Fte":{get:()=>Fte', '"Xrt":{get:()=>Xrt',
-  '"gat":{get:()=>gat', '"SB":{get:()=>SB', '"wst":{get:()=>wst',
-  '"yst":{get:()=>yst', '"PB":{get:()=>PB',
-  "function gat", "function wst", "function SB", "function yst", "function PB",
-  "function Xrt", "const Xrt=", "var Xrt=", "function cst", "const cst=", "var cst=",
-  "Fte.createPortal", "createPortal", "2026-11-01", "wml-core.js",
-  "symbols/2026-11-01.js", "mods.js"
+  '"J":{get:()=>J,set:v=>{J=v}', '"J":{get:()=>J,enumerable',
+  '"Fte":{get:()=>Fte,set:v=>{Fte=v}', '"Fte":{get:()=>Fte,enumerable',
+  '"Xrt":{get:()=>Xrt,set:v=>{Xrt=v}', '"Xrt":{get:()=>Xrt,enumerable',
+  '"gat":{get:()=>gat,set:v=>{gat=v}', '"gat":{get:()=>gat,enumerable',
+  '"SB":{get:()=>SB,set:v=>{SB=v}', '"SB":{get:()=>SB,enumerable',
+  '"wst":{get:()=>wst,set:v=>{wst=v}', '"wst":{get:()=>wst,enumerable',
+  '"yst":{get:()=>yst,set:v=>{yst=v}', '"yst":{get:()=>yst,enumerable',
+  '"PB":{get:()=>PB,set:v=>{PB=v}', '"PB":{get:()=>PB,enumerable',
+  "globalThis.__WML__.boot", "Object.defineProperties(__wmlE",
+  "function gat", "function wst", "function SB", "function yst",
+  "function PB", "function Xrt", "function cst",
+  "2026-11-01", "wml-core.js", "symbols/2026-11-01.js", "mods.js"
 ];
 
 function sha256(value) {
