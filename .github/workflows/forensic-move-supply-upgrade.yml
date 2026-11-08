@@ -29,5 +29,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: forensic-move-supply-upgrade
-          path: forensic-move-supply-upgrade.zip
+          path: |
+            forensic-move-supply-upgrade.zip
+            focused-ui-owner.zip
           if-no-files-found: error
