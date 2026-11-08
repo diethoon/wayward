@@ -562,6 +562,9 @@ public final class MainActivity extends Activity {
         Intent intent = new Intent(this, ImageGenService.class);
         intent.setAction(ImageGenService.ACTION_START);
         intent.putExtra(ImageGenService.EXTRA_BACKEND_ROOT, backend.getAbsolutePath());
+        ImageGenService.serverReady = false;
+        ImageGenService.starting = true;
+        ImageGenService.statusMessage = "이미지 생성 서버 시작 요청을 전달했습니다.";
         try {
             if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
             else startService(intent);
