@@ -92,7 +92,7 @@ if (fs.existsSync(corePath)) {
       line: versionAt + 1, lines: lines.slice(Math.max(0,versionAt-2),versionAt+5)
     }));
   }
-  for (const term of ["function addHook(", "function getHook(", "function boot(", "globalThis.__WML__", "window.WML =", "const VERSION"]) {
+  for (const term of ["function addHook(", "function getHook(", "function boot(", "globalThis.__WML__", "window.__WML__", "__WML__", "window.WML =", "const VERSION"]) {
     const at = code.indexOf(term);
     if (at >= 0) console.log("CORE_CONTEXT", JSON.stringify({
       term, offset: at,
