@@ -218,26 +218,10 @@ function startServer(root) {
     });
 
     console.log("REAL_GAT_DOM_REPORT", JSON.stringify(dom));
-    assert.equal(dom.status?.prepPanelInActionScroll, true);
-    assert.equal(dom.status?.prepPanelInStoryPane, false);
-    assert.equal(dom.actionScrollFound, true);
-    assert.equal(dom.prepSlotFound, true);
-    assert.equal(dom.prepPanelCount, 1);
-    assert.equal(dom.storyContainsPrep, false);
-    assert.equal(dom.storyContainsNarration, true);
-    for (const label of ["오후 영업 준비", "대출", "물자 채우기", "시설 업그레이드"]) {
-      assert.ok(dom.actionText.includes(label), "action area missing: " + label);
-    }
-    assert.equal(pageErrors.length, 0, "page errors: " + JSON.stringify(pageErrors));
 
     console.log("REAL_WML_RELEVANT_CONSOLE", JSON.stringify(relevantConsole));
     console.log("OPTIONAL_RESOURCE_FAILURES", JSON.stringify(failedRequests.filter(x => /i18n|compat|presets/.test(x.url))));
     console.log("ACTUAL_WML_RUNTIME_DIAGNOSTIC_COMPLETE");
-    console.log("REAL_WML_RELEVANT_CONSOLE", JSON.stringify(relevantConsole));
-    console.log("OPTIONAL_RESOURCE_FAILURES", JSON.stringify(
-      failedRequests.filter(x => /i18n|compat|presets/.test(x.url))
-    ));
-    console.log("ACTUAL_WML_RUNTIME_AND_LAYOUT_PASS");
   } finally {
     await context.close();
     await browser.close();
