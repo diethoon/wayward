@@ -20,16 +20,15 @@ with SOURCE.open("rb") as f:
         if not block:
             break
         digest.update(block)
-        chunks.append({
-            "offset": offset,
-            "length": len(block),
-            "sha256": hashlib.sha256(block).hexdigest()
-        })
+        chunks.append({"offset": offset, "length": len(block),
+                       "sha256": hashlib.sha256(block).hexdigest()})
         scan = carry + block
         base = offset - len(carry)
         for match in pattern.finditer(scan):
-            name = match.group(1).decode("ascii")
-            declarations.append({"name": name, "offset": base + match.start()})
+            declarations.append({
+                "name": match.group(1).decode("ascii"),
+                "offset": base + match.start()
+            })
         carry = scan[-256:]
         offset += len(block)
 
@@ -54,14 +53,12 @@ def extract_by_next_decl(name, start):
     if not next_decl:
         raise RuntimeError(f"No following function boundary for {name}")
     end = next_decl["offset"]
-    previous = read_at(end - 1, 1)
-    assert previous == b"}", {
-        "name": name,
-        "candidate_next": next_decl,
-        "previous_byte": previous.hex()
+    boundary = read_at(end - 2, 2)
+    assert boundary in (b"};", b"} "), {
+        "name": name, "candidate_next": next_decl, "boundary": boundary.hex()
     }
     length = end - start
-    assert length > 0 and length < 300_000, (name, length, next_decl)
+    assert 0 < length < 300_000, (name, length, next_decl)
     outdir = Path("forensic-functions") / name
     outdir.mkdir(parents=True, exist_ok=True)
     parts = []
@@ -87,40 +84,29 @@ def extract_by_next_decl(name, start):
             })
             consumed += len(part)
             index += 1
-    check = subprocess.run(
-        ["node", "--check", str(assembled)],
-        capture_output=True, text=True
-    )
+    check = subprocess.run(["node", "--check", str(assembled)],
+                           capture_output=True, text=True)
     if check.returncode:
         raise RuntimeError(f"node --check failed for {name}: {check.stderr[-2000:]}")
     return {
-        "name": name,
-        "source_offset": start,
-        "source_end": end,
-        "function_bytes": length,
-        "function_sha256": function_hash.hexdigest(),
-        "next_declaration": next_decl,
-        "node_check": "PASS",
-        "parts": parts
+        "name": name, "source_offset": start, "source_end": end,
+        "function_bytes": length, "function_sha256": function_hash.hexdigest(),
+        "next_declaration": next_decl, "node_check": "PASS", "parts": parts
     }
 
 functions = []
 for name in ["SB", "yst", "wst", "Zot", "Hst", "gat"]:
     positions = by_name.get(name, [])
-    if not positions:
-        continue
-    functions.append(extract_by_next_decl(name, positions[0]))
+    if positions:
+        functions.append(extract_by_next_decl(name, positions[0]))
 
 manifest = {
     "repository": "diethoon/wayward",
     "branch": "forensic/complete-ui-functions-20261108",
     "base_commit": "d1ad04c261cb503309a7d5d51f6c1998712c0383",
-    "source_path": str(SOURCE),
-    "source_bytes": offset,
-    "source_sha256": actual_sha,
-    "chunk_bytes": CHUNK,
-    "source_chunks": chunks,
-    "relevant_declarations": by_name,
+    "source_path": str(SOURCE), "source_bytes": offset,
+    "source_sha256": actual_sha, "chunk_bytes": CHUNK,
+    "source_chunks": chunks, "relevant_declarations": by_name,
     "functions": functions
 }
 Path("forensic-functions-manifest.json").write_text(
@@ -145,5 +131,5 @@ with zipfile.ZipFile("target-ui-functions.zip") as z:
 print("SOURCE", offset, actual_sha, "CHUNKS", len(chunks))
 for item in functions:
     print("FUNCTION", item["name"], item["source_offset"], item["source_end"],
-          item["function_bytes"], item["function_sha256"], item["node_check"])
-print("TARGET DECLARATIONS", json.dumps(by_name))
+          item["function_bytes"], item["function_sha256"], item["node_check"],
+          "NEXT", item["next_declaration"])
