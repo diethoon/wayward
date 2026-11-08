@@ -8,6 +8,7 @@ on:
       - "scripts/inspect_wml_runtime_gate.js"
       - "scripts/inspect_wml_archive.js"
       - "scripts/test_actual_wml_runtime.js"
+      - "mobile-ui-migration/mod.js"
       - ".github/workflows/forensic-wml-runtime-gate.yml"
 
 permissions:
@@ -45,6 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           node --check scripts/test_actual_wml_runtime.js
+          node --check mobile-ui-migration/mod.js
           node scripts/test_actual_wml_runtime.js
       - name: Upload raw forensic evidence
         if: always()
