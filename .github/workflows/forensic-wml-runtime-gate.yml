@@ -1,0 +1,35 @@
+name: Forensic inspect exact WML bootstrap and game id
+
+on:
+  pull_request:
+    branches:
+      - fix/mobile-ui-prep-choice-layout-1.3.15
+    paths:
+      - "scripts/inspect_wml_runtime_gate.js"
+      - ".github/workflows/forensic-wml-runtime-gate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-exact-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Inspect exact WML source in 4 KiB binary chunks
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/inspect_wml_runtime_gate.js
+          node scripts/inspect_wml_runtime_gate.js
+      - name: Upload raw forensic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-wml-runtime-gate-evidence
+          path: evidence/
+          if-no-files-found: error
