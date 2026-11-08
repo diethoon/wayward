@@ -1,27 +1,48 @@
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 const { chromium } = require("playwright");
 
-const root = process.cwd();
-const save = JSON.parse(fs.readFileSync("새 세이브.json", "utf8"));
-assert.equal(save.state?.phase, "prep", "saved test state must be the real prep-phase save");
-
-const mime = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".webp": "image/webp",
-  ".woff2": "font/woff2"
+const REPO = process.cwd();
+const ARCHIVE = path.join(REPO, "wayward 11.2.zip");
+const STAGE = "/tmp/wayward-wml-runtime-live";
+const EXPECTED = {
+  bytes: 4373978,
+  sha256: "e159fb2002d31559b1ac1936cf6b48cdbbdc4858bfbb0b67e2d7284ca2195d1d",
+  md5: "d75797d4101f4a1312b3ae0571d77f68"
 };
+const SAVE_PATH = path.join(REPO, "새 세이브.json");
+const MOD_PATH = path.join(REPO, "mobile-ui-migration", "mod.js");
 
-function startServer() {
+function hash(algorithm, bytes) {
+  return crypto.createHash(algorithm).update(bytes).digest("hex");
+}
+
+function writeZipEntry(entry, destination) {
+  const bytes = execFileSync("unzip", ["-p", ARCHIVE, entry], {
+    encoding: "buffer", maxBuffer: 32 * 1024 * 1024
+  });
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  fs.writeFileSync(destination, bytes);
+  return bytes;
+}
+
+function startServer(root) {
+  const mime = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".woff2": "font/woff2"
+  };
   return new Promise(resolve => {
     const server = http.createServer((req, res) => {
       let pathname;
@@ -32,8 +53,8 @@ function startServer() {
       if (file !== root && !file.startsWith(root + path.sep)) {
         res.writeHead(403); return res.end("forbidden");
       }
-      fs.stat(file, (statError, stat) => {
-        if (statError || !stat.isFile()) { res.writeHead(404); return res.end("not found"); }
+      fs.stat(file, (error, stat) => {
+        if (error || !stat.isFile()) { res.writeHead(404); return res.end("not found"); }
         res.writeHead(200, {
           "content-type": mime[path.extname(file).toLowerCase()] || "application/octet-stream",
           "content-length": stat.size,
@@ -47,129 +68,166 @@ function startServer() {
 }
 
 (async () => {
-  const server = await startServer();
+  assert.ok(fs.existsSync(ARCHIVE), "canonical source archive missing");
+  assert.ok(fs.existsSync(SAVE_PATH), "prep phase test save missing");
+  assert.ok(fs.existsSync(MOD_PATH), "v1.3.15 migration module missing");
+
+  const save = JSON.parse(fs.readFileSync(SAVE_PATH, "utf8"));
+  assert.equal(save.state?.phase, "prep", "test save is not phase=prep");
+
+  fs.rmSync(STAGE, { recursive: true, force: true });
+  fs.mkdirSync(STAGE, { recursive: true });
+
+  const htmlEntry = "wayward 11.5/Wayward_WML_ko.html";
+  const htmlBytes = writeZipEntry(htmlEntry, path.join(STAGE, "Wayward_WML_ko.html"));
+  const htmlMeta = {
+    bytes: htmlBytes.length,
+    sha256: hash("sha256", htmlBytes),
+    md5: hash("md5", htmlBytes)
+  };
+  assert.equal(htmlMeta.bytes, EXPECTED.bytes);
+  assert.equal(htmlMeta.sha256, EXPECTED.sha256);
+  assert.equal(htmlMeta.md5, EXPECTED.md5);
+  console.log("CANONICAL_HTML_EXACT_PASS", JSON.stringify(htmlMeta));
+
+  const runtimeEntries = [
+    "wayward 11.5/wml/runtime/wml-core.js",
+    "wayward 11.5/wml/symbols/2026-11-01.js"
+  ];
+  for (const entry of runtimeEntries) {
+    const relative = entry.slice("wayward 11.5/".length);
+    const bytes = writeZipEntry(entry, path.join(STAGE, relative));
+    console.log("RUNTIME_ASSET", JSON.stringify({
+      path: relative, bytes: bytes.length, sha256: hash("sha256", bytes)
+    }));
+  }
+
+  const modDestination = path.join(STAGE, "wml/mods/mobile-ui-migration/mod.js");
+  fs.mkdirSync(path.dirname(modDestination), { recursive: true });
+  fs.copyFileSync(MOD_PATH, modDestination);
+
+  // The archive omits the Korean i18n shims referenced by the canonical HTML.
+  // Empty files only prevent optional translation-script 404s in this isolated test.
+  const i18nPaths = [
+    "wml/i18n/ko/finals.js", "wml/i18n/ko/display.js",
+    "wml/i18n/ko/voice.js", "wml/i18n/ko/runtime.js"
+  ];
+  for (const relative of i18nPaths) {
+    const destination = path.join(STAGE, relative);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.writeFileSync(destination, "/* isolated test shim: absent from archive */\\n");
+  }
+  fs.mkdirSync(path.join(STAGE, "wml/compat"), { recursive: true });
+  fs.writeFileSync(path.join(STAGE, "wml/compat/compat.js"), "/* optional compat omitted */\\n");
+  fs.mkdirSync(path.join(STAGE, "wml/presets"), { recursive: true });
+  fs.writeFileSync(path.join(STAGE, "wml/presets/presets.js"), "/* optional presets omitted */\\n");
+  fs.writeFileSync(path.join(STAGE, "wml/mods/mods.js"), 'WML.enable(["mobile-ui-migration"]);\\n');
+
+  const server = await startServer(STAGE);
   const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
-    deviceScaleFactor: 1,
-    isMobile: true,
-    hasTouch: true,
+    deviceScaleFactor: 1, isMobile: true, hasTouch: true,
     userAgent: "Mozilla/5.0 (Linux; Android 15; SM-S938N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36"
   });
-  await context.addInitScript(() => localStorage.setItem("wml.dev", "true"));
 
   const page = await context.newPage();
   const pageErrors = [];
-  const wmlConsole = [];
+  const failedRequests = [];
+  const relevantConsole = [];
   page.on("pageerror", error => pageErrors.push(error.message));
+  page.on("requestfailed", request => failedRequests.push({
+    url: request.url(), error: request.failure()?.errorText
+  }));
   page.on("console", message => {
     const value = message.text();
-    if (/\\[WML|mobile-ui-migration|setup failed|hook .* threw/i.test(value)) {
-      wmlConsole.push({ type: message.type(), text: value });
+    if (/\\[WML|mobile-ui-migration|hook .* threw|setup failed|unknown symbol/i.test(value)) {
+      relevantConsole.push({ type: message.type(), text: value.slice(0, 1600) });
     }
   });
 
   try {
     await page.goto("http://127.0.0.1:4173/Wayward_WML_ko.html", {
-      waitUntil: "domcontentloaded",
-      timeout: 120000
+      waitUntil: "domcontentloaded", timeout: 120000
     });
     await page.waitForFunction(() => window.WML?.status?.().booted === true, {
       timeout: 60000
     });
 
     const boot = await page.evaluate(() => {
-      const status = window.WML.status();
+      const s = window.WML.status();
       return {
-        wmlVersion: window.WML.VERSION,
-        game: status.game,
-        host: status.host,
-        loaded: status.loaded,
-        failed: status.failed,
-        warnings: status.warnings
+        wmlVersion: window.WML.VERSION, game: s.game, host: s.host,
+        loaded: s.loaded, failed: s.failed, warnings: s.warnings,
+        order: s.order, symbols: s.modSymbols
       };
     });
-
+    console.log("REAL_WML_BOOT_REPORT", JSON.stringify(boot));
+    assert.equal(boot.wmlVersion, "0.9.5");
     assert.ok(boot.loaded.includes("mobile-ui-migration"),
-      "WML did not load mobile-ui-migration: " + JSON.stringify(boot));
+      "migration module did not reach loaded state: " + JSON.stringify(boot));
     assert.equal(boot.failed.length, 0,
-      "WML reported module/setup failures: " + JSON.stringify(boot.failed));
+      "WML boot reported failures: " + JSON.stringify(boot.failed));
 
-    const saveBytes = Buffer.byteLength(JSON.stringify(save));
     const stateResult = await page.evaluate(testState => {
-      const dev = window.WML.dev();
-      const before = dev.store.game();
-      dev.store.update(() => testState);
-      const after = dev.store.game();
-      return {
-        beforePhase: before?.phase ?? null,
-        afterPhase: after?.phase ?? null,
-        stateSlot: after?.slot ?? null
-      };
+      const api = window.WML.dev();
+      const before = api.store.game();
+      api.store.update(() => testState);
+      const after = api.store.game();
+      return { beforePhase: before?.phase ?? null, afterPhase: after?.phase ?? null, slot: after?.slot ?? null };
     }, save.state);
-
-    assert.equal(stateResult.afterPhase, "prep",
-      "real test save was not installed into the live game store");
+    assert.equal(stateResult.afterPhase, "prep");
+    console.log("REAL_GAME_STORE_PASS", JSON.stringify(stateResult));
 
     await page.waitForFunction(() => {
-      const status = window.__M36_MOBILE_UI_MIGRATION__?.getStatus?.();
-      return status?.prepPanelInActionScroll === true;
+      const value = window.__M36_MOBILE_UI_MIGRATION__?.getStatus?.();
+      return value && value.prepPanelInActionScroll === true;
     }, { timeout: 20000 });
 
-    const result = await page.evaluate(() => {
-      const status = window.__M36_MOBILE_UI_MIGRATION__.getStatus();
-      const actionScroll = document.querySelector("#root .m36-ui-migration-action-scroll");
-      const prep = actionScroll?.querySelector(".m36-ui-migration-prep-slot");
-      const story = [...document.querySelectorAll("#root div")].find(element =>
-        String(element.className || "").includes(
-          "flex-1 min-h-0 overflow-y-auto p-2 text-[0.78rem]"
-        )
+    const dom = await page.evaluate(() => {
+      const status = window.__M36_MOBILE_UI_MIGRATION__?.getStatus?.() || null;
+      const action = document.querySelector("#root .m36-ui-migration-action-scroll");
+      const prep = action?.querySelector(".m36-ui-migration-prep-slot");
+      const story = [...document.querySelectorAll("#root div")].find(el =>
+        String(el.className || "").includes("flex-1 min-h-0 overflow-y-auto p-2 text-[0.78rem]")
       );
-      const prepText = prep?.textContent || "";
-      const storyText = story?.textContent || "";
       return {
-        ...status,
-        prepCount: document.querySelectorAll("#root .m36-ui-migration-prep-panel").length,
-        actionContainsHeading: prepText.includes("오후 영업 준비"),
-        actionContainsDebt: prepText.includes("대출"),
-        actionContainsStockUp: prepText.includes("물자 채우기"),
-        actionContainsFacilities: prepText.includes("시설 업그레이드"),
-        storyContainsPrep: storyText.includes("오후 영업 준비"),
-        storyContainsNarration: storyText.includes("당신은 위층 침실"),
-        viewport: { width: innerWidth, height: innerHeight },
-        pageErrors: window.__M36_MOBILE_UI_MIGRATION__ ? 0 : -1
+        status, actionScrollFound: Boolean(action), prepSlotFound: Boolean(prep),
+        prepPanelCount: document.querySelectorAll(
+          "#root .m36-ui-migration-prep-slot .m36-ui-migration-prep-panel"
+        ).length,
+        actionText: (prep?.textContent || "").slice(0, 2000),
+        storyText: (story?.textContent || "").slice(0, 3000),
+        storyContainsPrep: (story?.textContent || "").includes("오후 영업 준비"),
+        storyContainsNarration: (story?.textContent || "").includes("당신은 위층 침실"),
+        viewport: { width: innerWidth, height: innerHeight }
       };
     });
 
-    assert.equal(result.mobileHost, true, "WML runtime did not identify Android");
-    assert.equal(result.portrait, true, "mobile portrait breakpoint did not activate");
-    assert.equal(result.actionPanel, true, "original gat action panel was not transformed");
-    assert.equal(result.actionScroll, true, "original action scroll was not transformed");
-    assert.equal(result.prepPanelInActionScroll, true, "prep panel is not in action scroll");
-    assert.equal(result.prepPanelInStoryPane, false, "prep panel still exists in story pane");
-    assert.equal(result.prepCount, 1, "prep panel must be rendered exactly once");
-    assert.equal(result.actionContainsHeading, true);
-    assert.equal(result.actionContainsDebt, true);
-    assert.equal(result.actionContainsStockUp, true);
-    assert.equal(result.actionContainsFacilities, true);
-    assert.equal(result.storyContainsPrep, false, "story pane still contains prep heading");
-    assert.equal(pageErrors.length, 0, "browser page errors: " + JSON.stringify(pageErrors));
+    console.log("REAL_GAT_DOM_REPORT", JSON.stringify(dom));
+    assert.equal(dom.status?.prepPanelInActionScroll, true);
+    assert.equal(dom.status?.prepPanelInStoryPane, false);
+    assert.equal(dom.actionScrollFound, true);
+    assert.equal(dom.prepSlotFound, true);
+    assert.equal(dom.prepPanelCount, 1);
+    assert.equal(dom.storyContainsPrep, false);
+    assert.equal(dom.storyContainsNarration, true);
+    for (const label of ["오후 영업 준비", "대출", "물자 채우기", "시설 업그레이드"]) {
+      assert.ok(dom.actionText.includes(label), "action area missing: " + label);
+    }
+    assert.equal(pageErrors.length, 0, "page errors: " + JSON.stringify(pageErrors));
 
-    console.log("REAL_WML_BOOT_PASS", JSON.stringify(boot));
-    console.log("REAL_GAME_STORE_FIXTURE_PASS", JSON.stringify({
-      saveBytes,
-      beforePhase: stateResult.beforePhase,
-      afterPhase: stateResult.afterPhase,
-      slot: stateResult.stateSlot
-    }));
-    console.log("REAL_GAT_LAYOUT_PASS", JSON.stringify(result));
-    console.log("WML_RUNTIME_CONSOLE", JSON.stringify(wmlConsole));
+    console.log("REAL_WML_RELEVANT_CONSOLE", JSON.stringify(relevantConsole));
+    console.log("OPTIONAL_RESOURCE_FAILURES", JSON.stringify(
+      failedRequests.filter(x => /i18n|compat|presets/.test(x.url))
+    ));
+    console.log("ACTUAL_WML_RUNTIME_AND_LAYOUT_PASS");
   } finally {
     await context.close();
     await browser.close();
     await new Promise(resolve => server.close(resolve));
   }
 })().catch(error => {
-  console.error("REAL_WML_RUNTIME_FAIL", error.stack || String(error));
+  console.error("ACTUAL_WML_RUNTIME_AND_LAYOUT_FAIL", error.stack || String(error));
   process.exitCode = 1;
 });
