@@ -12,6 +12,8 @@ ZIP_TEST_BUILD="$(mktemp -d)"
 trap 'rm -rf "$ZIP_TEST_BUILD"' EXIT
 javac -d "$ZIP_TEST_BUILD" app/src/main/java/com/wayward/launcher/ZipModStore.java tests/ZipModStoreTest.java
 java -cp "$ZIP_TEST_BUILD" com.wayward.launcher.ZipModStoreTest
+javac -d "$ZIP_TEST_BUILD" app/src/main/java/com/wayward/launcher/ImageGenStatusStore.java tests/ImageGenStatusStoreTest.java
+java -cp "$ZIP_TEST_BUILD" com.wayward.launcher.ImageGenStatusStoreTest
 test -s ../Wayward_WML_ko.html
 gradle --no-daemon assembleDebug
 test -s app/build/outputs/apk/debug/app-debug.apk
