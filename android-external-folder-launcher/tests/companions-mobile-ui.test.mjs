@@ -10,6 +10,11 @@ assert.ok(source.includes('WML.use("companions")'));
 assert.ok(source.includes("live.createCard(person.id)"));
 assert.ok(source.includes("live.updateCard(entry.card, state)"));
 assert.ok(source.includes("live.destroyCard(entry.card)"));
+assert.ok(source.includes("installLocalImageBasePath(api)"));
+assert.ok(source.includes('new URL(relativePath + parsed.search + parsed.hash, document.baseURI).href'));
+assert.ok(java.includes('addPathHandler("/game/",folderHandler)'));
+assert.ok(java.includes('InputStream in=isImageAssetPath(p)?tree.openImage(p):tree.open(p);'));
+assert.ok(java.includes('n=findIgnoreCase(parent,parts[i])'));
 assert.ok(java.includes('BUILTIN_COMPANIONS_MOD_ID = "launcher-mobile-companions"'));
 assert.ok(java.includes('BUILTIN_COMPANIONS_MOD_FILE = "wml/mods/" + BUILTIN_COMPANIONS_MOD_ID + "/mod.js"'));
 assert.ok(java.includes('assets.open("launcher-companions-mobile-ui.js")'));
@@ -41,17 +46,60 @@ class FakeElement {
     node.parentNode = null;
     return node;
   }
-  setAttribute(name, value) { this.attributes[name] = String(value); }
+  setAttribute(name, value) {
+    const key = String(name);
+    this.attributes[key] = String(value);
+    if (this instanceof FakeImageElement && key.toLowerCase() === "src") this._src = String(value);
+  }
+  getAttribute(name) {
+    const key = String(name);
+    return Object.prototype.hasOwnProperty.call(this.attributes, key) ? this.attributes[key] : null;
+  }
+  querySelectorAll(selector) {
+    const matches = [];
+    const visit = node => {
+      for (const child of node.children) {
+        if (selector === "img[src]" && child instanceof FakeImageElement && child.getAttribute("src") !== null) {
+          matches.push(child);
+        }
+        visit(child);
+      }
+    };
+    visit(this);
+    return matches;
+  }
   addEventListener(name, callback) { this.listeners[name] = callback; }
   remove() { if (this.parentNode) this.parentNode.removeChild(this); }
   click() { this.listeners.click?.({ currentTarget: this }); }
 }
 
+class FakeImageElement extends FakeElement {
+  constructor() { super("img"); this._src = ""; }
+  get src() { return this._src; }
+  set src(value) {
+    this._src = String(value);
+    this.attributes.src = this._src;
+  }
+}
+
+class FakeMutationObserver {
+  constructor(callback) { this.callback = callback; }
+  observe(target, options) { this.target = target; this.options = options; }
+}
+
+const documentElement = new FakeElement("html");
 const document = {
   body: new FakeElement("body"),
   head: new FakeElement("head"),
-  createElement(tag) { return new FakeElement(tag); }
+  documentElement,
+  baseURI: "https://localhost:8123/game/Wayward_WML_ko.html?launcher=test",
+  createElement(tag) { return String(tag).toLowerCase() === "img" ? new FakeImageElement() : new FakeElement(tag); },
+  querySelectorAll(selector) { return documentElement.querySelectorAll(selector); }
 };
+documentElement.append(document.head, document.body);
+const preexistingImage = new FakeImageElement();
+preexistingImage.src = "https://art.sintention.com/images/illustrious/characters/hina/preexisting.webp";
+document.head.appendChild(preexistingImage);
 const pendingFrames = [];
 const windowListeners = Object.create(null);
 let definition = null;
@@ -73,7 +121,11 @@ const WML = {
       list(state) { return state.companions; },
       live: {
         createCard(id) {
-          const card = { id, el: new FakeElement("article") };
+          const el = new FakeElement("article");
+          const image = new FakeImageElement();
+          image.src = "https://art.sintention.com/images/illustrious/characters/" + id + "/portrait.webp";
+          el.appendChild(image);
+          const card = { id, el, image };
           created.push(card);
           return card;
         },
@@ -100,9 +152,14 @@ const api = {
 };
 const sandbox = {
   WML, document,
+  Element: FakeElement,
+  HTMLImageElement: FakeImageElement,
+  MutationObserver: FakeMutationObserver,
+  URL,
+  location: { href: document.baseURI },
   window: { addEventListener(name, callback) { windowListeners[name] = callback; } },
   requestAnimationFrame(callback) { pendingFrames.push(callback); },
-  console: { warn() {} }
+  console: { info() {}, warn() {} }
 };
 vm.runInNewContext(source, sandbox, { filename: "launcher-companions-mobile-ui.js" });
 assert.ok(definition, "WML module should register");
@@ -113,7 +170,33 @@ assert.equal(typeof definition.setup, "function");
 definition.setup(api);
 assert.deepEqual(requestedModules, ["companions"]);
 assert.equal(typeof provided.open, "function");
+assert.equal(typeof provided.imagePathStatus, "function");
 assert.equal(typeof subscriber, "function");
+assert.equal(
+  preexistingImage.getAttribute("src"),
+  "https://localhost:8123/game/images/illustrious/characters/hina/preexisting.webp",
+  "Images present before the built-in adapter starts must be rewritten."
+);
+
+const attributeImage = new FakeImageElement();
+attributeImage.setAttribute("src", "https://art.sintention.com/images/illustrious/characters/mika/attribute.webp");
+document.head.appendChild(attributeImage);
+assert.equal(
+  attributeImage.getAttribute("src"),
+  "https://localhost:8123/game/images/illustrious/characters/mika/attribute.webp",
+  "setAttribute image URLs must be rewritten."
+);
+
+const rootImage = new FakeImageElement();
+rootImage.src = "https://localhost:8123/images/illustrious/characters/ryza/root.webp";
+assert.equal(
+  rootImage.src,
+  "https://localhost:8123/game/images/illustrious/characters/ryza/root.webp",
+  "Same-origin root /images URLs must resolve relative to the launcher game HTML."
+);
+const initialImageStatus = provided.imagePathStatus();
+assert.equal(initialImageStatus.expectedImagesFolder, "https://localhost:8123/game/images/");
+assert.equal(initialImageStatus.rewrites, 3);
 
 function flushFrames() {
   while (pendingFrames.length) pendingFrames.shift()();
@@ -129,6 +212,16 @@ flushFrames();
 assert.equal(panel.hidden, false);
 assert.equal(created.length, 2);
 assert.equal(updated.length, 2);
+assert.equal(
+  created[0].image.src,
+  "https://localhost:8123/game/images/illustrious/characters/a/portrait.webp",
+  "Companions card images must be rewritten before the card is attached."
+);
+assert.equal(
+  created[1].image.src,
+  "https://localhost:8123/game/images/illustrious/characters/b/portrait.webp"
+);
+assert.equal(provided.imagePathStatus().rewrites, 5);
 assert.equal(panel.children[2].children.length, 2);
 
 gameState = { companions: [{ id: "b", name: "B" }] };
