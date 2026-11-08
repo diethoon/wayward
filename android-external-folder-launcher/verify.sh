@@ -2,7 +2,12 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-git -C "$REPO_ROOT" diff --check HEAD^ HEAD
+if [[ -n "${GITHUB_BASE_REF:-}" ]] && git -C "$REPO_ROOT" rev-parse --verify "origin/${GITHUB_BASE_REF}" >/dev/null 2>&1; then
+  DIFF_BASE="$(git -C "$REPO_ROOT" merge-base HEAD "origin/${GITHUB_BASE_REF}")"
+else
+  DIFF_BASE="HEAD^"
+fi
+git -C "$REPO_ROOT" diff --check "$DIFF_BASE" HEAD
 node --check app/src/main/assets/wml-folder-bootstrap.js
 node --check app/src/main/assets/imagegen-proxy.js
 node tests/imagegen-proxy.test.mjs
