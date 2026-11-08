@@ -235,6 +235,16 @@ function startServer(root) {
       })))
     }));
 
+    const startPippa = page.getByRole("button", { name: "시작 — 피파 →", exact: true });
+    await startPippa.waitFor({ state: "visible", timeout: 30000 });
+    await startPippa.click();
+    await page.waitForTimeout(1600);
+    console.log("GAME_STARTED_REPORT", JSON.stringify({
+      rootText: (await page.locator("#root").innerText()).slice(0, 7000),
+      buttons: await page.locator("#root button").allTextContents()
+    }));
+
+
 
 
 
