@@ -323,7 +323,7 @@ function startServer(root) {
         actionText: (prep?.textContent || "").slice(0, 2000),
         storyText: (story?.textContent || "").slice(0, 3000),
         storyContainsPrep: (story?.textContent || "").includes("오후 영업 준비"),
-        storyContainsNarration: (story?.textContent || "").includes("위층 침실에 있습니다"),
+        storyContainsNarration: (story?.textContent || "").includes("당신에게는 금화 50개"),
         viewport: { width: innerWidth, height: innerHeight },
       };
     });
