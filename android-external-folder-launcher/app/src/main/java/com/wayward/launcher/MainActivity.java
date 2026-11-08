@@ -440,10 +440,28 @@ public final class MainActivity extends Activity {
                 super.onReceivedError(view,request,error);
             }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){
-                if(request!=null&&request.isForMainFrame()&&response!=null&&response.getStatusCode()>=400){
-                    JSONObject details=new JSONObject();
-                    try{details.put("status",response.getStatusCode());}catch(Exception ignored){}
-                    DiagnosticsLogger.event(MainActivity.this,"WARN","webview","main_frame_http_error",details);
+                if(request!=null&&response!=null&&response.getStatusCode()>=400){
+                    Uri failedUri=request.getUrl();
+                    String failedPath=failedUri==null?null:failedUri.getPath();
+                    boolean imageResource=isImageResourcePath(failedPath);
+                    boolean handledByLocalImageLogger=failedPath!=null&&(
+                            (domain.equalsIgnoreCase(failedUri.getHost())&&FolderHandler.isImageRequestPath(failedPath))
+                            ||("art.sintention.com".equalsIgnoreCase(failedUri.getHost())
+                                &&FolderHandler.isLocalOnlyCharacterImagePath(failedPath)));
+                    if(imageResource&&!handledByLocalImageLogger&&imageDiagnostics.getAndIncrement()<16){
+                        JSONObject details=new JSONObject();
+                        try{
+                            details.put("host",failedUri==null?"":failedUri.getHost());
+                            details.put("path",failedPath.substring(0,Math.min(failedPath.length(),240)));
+                            details.put("status",response.getStatusCode());
+                            details.put("mainFrame",request.isForMainFrame());
+                        }catch(Exception ignored){}
+                        DiagnosticsLogger.event(MainActivity.this,"WARN","webview","image_http_error",details);
+                    }else if(request.isForMainFrame()){
+                        JSONObject details=new JSONObject();
+                        try{details.put("status",response.getStatusCode());}catch(Exception ignored){}
+                        DiagnosticsLogger.event(MainActivity.this,"WARN","webview","main_frame_http_error",details);
+                    }
                 }
                 super.onReceivedHttpError(view,request,response);
             }
@@ -484,6 +502,15 @@ public final class MainActivity extends Activity {
             }
         });
         webFileChooser=new WebFileChooser(this);web.setWebChromeClient(webFileChooser);root.addView(web,new FrameLayout.LayoutParams(-1,-1));web.setVisibility(View.GONE);
+    }
+
+    private static boolean isImageResourcePath(String path){
+        if(path==null)return false;
+        String lower=path.toLowerCase(Locale.ROOT);
+        return FolderHandler.isImageRequestPath(path)
+                ||lower.endsWith(".png")||lower.endsWith(".jpg")||lower.endsWith(".jpeg")
+                ||lower.endsWith(".webp")||lower.endsWith(".gif")||lower.endsWith(".avif")
+                ||lower.endsWith(".svg");
     }
 
     private WebResourceResponse serveImageRequest(FolderHandler handler,String path,
