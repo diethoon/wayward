@@ -169,50 +169,75 @@ function startServer(root) {
       "migration module did not reach loaded state: " + JSON.stringify(boot));
     assert.equal(boot.failed.length, 0,
       "WML boot reported failures: " + JSON.stringify(boot.failed));
+    const ageGateButton = page.getByRole("button", { name: "예", exact: true });
+    await ageGateButton.waitFor({ state: "visible", timeout: 30000 });
+    await ageGateButton.click();
+    await page.waitForFunction(
+      () => !String(document.querySelector("#root")?.innerText || "").includes("연령 확인"),
+      { timeout: 30000 }
+    );
+    console.log("AGE_GATE_ACCEPTED", JSON.stringify({
+      rootText: (await page.locator("#root").innerText()).slice(0, 1200)
+    }));
 
     const stateResult = await page.evaluate(testState => {
       const api = window.WML.dev();
       const before = api.store.game();
       api.store.update(() => testState);
       const after = api.store.game();
-      return { beforePhase: before?.phase ?? null, afterPhase: after?.phase ?? null, slot: after?.slot ?? null };
+      return {
+        beforePhase: before?.phase ?? null,
+        afterPhase: after?.phase ?? null,
+        slot: after?.slot ?? null
+      };
     }, save.state);
     assert.equal(stateResult.afterPhase, "prep");
     console.log("REAL_GAME_STORE_PASS", JSON.stringify(stateResult));
 
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(1800);
 
     const hookReport = await page.evaluate(() => {
       const api = window.WML.dev();
       const hooks = [...api.hooks.entries()].map(([raw, hook]) => ({
-        raw, calls: hook.calls,
-        before: hook.before?.map(item => ({ owner: item.owner, where: item.where, errors: item.errors })) || [],
-        around: hook.around?.map(item => ({ owner: item.owner, where: item.where, errors: item.errors })) || [],
-        after: hook.after?.map(item => ({ owner: item.owner, where: item.where, errors: item.errors })) || []
+        raw,
+        calls: hook.calls,
+        before: hook.before?.map(item => ({
+          owner: item.owner, where: item.where, errors: item.errors
+        })) || [],
+        around: hook.around?.map(item => ({
+          owner: item.owner, where: item.where, errors: item.errors
+        })) || [],
+        after: hook.after?.map(item => ({
+          owner: item.owner, where: item.where, errors: item.errors
+        })) || []
       }));
-      return { hooks, rootExists: Boolean(document.querySelector("#root")),
-
-    const ageGateButton = page.getByRole("button", { name: "예", exact: true });
-    await ageGateButton.waitFor({ state: "visible", timeout: 30000 });
-    await ageGateButton.click();
-    await page.waitForFunction(() => !String(document.querySelector("#root")?.innerText || "").includes("연령 확인"), { timeout: 30000 });
-    console.log("AGE_GATE_ACCEPTED", JSON.stringify({ rootText: (await page.locator("#root").innerText()).slice(0, 1200) }));
-
+      return {
+        hooks,
+        rootExists: Boolean(document.querySelector("#root")),
         rootText: (document.querySelector("#root")?.innerText || "").slice(0, 7000),
-        bodyText: (document.body?.innerText || "").slice(0, 9000) };
+        bodyText: (document.body?.innerText || "").slice(0, 9000)
+      };
     });
     console.log("REAL_WML_HOOK_AND_DOM_REPORT", JSON.stringify(hookReport));
     fs.mkdirSync("evidence", { recursive: true });
-    await page.screenshot({ path: "evidence/actual-wml-runtime.png", fullPage: false });
+    await page.screenshot({
+      path: "evidence/actual-wml-runtime.png",
+      fullPage: false
+    });
+
     const dom = await page.evaluate(() => {
       const status = window.__M36_MOBILE_UI_MIGRATION__?.getStatus?.() || null;
       const action = document.querySelector("#root .m36-ui-migration-action-scroll");
       const prep = action?.querySelector(".m36-ui-migration-prep-slot");
       const story = [...document.querySelectorAll("#root div")].find(el =>
-        String(el.className || "").includes("flex-1 min-h-0 overflow-y-auto p-2 text-[0.78rem]")
+        String(el.className || "").includes(
+          "flex-1 min-h-0 overflow-y-auto p-2 text-[0.78rem]"
+        )
       );
       return {
-        status, actionScrollFound: Boolean(action), prepSlotFound: Boolean(prep),
+        status,
+        actionScrollFound: Boolean(action),
+        prepSlotFound: Boolean(prep),
         prepPanelCount: document.querySelectorAll(
           "#root .m36-ui-migration-prep-slot .m36-ui-migration-prep-panel"
         ).length,
@@ -220,7 +245,8 @@ function startServer(root) {
         storyText: (story?.textContent || "").slice(0, 3000),
         storyContainsPrep: (story?.textContent || "").includes("오후 영업 준비"),
         storyContainsNarration: (story?.textContent || "").includes("당신은 위층 침실"),
-        viewport: { width: innerWidth, height: innerHeight }
+        viewport: { width: innerWidth, height: innerHeight },
+        pageErrors
       };
     });
 
