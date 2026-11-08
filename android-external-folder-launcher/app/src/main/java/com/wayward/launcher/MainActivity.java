@@ -497,8 +497,8 @@ public final class MainActivity extends Activity {
             }
             @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest r){
                 Uri u=r.getUrl();WebResourceResponse local=loader.shouldInterceptRequest(u);if(local!=null)return local;
-                if(domain.equalsIgnoreCase(u.getHost())&&u.getPort()==originPort&&u.getPath()!=null&&u.getPath().startsWith("/images/"))return folderHandler.serveImagePath(u.getPath().substring(8));
-                if("art.sintention.com".equalsIgnoreCase(u.getHost())&&u.getPath()!=null&&u.getPath().startsWith("/images/"))return folderHandler.serveExternalImagePath(u.getPath().substring(8));
+                if(domain.equalsIgnoreCase(u.getHost())&&u.getPort()==originPort&&FolderHandler.isImageRequestPath(u.getPath()))return folderHandler.serveImagePath(u.getPath().substring(8));
+                if("art.sintention.com".equalsIgnoreCase(u.getHost())&&FolderHandler.isImageRequestPath(u.getPath()))return folderHandler.serveExternalImagePath(u.getPath().substring(8));
                 return null;
             }
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){
@@ -783,6 +783,9 @@ public final class MainActivity extends Activity {
         private static final String CORE="wml/runtime/wml-core.js";private final SafTree tree;private final android.content.res.AssetManager assets;private final ZipModStore zipMods;private final String origin;
         FolderHandler(SafTree t,android.content.res.AssetManager a,ZipModStore z,String o){tree=t;assets=a;zipMods=z;origin=o;}
         @Override public WebResourceResponse handle(String p){return serve(p);}
+        static boolean isImageRequestPath(String path){
+            return path!=null&&path.regionMatches(true,0,"/images/",0,8);
+        }
         WebResourceResponse serveImagePath(String relative){
             WebResourceResponse result=serveLocalImage(relative);
             return result!=null?result:response(404,"Not Found","text/plain","Local image not found");
