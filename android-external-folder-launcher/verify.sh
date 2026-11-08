@@ -17,6 +17,10 @@ node tests/imagegen-session-contract.test.mjs
 node tests/diagnostics-contract.test.mjs
 node diagnostics-server/server.test.mjs
 node diagnostics-vercel/test.mjs
+node --check diagnostics-vercel/lib/common.js
+node --check diagnostics-vercel/api/v1/ping.js
+node --check diagnostics-vercel/api/v1/ingest.js
+node --check diagnostics-vercel/api/v1/read.js
 node tests/diagnostics-contract.test.mjs
 node diagnostics-server/server.test.mjs
 ZIP_TEST_BUILD="$(mktemp -d)"
