@@ -786,6 +786,9 @@ public final class MainActivity extends Activity {
         static boolean isImageRequestPath(String path){
             return path!=null&&path.regionMatches(true,0,"/images/",0,8);
         }
+        static boolean isImageAssetPath(String path){
+            return path!=null&&path.regionMatches(true,0,"images/",0,7);
+        }
         WebResourceResponse serveImagePath(String relative){
             WebResourceResponse result=serveLocalImage(relative);
             return result!=null?result:response(404,"Not Found","text/plain","Local image not found");
@@ -809,7 +812,7 @@ public final class MainActivity extends Activity {
         }
         WebResourceResponse serve(String raw){
             if(tree==null)return response(404,"Not Found","text/plain","Not found");
-            try{String p=normal(raw);if(p==null)return response(404,"Not Found","text/plain","Not found");InputStream in=tree==null?null:tree.open(p);if(in==null&&zipMods!=null)in=zipMods.open(p);if(in==null)return null;if(p.toLowerCase(Locale.ROOT).endsWith(".html")||p.toLowerCase(Locale.ROOT).endsWith(".htm"))in=mobileViewport(in);if(CORE.equals(p))in=new SequenceInputStream(assets.open("wml-folder-bootstrap.js"),in);String m=mime(p);return new WebResourceResponse(m,text(m)?"UTF-8":null,200,"OK",headers(p),in);}
+            try{String p=normal(raw);if(p==null)return response(404,"Not Found","text/plain","Not found");InputStream in=tree==null?null:(isImageAssetPath(p)?tree.openImage(p):tree.open(p));if(in==null&&zipMods!=null)in=zipMods.open(p);if(in==null)return null;if(p.toLowerCase(Locale.ROOT).endsWith(".html")||p.toLowerCase(Locale.ROOT).endsWith(".htm"))in=mobileViewport(in);if(CORE.equals(p))in=new SequenceInputStream(assets.open("wml-folder-bootstrap.js"),in);String m=mime(p);return new WebResourceResponse(m,text(m)?"UTF-8":null,200,"OK",headers(p),in);}
             catch(Exception e){return response(500,"Read Error","text/plain","Read error: "+e.getMessage());}
         }
         static InputStream mobileViewport(InputStream source)throws Exception{
