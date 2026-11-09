@@ -49,6 +49,7 @@ public final class ImageProviderActivity extends Activity {
     private ImageProviderStore.Snapshot data;
     private boolean loadFailed;
     private boolean editorShowing;
+    private boolean testRunning;
     private FrameLayout frame;
 
     private static final class GameProfile {
@@ -587,15 +588,26 @@ public final class ImageProviderActivity extends Activity {
     }
 
     private void runTest(ImageProviderStore.Provider provider) {
+        if (testRunning) {
+            Toast.makeText(this, "이미 연결 테스트가 진행 중입니다.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        testRunning = true;
         Toast.makeText(this, "샘플 이미지를 생성하고 있습니다…", Toast.LENGTH_SHORT).show();
         tests.execute(() -> {
             try {
                 ImageProviderClient.Result result = ImageProviderClient.generate(provider,
                         "A clean simple illustration of a small orange circle on a warm off-white background, centered, no text.",
                         512, 512);
-                runOnUiThread(() -> showPreview(provider.name, result));
+                runOnUiThread(() -> {
+                    testRunning = false;
+                    if (!isFinishing()) showPreview(provider.name, result);
+                });
             } catch (Exception error) {
-                runOnUiThread(() -> showError("연결 테스트 실패", error.getMessage()));
+                runOnUiThread(() -> {
+                    testRunning = false;
+                    if (!isFinishing()) showError("연결 테스트 실패", error.getMessage());
+                });
             }
         });
     }
