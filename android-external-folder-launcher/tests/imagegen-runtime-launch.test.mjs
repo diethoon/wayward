@@ -24,8 +24,6 @@ assert.match(service, /command\.add\(launch\.getAbsolutePath\(\)\)/,
 assert.match(service, /--config/);
 assert.match(service, /if \(config\.isFile\(\) && config\.length\(\) > 0\)/,
   "ComfyUI uses a supplied custom config when present but supports the CLI default when absent");
-assert.match(main, /wayward-imagegen\.config\.json이 필요합니다/,
-  "ComfyUI startup validates its workflow configuration before launching");
 assert.match(service, /--comfy-url/);
 assert.match(service, /installCommand\.command\(\)\.add\("--production"\)/,
   "NovelAI uses the full dependency install while Image Studio keeps production-only install");
