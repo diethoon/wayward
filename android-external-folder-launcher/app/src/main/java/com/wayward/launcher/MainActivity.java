@@ -151,6 +151,7 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams imageTitleParams=new LinearLayout.LayoutParams(-1,-2);imageTitleParams.topMargin=dp(24);imageTitleParams.bottomMargin=dp(7);page.addView(imageTitle,imageTitleParams);
         TextView imageDesc=new TextView(this);imageDesc.setText("Wayward ImageGen 0.8.4 서버를 런처 APK에 내장했습니다. 게임 폴더나 ZIP에서 서버를 찾지 않으며, NovelAI와 PC ComfyUI를 같은 내장 서버로 실행합니다.");imageDesc.setTextColor(Color.rgb(174,194,181));imageDesc.setTextSize(12);imageDesc.setLineSpacing(dp(2),1f);page.addView(imageDesc);
         page.addView(button("이미지 서비스 관리 · 등록 / 테스트",true,()->startActivity(new Intent(MainActivity.this,ImageProviderActivity.class))),buttonParams());
+        page.addView(button("이미지 전달 진단 · 로그 보기",false,()->startActivity(new Intent(MainActivity.this,ImageDiagnosticsActivity.class))),buttonParams());
         TextView runtimeHint=new TextView(this);runtimeHint.setText("NovelAI 토큰은 이미지 서비스 관리에서 먼저 등록하세요. ComfyUI는 PC가 꺼져 있거나 주소가 비어 있어도 휴대폰 중계 서버를 먼저 켜고 대기합니다. PC 주소를 나중에 입력하면 중계 서버가 새 주소로 재시작됩니다.");runtimeHint.setTextColor(Color.rgb(174,194,181));runtimeHint.setTextSize(12);runtimeHint.setLineSpacing(dp(2),1f);LinearLayout.LayoutParams runtimeHintParams=new LinearLayout.LayoutParams(-1,-2);runtimeHintParams.topMargin=dp(10);page.addView(runtimeHint,runtimeHintParams);
         comfyUrlInput=new EditText(this);comfyUrlInput.setSingleLine(true);comfyUrlInput.setTextSize(14);comfyUrlInput.setTextColor(Color.WHITE);comfyUrlInput.setHintTextColor(Color.rgb(142,160,148));comfyUrlInput.setHint("http://PC의-LAN-IP:8188 또는 https://PC의-Tailscale-주소:8188");comfyUrlInput.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);comfyUrlInput.setPadding(dp(12),dp(9),dp(12),dp(9));comfyUrlInput.setText(getSharedPreferences(PREFS,MODE_PRIVATE).getString(KEY_COMFY_URL,""));LinearLayout.LayoutParams comfyInputParams=new LinearLayout.LayoutParams(-1,dp(52));comfyInputParams.topMargin=dp(8);comfyInputParams.bottomMargin=dp(7);page.addView(comfyUrlInput,comfyInputParams);
         page.addView(button("NovelAI · 런처 내장 서버 실행",true,this::startNovelAiServer),buttonParams());
@@ -1004,6 +1005,10 @@ public final class MainActivity extends Activity {
         }
         @JavascriptInterface public void generateImageWithProvider(String requestId,String providerId,String prompt,int width,int height){
             ImageProviderBridge.generate(MainActivity.this,web,activeProfileId,requestId,providerId,prompt,width,height);
+        }
+        @JavascriptInterface public void logImageProviderDiagnostic(String eventName,String detailsJson){
+            if(eventName==null||!eventName.matches("[a-z0-9_]{1,64}"))return;
+            ImagePipelineDiagnostics.recordJson(MainActivity.this,eventName,detailsJson);
         }
         @JavascriptInterface public String listModIds(){
             try{JSONObject r=new JSONObject();JSONArray a=new JSONArray();for(String id:allModIds())a.put(id);r.put("ok",true);r.put("ids",a);return r.toString();}
