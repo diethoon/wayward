@@ -742,7 +742,7 @@ public final class MainActivity extends Activity {
 
     private void startComfyConnectionServer(){
         try{
-            String url=ComfyEndpoint.normalize(comfyUrlInput==null?"":comfyUrlInput.getText().toString());
+            String url=ComfyEndpoint.normalizeOptional(comfyUrlInput==null?"":comfyUrlInput.getText().toString());
             getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString(KEY_COMFY_URL,url).apply();
             startManagedImageGenServer("comfy",url);
         }catch(IllegalArgumentException error){
@@ -939,7 +939,15 @@ public final class MainActivity extends Activity {
     private void refreshImageGenStatus() {
         if (imageGenStatus == null) return;
         ImageGenStatusStore.State state = ImageGenStatusStore.read(getFilesDir());
-        if (state.isReady()) imageGenStatus.setText("연결됨 · 공통 이미지 생성 서버 127.0.0.1:8189 · Image Studio " + safeVersion(state.backendVersion));
+        if (state.isReady()) {
+            boolean comfy = state.backendVersion != null && state.backendVersion.endsWith(":comfy");
+            String endpoint = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_COMFY_URL, "");
+            if (comfy && (endpoint == null || endpoint.trim().isEmpty())) {
+                imageGenStatus.setText("로컬 ComfyUI 중계 서버 실행됨 · PC 주소 미설정 · 연결 대기 중 · 127.0.0.1:8189");
+            } else {
+                imageGenStatus.setText("연결됨 · 공통 이미지 생성 서버 127.0.0.1:8189 · Image Studio " + safeVersion(state.backendVersion));
+            }
+        }
         else if (state.isStarting()) imageGenStatus.setText(state.message.isEmpty() ? "이미지 생성 서버 시작 중…" : state.message);
         else if (imageGenCopying || manualImageGenPreparing) imageGenStatus.setText("이미지 생성 백엔드 준비 중…");
         else if (state.ready && !state.isFresh()) imageGenStatus.setText("이미지 생성 서비스 heartbeat가 끊겼습니다. 현재 세션을 다시 열면 서버를 재시작합니다.");
