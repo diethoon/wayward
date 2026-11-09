@@ -3,7 +3,6 @@ package com.wayward.launcher;
 import android.content.Context;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
-import android.util.Base64;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -44,6 +43,7 @@ final class ImageProviderStore {
         String responsePath = "image";
         String responseEncoding = "AUTO";
         boolean enabled = true;
+        boolean allowInGame = false;
 
         JSONObject toJson() throws Exception {
             JSONObject value = new JSONObject();
@@ -59,6 +59,7 @@ final class ImageProviderStore {
             value.put("responsePath", responsePath);
             value.put("responseEncoding", responseEncoding);
             value.put("enabled", enabled);
+            value.put("allowInGame", allowInGame);
             return value;
         }
 
@@ -76,6 +77,7 @@ final class ImageProviderStore {
             provider.responsePath = value.optString("responsePath", "image");
             provider.responseEncoding = value.optString("responseEncoding", "AUTO");
             provider.enabled = value.optBoolean("enabled", true);
+            provider.allowInGame = value.optBoolean("allowInGame", false);
             return provider;
         }
     }
@@ -205,6 +207,7 @@ final class ImageProviderStore {
                 item.put("name", provider.name);
                 item.put("type", provider.type);
                 item.put("model", provider.model);
+                item.put("gameEnabled", provider.allowInGame);
                 list.put(item);
             }
             root.put("providers", list);
