@@ -78,13 +78,13 @@ assert.match(service, /if \(stopping \|\| Thread\.currentThread\(\)\.isInterrupt
   "Bun validation must not swallow a user cancellation as a binary validation failure");
 assert.match(service, /if \(stopping \|\| Thread\.currentThread\(\)\.isInterrupted\(\)\) \{\s*stopRuntime\(\);/,
   "a server process created during a stop race must be terminated immediately");
-const restartControl = main.match(/private void restartImageGenServerManually\(\)\{[\s\S]*?\n    \}\n\n    private void stopImageGenServer/)?.[0] || "";
+const restartControl = main.match(/private void restartImageGenServerManually\(\)\s*\{[\s\S]*?\n    \}\n\n    private void stopImageGenServer/)?.[0] || "";
 assert.ok(restartControl, "manual restart handler must be present");
 assert.doesNotMatch(restartControl, /if\s*\(state\.isStarting\(\)\)[\s\S]*?return;/,
   "restart must remain available while startup is waiting for health");
 assert.match(restartControl, /ACTION_RESTART/,
   "restart control must dispatch a service restart command");
-const stopControl = main.match(/private void stopImageGenServer\(\)[\s\S]*?\n    \}\n\n    private void startImageGenStatusMonitor/)?.[0] || "";
+const stopControl = main.match(/private void stopImageGenServer\(\)\s*\{[\s\S]*?\n    \}\n\n    private void startImageGenStatusMonitor/)?.[0] || "";
 assert.match(stopControl, /ACTION_STOP/,
   "stop control must dispatch a service stop command");
 for (const button of ["imageGenStartButton", "imageGenRestartButton", "imageGenStopButton"]) {
