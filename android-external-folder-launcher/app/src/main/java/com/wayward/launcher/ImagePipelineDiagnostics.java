@@ -43,7 +43,8 @@ final class ImagePipelineDiagnostics {
             "native_webview_delivery_started", "native_delivery_failed", "native_delivery_queued",
             "native_js_evaluate_callback", "native_js_resolver_invoked", "native_js_resolver_missing",
             "native_webview_evaluate_failed", "provider_http_response",
-            "provider_http_error", "provider_http_request_failed", "webview_image_http_error",
+            "provider_http_error", "provider_http_request_failed",
+            "native_image_decode_bounds_succeeded", "native_image_decode_bounds_failed", "webview_image_http_error",
             "webview_image_resource_error", "webview_image_resource_slow"
     ));
     private static final Set<String> ALLOWED = new HashSet<>(Arrays.asList(
