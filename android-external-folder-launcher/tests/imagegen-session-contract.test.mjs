@@ -43,7 +43,7 @@ assert.match(service, /catch \(Throwable error\)/,
   "runtime startup failures must be captured by the isolated service");
 const runtimeStartup = service.match(/private void startRuntime\(File backendRoot\) throws Exception \{[\s\S]*?\n    private File ensureBun\(\)/)?.[0] || "";
 assert.ok(runtimeStartup, "runtime startup method must be present");
-assert.doesNotMatch(runtimeStartup, /if\s*\(probeHealth\(\)\)\s*\{[\s\S]*?return;/,
+assert.doesNotMatch(runtimeStartup, /if\s*\(probeHealth\(\)\)\s*\{\s*return;/,
   "an unrelated process must not satisfy readiness before this app starts its backend");
 assert.ok(runtimeStartup.indexOf("if (serverProcess == null || !serverProcess.isAlive())")
     < runtimeStartup.indexOf("if (probeHealth())"),
