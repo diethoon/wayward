@@ -92,8 +92,8 @@ imageListeners.error({
   type: "error",
   target: {
     tagName: "IMG",
-    src: "https://example.invalid/private/secret.png?token=hidden",
-    currentSrc: "https://example.invalid/private/secret.png?token=hidden",
+    src: "https://example.invalid/private/portrait.png?token=hidden",
+    currentSrc: "https://example.invalid/private/portrait.png?token=hidden",
     id: "portrait-main",
     className: "character portrait",
     alt: "Mika portrait",
@@ -106,7 +106,7 @@ const imageError = diagnostics.find(item => item.event === "img_element_error");
 assert.ok(imageError);
 assert.equal(imageError.details.srcKind, "https");
 assert.equal(imageError.details.srcHost, "example.invalid");
-assert.equal(imageError.details.srcPath, "/private/secret.png");
+assert.equal(imageError.details.srcPath, "/private/portrait.png");
 assert.equal(imageError.details.elementId, "portrait-main");
 assert.equal(imageError.details.elementClass, "character portrait");
 assert.equal(imageError.details.elementAlt, "Mika portrait");
@@ -118,8 +118,8 @@ imageListeners.error({
   type: "error",
   target: {
     tagName: "IMG",
-    src: "https://example.invalid/private/secret.png?different=ignored",
-    currentSrc: "https://example.invalid/private/secret.png?different=ignored",
+    src: "https://example.invalid/private/portrait.png?different=ignored",
+    currentSrc: "https://example.invalid/private/portrait.png?different=ignored",
     id: "portrait-main",
     className: "character portrait",
     alt: "Mika portrait",
