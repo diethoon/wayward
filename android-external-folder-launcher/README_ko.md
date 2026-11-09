@@ -1,4 +1,4 @@
-# Wayward Android Launcher 0.3.10 · SAF/ZIP 및 이미지 서비스 관리
+# Wayward Android Launcher 0.3.12 · SAF/ZIP, 이미지 서비스 및 이미지 전달 진단
 
 Android SAF 폴더 실행기입니다. 게임 원본 폴더는 직접 읽고, 일반 WML ZIP 모드는 앱 내부에 보관해 가상 제공하며, 여러 게임 폴더를 독립 세션으로 실행합니다. Image Studio 백엔드는 별도 ZIP 설치를 요구하지 않고 각 세션의 실제 WML 모드 폴더에서 감지합니다.
 
@@ -56,9 +56,9 @@ ZIP 1개는 WML 모드 1개를 포함해야 합니다. mod.js가 없거나, WML.
 - 세이브/백업 내보내기는 기존처럼 Download/Wayward/를 사용합니다.
 - 앱을 삭제하면 앱 전용 ZIP 모드와 세션별 WebView 저장소도 삭제됩니다.
 
-## 5. 설치 패키지
+## 5. 이미지 전달 진단\n\n런처 홈의 **이미지 전달 진단 · 로그 보기**에서 새 진단을 시작한 뒤 게임으로 돌아가 이미지 한 장을 생성하고 다시 진단 화면을 열어 확인합니다. HTTP 이미지 수신, 네이티브 이미지 바이트/형식, WebView 브리지 호출, data URL 디코딩 및 DOM 이미지 요소의 load/error 단계를 구분해 기록합니다. 프롬프트 원문, API 키, 이미지 바이트 및 전체 URL은 기록하지 않습니다. 진단 로그는 앱 내부에만 저장되며 일반 원격 진단 로그와 별도로 유지되고 자동 업로드하지 않습니다. **로그 복사**를 눌러 지원 요청에 첨부할 수 있습니다.\n\n## 6. 설치 패키지
 
-0.3.10 테스트 빌드는 `com.wayward.launcher.imagegen038` 패키지 ID를 유지해 0.3.8/0.3.9 계열 테스트 빌드 위에 업데이트할 수 있도록 합니다. 기존 0.3.6 (`com.wayward.launcher.imagegen036`), 0.3.5 (`com.wayward.launcher.imagegen035`), 0.3.4 (`com.wayward.launcher.imagegen034`) 및 구버전과 별도 앱으로 공존하므로 기존 앱을 삭제하거나 덮어쓰지 않습니다. 앱 데이터는 패키지별로 분리되므로 새 앱에서 게임 폴더를 다시 선택하고, 이전 앱에 보관한 앱 전용 ZIP 모드를 다시 설치해야 합니다. 기존 앱의 WebView localStorage/IndexedDB, 설정, 세이브 데이터는 자동 이전되지 않으며 기존 앱에 그대로 남습니다. 두 버전은 `127.0.0.1:8189` 포트를 공유하므로 다른 런처 앱에서 Image Studio 서버를 중지한 뒤 새 버전을 실행하세요. 기존 앱은 삭제하지 마세요.
+0.3.12 테스트 빌드는 `com.wayward.launcher.imagegen038` 패키지 ID를 유지해 0.3.8/0.3.9/0.3.11 계열 테스트 빌드 위에 업데이트할 수 있도록 합니다. 기존 0.3.6 (`com.wayward.launcher.imagegen036`), 0.3.5 (`com.wayward.launcher.imagegen035`), 0.3.4 (`com.wayward.launcher.imagegen034`) 및 구버전과 별도 앱으로 공존하므로 기존 앱을 삭제하거나 덮어쓰지 않습니다. 앱 데이터는 패키지별로 분리되므로 새 앱에서 게임 폴더를 다시 선택하고, 이전 앱에 보관한 앱 전용 ZIP 모드를 다시 설치해야 합니다. 기존 앱의 WebView localStorage/IndexedDB, 설정, 세이브 데이터는 자동 이전되지 않으며 기존 앱에 그대로 남습니다. 두 버전은 `127.0.0.1:8189` 포트를 공유하므로 다른 런처 앱에서 Image Studio 서버를 중지한 뒤 새 버전을 실행하세요. 기존 앱은 삭제하지 마세요.
 
 ## 6. 세션별 Image Studio 자동 감지와 공통 서버
 
