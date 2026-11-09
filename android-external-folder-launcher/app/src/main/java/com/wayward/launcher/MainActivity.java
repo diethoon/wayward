@@ -692,8 +692,8 @@ public final class MainActivity extends Activity {
     }
 
     private static boolean sameImageGenVersion(String running, String requested) {
-        return running != null && requested != null && !running.isEmpty()
-                && running.equals(requested);
+        if(running==null||requested==null||running.isEmpty()||requested.isEmpty())return false;
+        return running.equals(requested)||running.startsWith("imagestudio:"+requested+":comfy");
     }
 
     private static String safeVersion(String version) {
@@ -758,7 +758,7 @@ public final class MainActivity extends Activity {
 
     private void startManagedImageGenServer(String mode,String comfyUrl){
         ImageGenStatusStore.State running=ImageGenStatusStore.read(getFilesDir());
-        if(running.ready||running.starting){
+        if(running.isReady()||running.isStarting()){
             imageGenSessionMessage="이미 이미지 서버가 실행 중이거나 시작 중입니다. 다른 엔진으로 바꾸려면 먼저 서버를 중지하세요.";
             refreshImageGenStatus();
             Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
