@@ -1186,43 +1186,6 @@ public final class MainActivity extends Activity {
             return n;
         }
 
-        boolean copyDirectory(String relativePath,File destination)throws Exception{
-            Node source=resolve(relativePath);if(source==null||!source.dir)return false;
-            deleteFileTree(destination);
-            if(!destination.mkdirs()&&!destination.isDirectory())throw new IllegalStateException("앱 내부 ImageGen 폴더를 만들지 못했습니다.");
-            long[] total={0};int[] count={0};
-            try{copyChildren(source.id,destination,destination.getCanonicalFile(),total,count);}
-            catch(Exception e){deleteFileTree(destination);throw e;}
-            if(count[0]==0){deleteFileTree(destination);return false;}
-            return true;
-        }
-        private void copyChildren(String parentId,File outputRoot,File canonicalRoot,long[] total,int[] count)throws Exception{
-            String rootPath=canonicalRoot.getPath()+File.separator;
-            for(Node child:children(parentId)){
-                String name=child.name;
-                if(name==null||name.isEmpty()||name.equals(".")||name.equals("..")||name.indexOf('/')>=0||name.indexOf(92)>=0||name.indexOf(0)>=0)continue;
-                if(++count[0]>20000)throw new IllegalStateException("ImageGen 파일 수가 20,000개 제한을 초과했습니다.");
-                File out=new File(outputRoot,name).getCanonicalFile();
-                if(!out.getPath().startsWith(rootPath))throw new SecurityException("ImageGen 경로가 앱 내부 저장소를 벗어납니다.");
-                if(child.dir){
-                    if(!out.mkdirs()&&!out.isDirectory())throw new IllegalStateException("ImageGen 폴더 생성 실패");
-                    copyChildren(child.id,out,canonicalRoot,total,count);
-                    continue;
-                }
-                File parent=out.getParentFile();if(parent!=null&&!parent.mkdirs()&&!parent.isDirectory())throw new IllegalStateException("ImageGen 상위 폴더 생성 실패");
-                try(InputStream in=getContentResolver().openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree,child.id));
-                    FileOutputStream output=new FileOutputStream(out)){
-                    if(in==null)throw new IllegalStateException("ImageGen 파일을 읽지 못했습니다: "+name);
-                    byte[] buffer=new byte[32768];long fileBytes=0;int n;
-                    while((n=in.read(buffer))>=0){
-                        if(n==0)continue;fileBytes+=n;total[0]+=n;
-                        if(fileBytes>256L*1024L*1024L||total[0]>512L*1024L*1024L)throw new IllegalStateException("ImageGen 백엔드가 512MB 제한을 초과했습니다.");
-                        output.write(buffer,0,n);
-                    }
-                    output.flush();
-                }
-            }
-        }
         String imageStudioBackendVersion() throws Exception {
             Node modDirectory = resolve("wml/mods/imagestudio");
             if (modDirectory == null || !modDirectory.dir) return null;
