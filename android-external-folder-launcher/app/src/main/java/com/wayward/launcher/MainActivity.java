@@ -149,11 +149,11 @@ public final class MainActivity extends Activity {
 
         TextView imageTitle=new TextView(this);imageTitle.setText("이미지 생성 서비스");imageTitle.setTextColor(Color.WHITE);imageTitle.setTextSize(16);imageTitle.setTypeface(null,1);
         LinearLayout.LayoutParams imageTitleParams=new LinearLayout.LayoutParams(-1,-2);imageTitleParams.topMargin=dp(24);imageTitleParams.bottomMargin=dp(7);page.addView(imageTitle,imageTitleParams);
-        TextView imageDesc=new TextView(this);imageDesc.setText("Cloudflare FLUX 등 외부 API 관리와 함께, EasyGen NovelAI 및 PC ComfyUI 연결용 Wayward ImageGen 서버를 앱에서 실행합니다.");imageDesc.setTextColor(Color.rgb(174,194,181));imageDesc.setTextSize(12);imageDesc.setLineSpacing(dp(2),1f);page.addView(imageDesc);
+        TextView imageDesc=new TextView(this);imageDesc.setText("Wayward ImageGen 0.8.4 서버를 런처 APK에 내장했습니다. 게임 폴더나 ZIP에서 서버를 찾지 않으며, NovelAI와 PC ComfyUI를 같은 내장 서버로 실행합니다.");imageDesc.setTextColor(Color.rgb(174,194,181));imageDesc.setTextSize(12);imageDesc.setLineSpacing(dp(2),1f);page.addView(imageDesc);
         page.addView(button("이미지 서비스 관리 · 등록 / 테스트",true,()->startActivity(new Intent(MainActivity.this,ImageProviderActivity.class))),buttonParams());
-        TextView runtimeHint=new TextView(this);runtimeHint.setText("NovelAI는 EasyGen 서버를 휴대폰 안에서 실행합니다. ComfyUI는 PC에서 먼저 실행하고, 아래에 PC의 사설 LAN 또는 Tailscale 주소를 입력하세요.");runtimeHint.setTextColor(Color.rgb(174,194,181));runtimeHint.setTextSize(12);runtimeHint.setLineSpacing(dp(2),1f);LinearLayout.LayoutParams runtimeHintParams=new LinearLayout.LayoutParams(-1,-2);runtimeHintParams.topMargin=dp(10);page.addView(runtimeHint,runtimeHintParams);
+        TextView runtimeHint=new TextView(this);runtimeHint.setText("NovelAI 토큰은 이미지 서비스 관리에서 먼저 등록하세요. ComfyUI는 PC가 꺼져 있거나 주소가 비어 있어도 휴대폰 중계 서버를 먼저 켜고 대기합니다. PC 주소를 나중에 입력하면 중계 서버가 새 주소로 재시작됩니다.");runtimeHint.setTextColor(Color.rgb(174,194,181));runtimeHint.setTextSize(12);runtimeHint.setLineSpacing(dp(2),1f);LinearLayout.LayoutParams runtimeHintParams=new LinearLayout.LayoutParams(-1,-2);runtimeHintParams.topMargin=dp(10);page.addView(runtimeHint,runtimeHintParams);
         comfyUrlInput=new EditText(this);comfyUrlInput.setSingleLine(true);comfyUrlInput.setTextSize(14);comfyUrlInput.setTextColor(Color.WHITE);comfyUrlInput.setHintTextColor(Color.rgb(142,160,148));comfyUrlInput.setHint("http://PC의-LAN-IP:8188 또는 https://PC의-Tailscale-주소:8188");comfyUrlInput.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);comfyUrlInput.setPadding(dp(12),dp(9),dp(12),dp(9));comfyUrlInput.setText(getSharedPreferences(PREFS,MODE_PRIVATE).getString(KEY_COMFY_URL,""));LinearLayout.LayoutParams comfyInputParams=new LinearLayout.LayoutParams(-1,dp(52));comfyInputParams.topMargin=dp(8);comfyInputParams.bottomMargin=dp(7);page.addView(comfyUrlInput,comfyInputParams);
-        page.addView(button("NovelAI · EasyGen 서버 실행",true,()->startManagedImageGenServer("novelai","")),buttonParams());
+        page.addView(button("NovelAI · 런처 내장 서버 실행",true,this::startNovelAiServer),buttonParams());
         page.addView(button("ComfyUI 연결 서버 실행",true,this::startComfyConnectionServer),buttonParams());
         page.addView(button("이미지 생성 설정 / 상태 열기",false,this::openImageGenPanel),buttonParams());
         imageGenStatus=new TextView(this);imageGenStatus.setTextColor(Color.rgb(245,210,130));imageGenStatus.setTextSize(12);imageGenStatus.setPadding(dp(10),dp(9),dp(10),dp(9));imageGenStatus.setBackgroundColor(Color.rgb(35,48,40));
@@ -739,16 +739,62 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void startNovelAiServer(){
+        startOrSwitchManagedImageGenServer("novelai","");
+    }
+
     private void startComfyConnectionServer(){
         try{
             String url=ComfyEndpoint.normalizeOptional(comfyUrlInput==null?"":comfyUrlInput.getText().toString());
-            getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString(KEY_COMFY_URL,url).apply();
-            startManagedImageGenServer("comfy",url);
+            startOrSwitchManagedImageGenServer("comfy",url);
         }catch(IllegalArgumentException error){
             imageGenSessionMessage="ComfyUI 주소 확인: "+msg(error);
             refreshImageGenStatus();
             Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
         }
+    }
+
+    private void startOrSwitchManagedImageGenServer(String mode,String endpoint){
+        ImageGenStatusStore.State running=ImageGenStatusStore.read(getFilesDir());
+        String storedEndpoint=getSharedPreferences(PREFS,MODE_PRIVATE).getString(KEY_COMFY_URL,"");
+        boolean endpointChanged="comfy".equals(mode)&&!endpoint.equals(storedEndpoint==null?"":storedEndpoint);
+        boolean sameMode=running.backendVersion!=null&&running.backendVersion.endsWith(":"+mode);
+        if(running.isStarting()){
+            imageGenSessionMessage="이미 이미지 서버를 시작하고 있습니다. 준비가 끝난 뒤 다시 시도해 주세요.";
+            refreshImageGenStatus();
+            return;
+        }
+        if(running.isReady()&&sameMode&&!endpointChanged){
+            imageGenSessionMessage="런처 내장 "+("comfy".equals(mode)?"ComfyUI 중계":"NovelAI")+" 서버가 이미 실행 중입니다.";
+            refreshImageGenStatus();
+            Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if("comfy".equals(mode)){
+            getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString(KEY_COMFY_URL,endpoint).apply();
+        }
+        if(running.isReady()){
+            imageGenSessionMessage="서버 설정 변경을 적용하기 위해 내장 이미지 서버를 재시작합니다…";
+            refreshImageGenStatus();
+            stopImageGenServer();
+            waitForImageGenStopThenStart(mode,endpoint,0);
+            return;
+        }
+        startManagedImageGenServer(mode,endpoint);
+    }
+
+    private void waitForImageGenStopThenStart(String mode,String endpoint,int attempt){
+        ImageGenStatusStore.State state=ImageGenStatusStore.read(getFilesDir());
+        if(!state.isReady()&&!state.isStarting()){
+            startManagedImageGenServer(mode,endpoint);
+            return;
+        }
+        if(attempt>=20){
+            imageGenSessionMessage="기존 이미지 서버가 아직 종료되지 않았습니다. 중지 버튼으로 종료한 뒤 다시 실행해 주세요.";
+            refreshImageGenStatus();
+            return;
+        }
+        imageGenHandler.postDelayed(()->waitForImageGenStopThenStart(mode,endpoint,attempt+1),250);
     }
 
     private void openImageGenPanel(){
