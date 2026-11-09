@@ -12,6 +12,7 @@ grep -Fq 'bunProcess(bun, "src/cli.ts", "--no-webp")' app/src/main/java/com/wayw
 grep -Fq 'while (!stopping && !Thread.currentThread().isInterrupted())' app/src/main/java/com/wayward/launcher/ImageGenService.java
 ! grep -Fq '60초 안에 /api/image/health' app/src/main/java/com/wayward/launcher/ImageGenService.java
 grep -Fq 'task.cancel(true)' app/src/main/java/com/wayward/launcher/ImageGenService.java
+grep -Fq 'private void checkStartupActive()' app/src/main/java/com/wayward/launcher/ImageGenService.java
 grep -Fq 'imageGenStartButton.setEnabled(true)' app/src/main/java/com/wayward/launcher/MainActivity.java
 grep -Fq 'imageGenRestartButton.setEnabled(true)' app/src/main/java/com/wayward/launcher/MainActivity.java
 grep -Fq 'imageGenStopButton.setEnabled(true)' app/src/main/java/com/wayward/launcher/MainActivity.java
