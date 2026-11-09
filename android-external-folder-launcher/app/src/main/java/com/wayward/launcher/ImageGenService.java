@@ -194,13 +194,8 @@ public final class ImageGenService extends Service {
             throw new IllegalStateException("wayward-imagegen/package.json 또는 src/cli.ts가 없습니다.");
         }
 
-        if (probeHealth()) {
-            serverReady = true;
-            starting = false;
-            updateNotification("이미지 생성 서버가 이미 실행 중입니다.");
-            return;
-        }
-
+        // Do not adopt an arbitrary listener on the shared Android loopback port.
+        // Start our own backend and only accept health while our child process is alive.
         File bun = ensureBun();
         File log = new File(getFilesDir(), "imagegen/server.log");
         File logParent = log.getParentFile();
@@ -229,14 +224,14 @@ public final class ImageGenService extends Service {
 
         long deadline = System.currentTimeMillis() + 60000L;
         while (!stopping && System.currentTimeMillis() < deadline) {
+            if (serverProcess == null || !serverProcess.isAlive()) {
+                throw new IllegalStateException("ImageGen 프로세스가 시작 직후 종료됐습니다. 포트 충돌 또는 런타임 오류일 수 있습니다. 로그: " + log.getAbsolutePath());
+            }
             if (probeHealth()) {
                 serverReady = true;
                 starting = false;
                 updateNotification("연결됨 · 127.0.0.1:8189");
                 break;
-            }
-            if (!serverProcess.isAlive()) {
-                throw new IllegalStateException("ImageGen 프로세스가 시작 직후 종료됐습니다. 로그: " + log.getAbsolutePath());
             }
             Thread.sleep(500);
         }
