@@ -60,7 +60,7 @@ assert.match(service, /bunProcess\(bun, "install", "--production"\)/,
   "dependency installation must use the system-linker launch path");
 assert.match(service, /bunProcess\(bun, "src\/cli\.ts", "--no-webp"\)/,
   "Android must disable WebP because the packaged sharp native binary is not Android ARM64");
-assert.match(service, /outFile\.setReadOnly\(\)/,
+assert.match(service, /while \(!stopping\)[\s\S]*?probeHealth\(\)/,\n  "health readiness must keep waiting while the launched server process remains alive");\nassert.doesNotMatch(service, /60초 안에 \/api\/image\/health/,\n  "health readiness must not fail solely because a fixed startup timeout elapsed");\nassert.match(service, /outFile\.setReadOnly\(\)/,
   "the extracted runtime must be marked read-only before writing");
 assert.match(service, /executable\.setReadOnly\(\)/,
   "existing and fresh Bun executables must remain read-only");
