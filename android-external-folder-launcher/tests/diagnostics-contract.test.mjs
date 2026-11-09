@@ -51,7 +51,7 @@ assert.match(imagePipeline, /safeString\(String key, String value\)/);
 assert.match(imagePipeline, /ALLOWED_EVENTS/);
 assert.match(imageProviderBridge, /native_js_resolver_invoked/);
 assert.match(imageProviderJs, /data_url_probe_loaded/);
-assert.match(imageProviderJs, /img_element_error/);
+assert.match(imageProviderJs, /img_element_error/);\nassert.match(imageProviderJs, /safeImageLocation/);\nassert.match(imageProviderJs, /elementClass/);\nassert.match(imageProviderJs, /repeatCount/);
 assert.match(main, /folder_picker_opened/);
 assert.match(main, /folder_permission_failed/);
 assert.match(main, /game_session_open_requested/);
