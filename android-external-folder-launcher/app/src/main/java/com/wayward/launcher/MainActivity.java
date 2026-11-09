@@ -75,6 +75,7 @@ public final class MainActivity extends Activity {
     private final Handler imageGenHandler = new Handler(Looper.getMainLooper());
     private final List<Runnable> imageGenReadyCallbacks = new ArrayList<>();
     private Runnable imageGenPollRunnable;
+    private boolean pendingGameLoad = false;
     private WebView web;
     private WebFileChooser webFileChooser;
 
@@ -103,6 +104,7 @@ public final class MainActivity extends Activity {
         String sessionId=sessionProfileId(intent);
         if(sessionId==null)return;
         if(sessionId.equals(activeProfileId)&&web!=null){
+            if (pendingGameLoad) return;
             if(home!=null)home.setVisibility(View.GONE);
             web.setVisibility(View.VISIBLE);
         }else openProfileSession(sessionId);
@@ -322,24 +324,35 @@ public final class MainActivity extends Activity {
         if(p==null){status("등록된 게임 폴더를 찾지 못했습니다. 홈에서 다시 등록해 주세요.");return;}
         try{
             if(web!=null)destroyWeb();
+            pendingGameLoad = false;
             activeProfileId=p.id;treeUri=Uri.parse(p.uri);tree=new SafTree(treeUri);
             String file=gameFile();if(file==null){DiagnosticsLogger.event(this,"ERROR","launcher","game_html_not_found",null);status("선택한 폴더에서 Wayward HTML을 찾지 못했습니다: "+p.label);return;}
             setTitle("Wayward · "+p.label);
             RUNNING_SESSIONS.add(p.id);
-            if(home!=null)home.setVisibility(View.GONE);
+            if(home!=null)home.setVisibility(View.VISIBLE);
             loadedZipRevision=getZipRevision();
-            createWeb();web.setVisibility(View.VISIBLE);
+            createWeb();
+            web.setVisibility(View.GONE);
             String gameUrl=sessionOrigin(activeProfileId)+"/game/"+Uri.encode(file)+"?launcher="+System.currentTimeMillis();
             SafTree sessionTree=tree;
-            web.setVisibility(View.VISIBLE);
-            DiagnosticsLogger.event(this,"INFO","launcher","game_webview_load_requested",null);
-            web.loadUrl(gameUrl);
-            // Image Studio is optional: its startup must never gate the game page.
+
+            // Prepare the Image Studio runtime before allowing its first request.
+            // Missing/invalid Image Studio still completes the callback and opens the game.
+            pendingGameLoad = true;
             ensureImageGenServer(sessionTree,()->{
-                if(web==null||!activeProfileId.equals(id))return;
+                if(isFinishing()||web==null||!activeProfileId.equals(id))return;
+                pendingGameLoad = false;
+                if(home!=null)home.setVisibility(View.GONE);
+                web.setVisibility(View.VISIBLE);
+                DiagnosticsLogger.event(this,"INFO","launcher","game_webview_load_requested",null);
+                web.loadUrl(gameUrl);
                 refreshImageGenStatus();
             });
-        }catch(Exception e){DiagnosticsLogger.error(this,"launcher","game_session_open_failed",e);status("게임 실행 실패: "+msg(e));}
+        }catch(Exception e){
+            pendingGameLoad = false;
+            DiagnosticsLogger.error(this,"launcher","game_session_open_failed",e);
+            status("게임 실행 실패: "+msg(e));
+        }
     }
 
     private void removeProfile(String id){
