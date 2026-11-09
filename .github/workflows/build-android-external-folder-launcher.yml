@@ -65,6 +65,45 @@ jobs:
                           remaining -= len(chunk)
                   print("AUDIT_FILE", relative.as_posix(), entry.file_size)
           PY
+      - name: Generate one real Cloudflare FLUX smoke image
+        id: flux_smoke
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.sha == '7ed7cc2dca4a427bedd86cce76661c8fbb6b4aaa'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/flux-smoke"
+          curl --fail --silent --show-error --max-time 240 \
+            -H 'content-type: application/json' \
+            --data '{"prompt":"An original cozy fantasy shopkeeper in a small woodland general store, polished anime illustration, warm afternoon sunlight, full body, detailed but clean composition, no text"}' \
+            'https://wayward-image-worker.trpgengine.workers.dev' \
+            -o "$RUNNER_TEMP/flux-smoke/response.json"
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          const root = process.env.RUNNER_TEMP + '/flux-smoke';
+          const response = JSON.parse(fs.readFileSync(root + '/response.json', 'utf8'));
+          if (response.success !== true || typeof response.image !== 'string' || !response.image.length) {
+            throw new Error('Cloudflare Worker did not return success=true and a base64 image.');
+          }
+          const bytes = Buffer.from(response.image, 'base64');
+          const mime = String(response.mimeType || 'image/jpeg').toLowerCase();
+          const signatures = [
+            ['image/jpeg', bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff, 'jpg'],
+            ['image/png', bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])), 'png'],
+            ['image/webp', bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP', 'webp']
+          ];
+          const detected = signatures.find(([, ok]) => ok);
+          if (!detected) throw new Error('Worker response is not a recognized JPEG/PNG/WebP image.');
+          const ext = detected[2];
+          const output = root + '/cloudflare-flux-smoke.' + ext;
+          fs.writeFileSync(output, bytes);
+          const sha = crypto.createHash('sha256').update(bytes).digest('hex');
+          fs.writeFileSync(root + '/result.txt',
+            'provider=Cloudflare FLUX Worker\\nhttp=200\\nmimeType=' + (response.mimeType || mime) +
+            '\\nbytes=' + bytes.length + '\\nsha256=' + sha + '\\nfile=' + output + '\\n');
+          console.log(fs.readFileSync(root + '/result.txt', 'utf8'));
+          JS
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -91,6 +130,16 @@ jobs:
       - name: Verify and build
         working-directory: android-external-folder-launcher
         run: bash ./verify.sh
+      - name: Upload real FLUX smoke image
+        if: steps.flux_smoke.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wayward-Cloudflare-FLUX-real-image
+          path: |
+            ${{ runner.temp }}/flux-smoke/cloudflare-flux-smoke.*
+            ${{ runner.temp }}/flux-smoke/result.txt
+          if-no-files-found: error
+          retention-days: 7
       - name: Upload pinned EasyGen source audit bundle
         if: always()
         uses: actions/upload-artifact@v4
