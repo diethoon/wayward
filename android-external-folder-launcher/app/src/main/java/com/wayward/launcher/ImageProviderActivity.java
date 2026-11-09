@@ -285,7 +285,7 @@ public final class ImageProviderActivity extends Activity {
                 }
             }
             fallbackSpinner.setSelection(fallbackSelection);
-            fallbackSpinner.setEnabled(!loadFailed);
+            fallbackSpinner.setEnabled(!loadFailed && primaryId != null);
             fallbackSpinner.setAlpha(loadFailed ? 0.45f : 1f);
 
             primarySpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
@@ -296,10 +296,12 @@ public final class ImageProviderActivity extends Activity {
                     if (position == 0) {
                         data.defaults.remove(profile.id);
                         data.fallbacks.remove(profile.id);
+                        fallbackSpinner.setEnabled(false);
                         fallbackSpinner.setSelection(0);
                     } else {
                         String selectedProvider = data.providers.get(position - 1).id;
                         data.defaults.put(profile.id, selectedProvider);
+                        fallbackSpinner.setEnabled(!loadFailed);
                         if (selectedProvider.equals(data.fallbacks.get(profile.id))) {
                             data.fallbacks.remove(profile.id);
                             fallbackSpinner.setSelection(0);
