@@ -4,6 +4,7 @@
 
   const host = window.WMLHost;
   const pending = new Map();
+  const imageErrorCounts = new Map();
   const log = (event, details) => {
     try {
       if (host && typeof host.logImageProviderDiagnostic === "function") {
@@ -29,10 +30,73 @@
     return "other";
   }
 
-  function imageDetails(img) {
+  function safeDomField(value, maxLength) {
+    return String(value || "")
+      .replace(/[\\u0000-\\u001f\\u007f]/g, " ")
+      .replace(/[^A-Za-z0-9\\u00c0-\\u024f\\u3040-\\u30ff\\u3400-\\u9fff\\uac00-\\ud7a3 ._:-]/g, "")
+      .replace(/\\s+/g, " ").trim().slice(0, maxLength);
+  }
+
+  function safeImageLocation(raw) {
+    try {
+      const Url = window.URL || URL;
+      const base = window.document && window.document.baseURI;
+      const parsed = base ? new Url(raw, base) : new Url(raw);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return {};
+      const segments = String(parsed.pathname || "/").split("/");
+      const safeSegments = segments.map((part, index) => {
+        if (index === 0) return "";
+        let decoded = part;
+        try { decoded = decodeURIComponent(part); } catch (_) {}
+        const lower = decoded.toLowerCase();
+        const sensitive = decoded.length > 80 ||
+          /^[A-Za-z0-9_-]{40,}$/.test(decoded) ||
+          /^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$/.test(decoded) ||
+          /token|secret|signature|authorization|bearer|session|api[_-]?key/i.test(lower);
+        if (sensitive) return "~redacted~";
+        return decoded.replace(/[^A-Za-z0-9\\u00c0-\\u024f\\u3040-\\u30ff\\u3400-\\u9fff\\uac00-\\ud7a3._~!  function imageDetails(img) {
     const raw = String(img.currentSrc || img.src || "");
     return {
       elementTag: "img",
+      srcKind: srcKind(raw),
+      srcLength: raw.length,
+      naturalWidth: Number(img.naturalWidth) || 0,
+      naturalHeight: Number(img.naturalHeight) || 0,
+      complete: Boolean(img.complete)
+    };
+  }
+'()*+,;=:@%\\-]/g, "_");
+      });
+      let path = safeSegments.join("/");
+      if (!path.startsWith("/")) path = "/" + path;
+      if (path.length > 160) path = path.slice(-159);
+      if (!path.startsWith("/")) path = "/" + path;
+      return {
+        srcHost: String(parsed.hostname || "").toLowerCase().slice(0, 120),
+        srcPath: path
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function imageDetails(img) {
+    const raw = String(img.currentSrc || img.src || "");
+    const classValue = typeof img.className === "string"
+      ? img.className
+      : (typeof img.getAttribute === "function" ? img.getAttribute("class") : "");
+    const altValue = typeof img.alt === "string"
+      ? img.alt
+      : (typeof img.getAttribute === "function" ? img.getAttribute("alt") : "");
+    const idValue = typeof img.id === "string"
+      ? img.id
+      : (typeof img.getAttribute === "function" ? img.getAttribute("id") : "");
+    return {
+      elementTag: "img",
+      elementId: safeDomField(idValue, 64),
+      elementClass: safeDomField(classValue, 96),
+      elementAlt: safeDomField(altValue, 80),
+      ...safeImageLocation(raw),
       srcKind: srcKind(raw),
       srcLength: raw.length,
       naturalWidth: Number(img.naturalWidth) || 0,
@@ -48,8 +112,23 @@
       const img = event && event.target;
       if (!img || String(img.tagName || "").toUpperCase() !== "IMG") return;
       const details = imageDetails(img);
-      if (event.type === "error") log("img_element_error", details);
-      else if (details.srcKind === "data" || details.srcKind === "blob") {
+      if (event.type === "error") {
+        const identity = details.srcHost && details.srcPath
+          ? details.srcHost + "|" + details.srcPath : "";
+        if (identity) {
+          const repeatCount = (imageErrorCounts.get(identity) || 0) + 1;
+          imageErrorCounts.set(identity, repeatCount);
+          if (imageErrorCounts.size > 128 && repeatCount === 1) {
+            imageErrorCounts.delete(imageErrorCounts.keys().next().value);
+          }
+          if (repeatCount === 1 || repeatCount === 2 || repeatCount % 10 === 0) {
+            details.repeatCount = repeatCount;
+            log("img_element_error", details);
+          }
+        } else {
+          log("img_element_error", details);
+        }
+      } else if (details.srcKind === "data" || details.srcKind === "blob") {
         log("img_element_loaded", details);
       }
     };
