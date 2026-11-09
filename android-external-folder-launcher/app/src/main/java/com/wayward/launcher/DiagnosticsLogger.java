@@ -170,12 +170,12 @@ final class DiagnosticsLogger {
                 if (lower.matches(".*(prompt|authorization|cookie|request[_ -]?body|response[_ -]?body|data:image|base64|bearer\\s|api[_-]?key|access[_-]?token).*")) {
                     continue;
                 }
-                boolean diagnostic = lower.matches(".*(error|exception|fatal|panic|eaddrinuse|address already in use|cannot find|failed|failure|err_[a-z0-9_]+|warn|stack trace| at [^ ]+\\\\([^)]*\\)).*");
+                boolean diagnostic = lower.matches(".*(error|exception|fatal|panic|eaddrinuse|address already in use|cannot find|failed|failure|err_[a-z0-9_]+|warn|stack trace).*");
                 boolean installProgress = installLog && lower.matches(".*(bun install|resolved [0-9]+|installed [0-9]+|downloaded [0-9]+|saved lockfile|packages? installed|fetching|extracting|cache).*");
                 if (!diagnostic && !installProgress) continue;
                 String safe = redact(line);
                 if (selected.length() + safe.length() + 1 > maxBytes) break;
-                selected.append(safe).append('\\n');
+                selected.append(safe).append('\n');
                 included++;
             }
             if (offset > 0) report.append("[older content truncated]\n");
@@ -183,7 +183,7 @@ final class DiagnosticsLogger {
             else report.append(selected);
             report.append("[filtered lines=").append(included).append("]\n");
         } catch (Exception error) {
-            report.append("[read failed] ").append(redact(error.toString())).append('\\n');
+            report.append("[read failed] ").append(redact(error.toString())).append('\n');
         }
     }
 
