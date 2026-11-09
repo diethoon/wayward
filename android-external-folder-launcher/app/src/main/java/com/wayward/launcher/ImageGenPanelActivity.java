@@ -93,7 +93,7 @@ public final class ImageGenPanelActivity extends Activity {
         });
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1f));
         setContentView(root);
-        String mode=getIntent()==null?"novelai":getIntent().getStringExtra(EXTRA_MODE);
+
         web.loadUrl("comfy".equals(mode)?COMFY_PANEL_URL:NOVELAI_PANEL_URL);
     }
 
