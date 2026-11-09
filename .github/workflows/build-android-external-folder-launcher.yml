@@ -2,7 +2,7 @@ name: Build Wayward external-folder Android launcher
 
 on:
   push:
-    branches: [feature/android-external-folder-launcher-v1, feature/android-external-folder-launcher-viewport-fit, feature/android-launcher-zip-mods-multi-sessions, feature/android-imagegen-launcher-one-tap, perf/launcher-saf-webview-20261109, fix/mobile-imagegen-server-first, fix/launcher-0312-no-companion-zip-live-server]
+    branches: [feature/android-external-folder-launcher-v1, feature/android-external-folder-launcher-viewport-fit, feature/android-launcher-zip-mods-multi-sessions, feature/android-imagegen-launcher-one-tap, perf/launcher-saf-webview-20261109, fix/mobile-imagegen-server-first, fix/launcher-0312-no-companion-zip-live-server, fix/launcher-0312-android-execve-diagnostics]
     paths:
       - "android-external-folder-launcher/**"
       - ".github/workflows/build-android-external-folder-launcher.yml"
