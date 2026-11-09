@@ -579,7 +579,7 @@ public final class MainActivity extends Activity {
         if (sessionTree == null) return false;
         // The WML mod is only the in-game adapter. The server implementation is
         // shipped in the launcher APK and never copied from the selected game.
-        String modVersion = sessionTree.imageStudioBackendVersion();
+        String modVersion = sessionTree.imageStudioModId();
         if (modVersion == null) return false;
         File backend = ImageGenBackendInstaller.install(this, imageGenBackendRoot());
         return hasImageGenProject(backend);
@@ -613,7 +613,7 @@ public final class MainActivity extends Activity {
 
         final String version;
         try {
-            String detected = sessionTree.imageStudioBackendVersion();
+            String detected = sessionTree.imageStudioModId();
             if (detected == null) {
                 imageGenSessionMessage = "현재 세션의 WML Image Studio 모드가 없어 이미지 서버를 시작하지 않았습니다.";
                 refreshImageGenStatus();
@@ -1186,40 +1186,14 @@ public final class MainActivity extends Activity {
             return n;
         }
 
-        String imageStudioBackendVersion() throws Exception {
+        String imageStudioModId() throws Exception {
+            // The game folder supplies only the WML adapter marker.
+            // The actual server is always installed from the launcher APK.
             Node modDirectory = resolve("wml/mods/imagestudio");
             if (modDirectory == null || !modDirectory.dir) return null;
             Node modScript = find(modDirectory.id, "mod.js");
             if (modScript == null || modScript.dir || !"imagestudio".equals(declared(modScript))) return null;
-
-            String nestedVersion = backendPackageVersion(
-                    "wml/mods/imagestudio/backend/wayward-imagegen/package.json",
-                    "wml/mods/imagestudio/backend/wayward-imagegen/src/cli.ts");
-            if (nestedVersion != null) return nestedVersion;
-
-            String rootVersion = backendPackageVersion(
-                    "wml/mods/imagestudio/backend/package.json",
-                    "wml/mods/imagestudio/backend/src/cli.ts");
-            return rootVersion == null ? "" : rootVersion;
-        }
-
-        private String backendPackageVersion(String packagePath, String cliPath) throws Exception {
-            if (!exists(packagePath) || !exists(cliPath)) return null;
-            try (InputStream in = open(packagePath)) {
-                if (in == null) return null;
-                byte[] bytes = new byte[65537];
-                int used = 0;
-                while (used < bytes.length) {
-                    int n = in.read(bytes, used, bytes.length - used);
-                    if (n < 0) break;
-                    if (n == 0) continue;
-                    used += n;
-                }
-                if (used > 65536) throw new IllegalStateException("Image Studio package.json가 64KB를 초과합니다.");
-                JSONObject pkg = new JSONObject(new String(bytes, 0, used, StandardCharsets.UTF_8));
-                String version = pkg.optString("version", "unknown").trim();
-                return version.isEmpty() ? "unknown" : version;
-            }
+            return "imagestudio";
         }
 
         List<String> listModIds()throws Exception{
