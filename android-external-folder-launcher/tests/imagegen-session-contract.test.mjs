@@ -21,8 +21,12 @@ assert.match(main, /String imageStudioBackendVersion\(\)/,
   "Image Studio ID and backend entrypoints must be detected in that session");
 assert.match(main, /wml\/mods\/imagestudio\/backend\/wayward-imagegen\/package\.json/,
   "the active session's nested backend layout must be recognized");
-assert.doesNotMatch(main, /zipMods\.extractDirectory\("imagestudio"/,
-  "Image Studio must not require a separate launcher ZIP installation");
+assert.match(main, /zipMods\.extractDirectory\("imagestudio",\s*"backend"/,
+  "Image Studio backend must be extractable from the launcher's app-private ZIP overlay");
+assert.match(main, /imageStudioZipBackendVersion\(\)/,
+  "Image Studio ZIP backend metadata must be detected when the SAF folder has no usable backend");
+assert.match(main, /zipMods\.open\("wml\/mods\/imagestudio\/backend/,
+  "Image Studio ZIP backend manifest and entrypoint must be read from the active ZIP overlay");
 assert.doesNotMatch(main, /for \(GameProfile profile : profiles\)/,
   "backend lookup must not silently take another registered session's mod");
 assert.match(main, /ImageGenStatusStore\.read\(getFilesDir\(\)\)/,
