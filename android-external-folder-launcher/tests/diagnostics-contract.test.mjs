@@ -45,7 +45,7 @@ assert.match(logger, /bun-version\.log/);
 assert.match(logger, /new File\(imageGen, "server\.log"\)/,
   "manual diagnostics must include a filtered tail of the runtime log");
 assert.match(logger, /appendFilteredLogTail/);
-assert.match(logger, /request[_ -]?body/);
+assert.match(logger, /request\\[_ -\\]\\?body/);
 assert.match(logger, /data:image/);
 assert.match(logger, /new File\(imageGen, "install\.log"\)/);
 assert.match(service, /new File\(getFilesDir\(\), "imagegen\/install\.log"\)/);
