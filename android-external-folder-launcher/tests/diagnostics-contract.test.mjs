@@ -59,6 +59,8 @@ assert.match(imageProviderBridge, /native_js_resolver_invoked/);
 assert.match(imageProviderJs, /data_url_probe_loaded/);
 assert.match(imageProviderJs, /img_element_error/);
 assert.match(imageProviderJs, /safeImageLocation/);
+assert.match(imageProviderJs, /srcAttrPath/);
+assert.match(imagePipeline, /srcAttrKind/);
 assert.match(imageProviderJs, /elementClass/);
 assert.match(imageProviderJs, /repeatCount/);
 assert.match(main, /folder_picker_opened/);
