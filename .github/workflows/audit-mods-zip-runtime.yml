@@ -13,7 +13,7 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Inspect archive and extract only relevant mod sources
@@ -21,7 +21,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import hashlib, json, os, re, zipfile
+          import hashlib, json, re, zipfile
           from pathlib import Path
 
           archive = Path("mods.zip")
@@ -47,42 +47,24 @@ jobs:
                   "entries": len(infos),
                   "uncompressed_bytes": sum(i.file_size for i in infos)
               }, ensure_ascii=False))
-              matches = set()
-              package_files = []
+              matches, package_files, content_matches = set(), [], []
               for info in infos:
                   p = info.filename.replace("\\", "/")
                   if patterns.search(p):
                       matches.add(p)
                   if p.lower().endswith("package.json") or p.endswith("src/cli.ts"):
                       package_files.append(p)
-              content_matches = []
-              for info in infos:
-                  p = info.filename.replace("\\", "/")
-                  if not p.lower().endswith((".js", ".mjs", ".cjs", ".json", ".ts")):
-                      continue
-                  if info.file_size > 5 * 1024 * 1024:
-                      continue
-                  try:
-                      data = zf.read(info)
-                      text = data.decode("utf-8", "replace")
-                  except Exception:
-                      continue
-                  if any(term.lower() in text.lower() for term in content_terms):
-                      content_matches.append(p)
-              print("PATH_MATCHES", json.dumps(sorted(matches), ensure_ascii=False))
-              print("CONTENT_MATCHES", json.dumps(content_matches, ensure_ascii=False))
-              print("PACKAGE_CANDIDATES", json.dumps(package_files, ensure_ascii=False))
-              # Pick each matched directory, plus directly relevant JS/config files.
+                  if p.lower().endswith((".js", ".mjs", ".cjs", ".json", ".ts")) and info.file_size <= 5 * 1024 * 1024:
+                      try:
+                          data = zf.read(info).decode("utf-8", "replace")
+                      except Exception:
+                          continue
+                      if any(term.lower() in data.lower() for term in content_terms):
+                          content_matches.append(p)
               roots = set()
               for p in matches | set(content_matches):
                   parts = p.split("/")
-                  if p.endswith((".js", ".mjs", ".cjs", ".ts", ".json")) and len(parts) > 1:
-                      roots.add("/".join(parts[:-1]))
-                  elif len(parts) > 1:
-                      roots.add("/".join(parts[:-1]))
-                  else:
-                      roots.add(parts[0])
-              # If matches are only path fragments, preserve the smallest parent containing them.
+                  roots.add("/".join(parts[:-1]) if len(parts) > 1 else parts[0])
               copied = []
               for info in infos:
                   p = info.filename.replace("\\", "/")
@@ -102,14 +84,87 @@ jobs:
                   "copied_files": copied
               }, ensure_ascii=False, indent=2), encoding="utf-8")
               (out / "all-paths.txt").write_text(
-                  "\n".join(i.filename for i in zf.infolist()), encoding="utf-8"
+                  "\\n".join(i.filename for i in zf.infolist()), encoding="utf-8"
               )
               print("COPIED_FILES", len(copied))
           PY
-      - name: Upload forensic selection
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Verify Image Studio backend and start real local HTTP runtime
+        shell: bash
+        working-directory: audit-output/image-search-customize/imagestudio/backend/wayward-imagegen
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/imagegen-images" "$RUNNER_TEMP/imagegen-state"
+          bun --version
+          bun install --production
+          bun src/cli.ts --version
+          bun src/cli.ts --help >/dev/null
+          # Doctor must give a deterministic diagnosis when no GPU/ComfyUI is attached.
+          set +e
+          bun src/cli.ts doctor --comfy-url http://127.0.0.1:9 > "$RUNNER_TEMP/doctor.log" 2>&1
+          doctor_status=$?
+          set -e
+          test "$doctor_status" -eq 1
+          grep -F "ComfyUI is not answering" "$RUNNER_TEMP/doctor.log"
+          # Start the actual TypeScript server (the no-GPU health route is still required to answer).
+          bun src/cli.ts --port 18189 --no-webp \
+            --images-dir "$RUNNER_TEMP/imagegen-images" \
+            --state-dir "$RUNNER_TEMP/imagegen-state" \
+            > "$RUNNER_TEMP/server.log" 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl --silent --show-error http://127.0.0.1:18189/api/pack -o "$RUNNER_TEMP/pack.json"; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              cat "$RUNNER_TEMP/server.log"
+              exit 1
+            fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const pack = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/pack.json', 'utf8'));
+          assert.ok(pack && typeof pack === 'object');
+          NODE
+          code=$(curl --silent --show-error -o "$RUNNER_TEMP/health.json" -w '%{http_code}' http://127.0.0.1:18189/api/image/health)
+          test "$code" = "503"
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const health = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/health.json', 'utf8'));
+          assert.equal(health.server, 'wayward-imagegen');
+          assert.equal(health.status, 'error');
+          assert.equal(health.comfyui, 'unavailable');
+          assert.ok(health.version);
+          console.log('IMAGEGEN_HTTP_RUNTIME_PASS', JSON.stringify({
+            server: health.server, version: health.version,
+            status: health.status, comfyui: health.comfyui,
+            images: health.images, imageFormat: health.imageFormat
+          }));
+          NODE
+          cp "$RUNNER_TEMP/doctor.log" "$RUNNER_TEMP/server.log" audit-runtime.log
+          cp "$RUNNER_TEMP/health.json" audit-health.json
+          cp "$RUNNER_TEMP/pack.json" audit-pack.json
+      - name: Upload forensic and runtime report
         uses: actions/upload-artifact@v4
         with:
-          name: mods-zip-forensic-selection
-          path: audit-output/
+          name: mods-zip-runtime-audit
+          path: |
+            audit-output/
+            audit-output/image-search-customize/imagestudio/backend/wayward-imagegen/audit-runtime.log
+            audit-output/image-search-customize/imagestudio/backend/wayward-imagegen/audit-health.json
+            audit-output/image-search-customize/imagestudio/backend/wayward-imagegen/audit-pack.json
           if-no-files-found: error
           retention-days: 7
