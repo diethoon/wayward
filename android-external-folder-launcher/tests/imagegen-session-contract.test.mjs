@@ -72,6 +72,12 @@ assert.match(service, /commandProcess = process/,
   "Bun install/version commands must be cancellable during startup");
 assert.match(service, /downloadConnection = connection/,
   "Bun runtime download must be cancellable during startup");
+assert.match(service, /private void checkStartupActive\(\)/,
+  "each startup phase must check whether Stop or Restart cancelled it");
+assert.match(service, /if \(stopping \|\| Thread\.currentThread\(\)\.isInterrupted\(\)\) throw error;/,
+  "Bun validation must not swallow a user cancellation as a binary validation failure");
+assert.match(service, /if \(stopping \|\| Thread\.currentThread\(\)\.isInterrupted\(\)\) \{\s*stopRuntime\(\);/,
+  "a server process created during a stop race must be terminated immediately");
 const restartControl = main.match(/private void restartImageGenServerManually\(\)\{[\s\S]*?\n    \}\n\n    private void stopImageGenServer/)?.[0] || "";
 assert.ok(restartControl, "manual restart handler must be present");
 assert.doesNotMatch(restartControl, /if\s*\(state\.isStarting\(\)\)[\s\S]*?return;/,
