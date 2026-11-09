@@ -1,0 +1,115 @@
+name: Audit uploaded mods ZIP
+
+on:
+  push:
+    branches:
+      - audit/mods-zip-runtime-20261109
+    paths:
+      - ".github/workflows/audit-mods-zip-runtime.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect archive and extract only relevant mod sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, re, zipfile
+          from pathlib import Path
+
+          archive = Path("mods.zip")
+          assert archive.is_file(), "mods.zip missing from checked-out commit"
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          out = Path("audit-output")
+          out.mkdir(exist_ok=True)
+          patterns = re.compile(
+              r"image.?search|search.?image|이미지.?서치|이미지.?검색|"
+              r"서치.?커스터마이즈|imageSearch|SearchCustomize",
+              re.I
+          )
+          content_terms = [
+              "이미지서치커스터마이즈", "이미지 서치 커스터마이즈",
+              "imageSearchCustomize", "image-search-customize",
+              "imageSearch", "searchCustomize"
+          ]
+          with zipfile.ZipFile(archive) as zf:
+              infos = [i for i in zf.infolist() if not i.is_dir()]
+              print("ARCHIVE_META", json.dumps({
+                  "bytes": archive.stat().st_size,
+                  "sha256": digest,
+                  "entries": len(infos),
+                  "uncompressed_bytes": sum(i.file_size for i in infos)
+              }, ensure_ascii=False))
+              matches = set()
+              package_files = []
+              for info in infos:
+                  p = info.filename.replace("\\", "/")
+                  if patterns.search(p):
+                      matches.add(p)
+                  if p.lower().endswith("package.json") or p.endswith("src/cli.ts"):
+                      package_files.append(p)
+              content_matches = []
+              for info in infos:
+                  p = info.filename.replace("\\", "/")
+                  if not p.lower().endswith((".js", ".mjs", ".cjs", ".json", ".ts")):
+                      continue
+                  if info.file_size > 5 * 1024 * 1024:
+                      continue
+                  try:
+                      data = zf.read(info)
+                      text = data.decode("utf-8", "replace")
+                  except Exception:
+                      continue
+                  if any(term.lower() in text.lower() for term in content_terms):
+                      content_matches.append(p)
+              print("PATH_MATCHES", json.dumps(sorted(matches), ensure_ascii=False))
+              print("CONTENT_MATCHES", json.dumps(content_matches, ensure_ascii=False))
+              print("PACKAGE_CANDIDATES", json.dumps(package_files, ensure_ascii=False))
+              # Pick each matched directory, plus directly relevant JS/config files.
+              roots = set()
+              for p in matches | set(content_matches):
+                  parts = p.split("/")
+                  if p.endswith((".js", ".mjs", ".cjs", ".ts", ".json")) and len(parts) > 1:
+                      roots.add("/".join(parts[:-1]))
+                  elif len(parts) > 1:
+                      roots.add("/".join(parts[:-1]))
+                  else:
+                      roots.add(parts[0])
+              # If matches are only path fragments, preserve the smallest parent containing them.
+              copied = []
+              for info in infos:
+                  p = info.filename.replace("\\", "/")
+                  if any(p == root or p.startswith(root.rstrip("/") + "/") for root in roots):
+                      dest = out / p
+                      dest.parent.mkdir(parents=True, exist_ok=True)
+                      dest.write_bytes(zf.read(info))
+                      copied.append(p)
+              (out / "archive-manifest.json").write_text(json.dumps({
+                  "archive_bytes": archive.stat().st_size,
+                  "archive_sha256": digest,
+                  "entry_count": len(infos),
+                  "matches": sorted(matches),
+                  "content_matches": content_matches,
+                  "package_candidates": package_files,
+                  "selected_roots": sorted(roots),
+                  "copied_files": copied
+              }, ensure_ascii=False, indent=2), encoding="utf-8")
+              (out / "all-paths.txt").write_text(
+                  "\n".join(i.filename for i in zf.infolist()), encoding="utf-8"
+              )
+              print("COPIED_FILES", len(copied))
+          PY
+      - name: Upload forensic selection
+        uses: actions/upload-artifact@v4
+        with:
+          name: mods-zip-forensic-selection
+          path: audit-output/
+          if-no-files-found: error
+          retention-days: 7
