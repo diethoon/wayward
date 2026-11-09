@@ -79,7 +79,6 @@ public final class MainActivity extends Activity {
     private final AtomicBoolean imageGenHealthProbeInFlight = new AtomicBoolean(false);
     private volatile boolean imageGenHealthResponding = false;
     private volatile boolean imageGenHealthProbeComplete = false;
-    private boolean pendingGameLoad = false;
     private String lastImageGenDiagnosticFailure = "";
     private long lastImageGenDiagnosticUploadAt = 0L;
     private WebView web;
@@ -116,7 +115,6 @@ public final class MainActivity extends Activity {
         String sessionId=sessionProfileId(intent);
         if(sessionId==null)return;
         if(sessionId.equals(activeProfileId)&&web!=null){
-            if (pendingGameLoad) return;
             if(home!=null)home.setVisibility(View.GONE);
             web.setVisibility(View.VISIBLE);
         }else openProfileSession(sessionId);
@@ -296,7 +294,6 @@ public final class MainActivity extends Activity {
         if(p==null){status("등록된 게임 폴더를 찾지 못했습니다. 홈에서 다시 등록해 주세요.");return;}
         try{
             if(web!=null)destroyWeb();
-            pendingGameLoad = false;
             activeProfileId=p.id;treeUri=Uri.parse(p.uri);tree=new SafTree(treeUri);
             String file=gameFile();if(file==null){DiagnosticsLogger.event(this,"ERROR","launcher","game_html_not_found",null);status("선택한 폴더에서 Wayward HTML을 찾지 못했습니다: "+p.label);return;}
             setTitle("Wayward · "+p.label);
