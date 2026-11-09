@@ -47,7 +47,7 @@ final class ImagePipelineDiagnostics {
             "provider_http_error", "provider_http_request_failed", "webview_image_network_error",
             "native_image_decode_bounds_succeeded", "native_image_decode_bounds_failed", "webview_image_http_error",
             "webview_image_resource_error", "webview_image_resource_slow",
-            "saf_image_open_timing", "saf_directory_query_timing"
+            "saf_image_open_timing", "saf_directory_query_timing", "saf_image_cache_completed"
     ));
     private static final Set<String> ALLOWED = new HashSet<>(Arrays.asList(
             "requestId", "providerId", "providerType", "mimeType", "imageBytes",
@@ -162,6 +162,7 @@ final class ImagePipelineDiagnostics {
                 return value.matches("[A-Za-z0-9_.$-]{1,80}");
             case "cacheState":
                 return "hit".equals(value) || "loaded".equals(value) || "shared".equals(value)
+                        || "loading".equals(value) || "cached".equals(value) || "failed".equals(value)
                         || "bypass".equals(value) || "fallback".equals(value) || "missing".equals(value);
             case "elementTag":
                 return "img".equals(value);
