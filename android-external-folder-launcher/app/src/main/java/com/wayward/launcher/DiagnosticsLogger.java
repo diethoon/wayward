@@ -167,7 +167,7 @@ final class DiagnosticsLogger {
                 if (line.isEmpty()) continue;
                 String lower = line.toLowerCase(java.util.Locale.ROOT);
                 // Never export lines that can carry generated prompts, request bodies or credentials.
-                if (lower.matches(".*(prompt|authorization|cookie|request[_ -]?body|response[_ -]?body|data:image|base64|bearer\\\\s|api[_-]?key|access[_-]?token).*")) {
+                if (lower.matches(".*(prompt|authorization|cookie|request[_ -]?body|response[_ -]?body|data:image|base64|bearer\\s|api[_-]?key|access[_-]?token).*")) {
                     continue;
                 }
                 boolean diagnostic = lower.matches(".*(error|exception|fatal|panic|eaddrinuse|address already in use|cannot find|failed|failure|err_[a-z0-9_]+|warn|stack trace| at [^ ]+\\\\([^)]*\\)).*");
