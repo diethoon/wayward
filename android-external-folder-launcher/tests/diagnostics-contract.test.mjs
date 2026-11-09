@@ -61,6 +61,10 @@ assert.match(logger, /sanitizeServerLogLine/);
 assert.match(logger, /Pattern\.quote\(field\)/,
   "server diagnostics must redact sensitive fields without dropping the entire error line");
 assert.match(logger, /ImageGen server\.log \(sanitized\)/);
+assert.match(logger, /ImageGen doctor\.log \(sanitized\)/);
+assert.match(service, /bunProcess\(bun, "src\/cli\.ts", "doctor"\)/);
+assert.match(service, /bun_server_doctor_completed/);
+assert.match(service, /doctorLogBytes/);
 
 assert.doesNotMatch(ingestApi, /authorized\(/);
 assert.match(ingestApi, /parseBody\(req\)/);
