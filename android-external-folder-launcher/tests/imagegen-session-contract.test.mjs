@@ -15,15 +15,15 @@ assert.match(main, /String imageStudioModId\(\)/,
   "the active session must identify the WML Image Studio adapter");
 assert.match(main, /zipMods\.open\("wml\/mods\/imagestudio\/mod\.js"\)/,
   "active-session detection must include the app-private ZIP overlay");
-assert.match(automaticStartup, /:novelai/,
-  "automatic startup must use the NovelAI-compatible EasyGen mode");
 assert.doesNotMatch(main, /wml\/mods\/imagestudio\/backend\//,
   "the game folder must not be required to contain the bundled server source");
 assert.match(main, /ImageGenBackendInstaller\.install\(this, imageGenBackendRoot\(\)\)/,
   "the embedded backend is installed from APK assets, not copied from the game folder");
 const automaticStartup = main.slice(main.indexOf("private void ensureImageGenServer"), main.indexOf("private static boolean sameImageGenVersion"));
 assert.doesNotMatch(automaticStartup, /extractDirectory\(/,
-  "automatic Image Studio startup must remain tied to the active physical game folder");
+  "automatic Image Studio startup must not extract the original WML ZIP mod");
+assert.match(automaticStartup, /:novelai/,
+  "automatic startup must use the NovelAI-compatible EasyGen mode");
 assert.match(main, /ImageGenBackendInstaller\.install\(this,backend\)/,
   "manual startup must install the server embedded in the launcher APK");
 assert.match(main, /launcher-imagegen:/,
