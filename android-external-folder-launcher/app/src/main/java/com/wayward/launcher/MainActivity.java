@@ -58,8 +58,6 @@ public final class MainActivity extends Activity {
     private static final String PREFS="wayward_launcher";
     private static final String KEY_TREE="game_tree_uri", KEY_PROFILES="game_profiles", KEY_ZIP_REV="zip_mod_revision", KEY_COMFY_URL="comfy_server_url";
     private static final String KO="Wayward_WML_ko.html", EN="Wayward_WML.html";
-    private static final String BUILTIN_COMPANIONS_MOD_ID = "launcher-mobile-companions";
-    private static final String BUILTIN_COMPANIONS_MOD_FILE = "wml/mods/" + BUILTIN_COMPANIONS_MOD_ID + "/mod.js";
     private static final Pattern ID=Pattern.compile("^[a-z0-9][a-z0-9._-]*$");
     private static final Set<String> RUNNING_SESSIONS=Collections.synchronizedSet(new HashSet<>());
     private static final Pattern MOD_ID=Pattern.compile("(?:\\bid\\s*:\\s*|[\\\"']id[\\\"']\\s*:\\s*)[\\\"']([a-z0-9][a-z0-9._-]*)[\\\"']");
@@ -412,7 +410,6 @@ public final class MainActivity extends Activity {
         Set<String> ids=new TreeSet<>();
         if(tree!=null)try{ids.addAll(tree.listModIds());}catch(Exception ignored){}
         if(zipMods!=null)ids.addAll(zipMods.listModIds());
-        ids.add(BUILTIN_COMPANIONS_MOD_ID);
         return new ArrayList<>(ids);
     }
     private void refreshStatus(){
@@ -1140,7 +1137,6 @@ public final class MainActivity extends Activity {
                 if(p==null)return response(404,"Not Found","text/plain","Not found");
                 InputStream in=isImageAssetPath(p)?tree.openImage(p):tree.open(p);
                 if(in==null&&zipMods!=null)in=zipMods.open(p);
-                if(in==null&&BUILTIN_COMPANIONS_MOD_FILE.equals(p))in=assets.open("launcher-companions-mobile-ui.js");
                 if(in==null)return null;
                 if(p.toLowerCase(Locale.ROOT).endsWith(".html")||p.toLowerCase(Locale.ROOT).endsWith(".htm"))in=mobileViewport(in);
                 if(CORE.equals(p))in=new SequenceInputStream(assets.open("wml-folder-bootstrap.js"),in);

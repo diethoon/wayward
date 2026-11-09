@@ -15,11 +15,10 @@ test -s app/src/main/assets/imagegen-backend/wayward-imagegen/src/nai/client.ts
 node --check app/src/main/assets/wml-folder-bootstrap.js
 node --check app/src/main/assets/imagegen-proxy.js
 node --check app/src/main/assets/image-provider-bridge.js
-node --check app/src/main/assets/launcher-companions-mobile-ui.js
 node tests/imagegen-proxy.test.mjs
 node tests/image-provider-bridge.test.mjs
 node tests/wml-folder-bootstrap.test.mjs
-node tests/companions-mobile-ui.test.mjs
+node tests/launcher-companions-removal.test.mjs
 node tests/web-file-chooser-contract.test.mjs
 node tests/imagegen-session-contract.test.mjs
 node tests/imagegen-runtime-launch.test.mjs
