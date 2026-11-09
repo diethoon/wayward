@@ -697,9 +697,9 @@ public final class MainActivity extends Activity {
 
     private static boolean sameImageGenVersion(String running, String requested) {
         if(running==null||requested==null||running.isEmpty()||requested.isEmpty())return false;
-        return running.equals(requested)
-                || (running.startsWith("launcher-imagegen:" + ImageGenBackendInstaller.VERSION + ":")
-                    && requested.startsWith("launcher-imagegen:" + ImageGenBackendInstaller.VERSION + ":"));
+        // The engine mode is part of the version identity: NovelAI and ComfyUI
+        // share code but have different active provider configuration.
+        return running.equals(requested);
     }
 
     private static String safeVersion(String version) {
