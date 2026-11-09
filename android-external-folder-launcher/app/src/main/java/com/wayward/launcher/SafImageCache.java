@@ -317,6 +317,34 @@ final class SafImageCache {
         }
 
         @Override
+        public long skip(long requested) throws IOException {
+            if (requested <= 0L) return 0L;
+            byte[] buffer = new byte[(int) Math.min(8192L, requested)];
+            long skipped = 0L;
+            while (skipped < requested) {
+                int count = read(buffer, 0, (int) Math.min(buffer.length, requested - skipped));
+                if (count < 0) break;
+                skipped += count;
+            }
+            return skipped;
+        }
+
+        @Override
+        public boolean markSupported() {
+            return false;
+        }
+
+        @Override
+        public void mark(int readLimit) {
+            // This stream intentionally does not support rewind while caching.
+        }
+
+        @Override
+        public void reset() throws IOException {
+            throw new IOException("SAF image stream does not support reset");
+        }
+
+        @Override
         public void close() throws IOException {
             if (closed) return;
             closed = true;
