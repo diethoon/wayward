@@ -138,9 +138,11 @@ final class DiagnosticsLogger {
         appendLogTail(report, new File(imageGen, "bun-version.log"), 4 * 1024, "Bun version probe");
         appendFilteredLogTail(report, new File(imageGen, "install.log"), 8 * 1024,
                 "ImageGen dependency install.log", true);
-        appendFilteredLogTail(report, new File(imageGen, "server.log"), 8 * 1024,
-                "ImageGen server.log (filtered)", false);
-        report.append("\n[Privacy] server/install logs are limited to diagnostic lines; prompt, request/body, authorization, cookie and image payload lines are omitted.\n");
+        appendSanitizedServerLogTail(report, new File(imageGen, "server.log"), 8 * 1024,
+                "ImageGen server.log (sanitized)");
+        appendSanitizedServerLogTail(report, new File(imageGen, "doctor.log"), 8 * 1024,
+                "ImageGen doctor.log (sanitized)");
+        report.append("\n[Privacy] server/doctor log lines are retained after masking prompt/body fields, credentials, bearer tokens and inline image data.\n");
         return report.toString();
     }
 
@@ -191,6 +193,64 @@ final class DiagnosticsLogger {
         } catch (Exception error) {
             report.append("[read failed] ").append(redact(error.toString())).append('\n');
         }
+    }
+
+    private static void appendSanitizedServerLogTail(StringBuilder report, File file,
+                                                        int maxBytes, String title) {
+        report.append("\n[").append(title).append("]\n");
+        if (file == null || !file.isFile()) {
+            report.append("(not present)\n");
+            return;
+        }
+        try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
+            long length = input.length();
+            long offset = Math.max(0L, length - maxBytes);
+            report.append("[file bytes=").append(length)
+                    .append(", tail offset=").append(offset).append("]\n");
+            int count = (int) Math.min(length - offset, maxBytes);
+            byte[] bytes = new byte[count];
+            input.seek(offset);
+            input.readFully(bytes);
+            String raw = new String(bytes, StandardCharsets.UTF_8);
+            String[] lines = raw.split("\\r?\\n");
+            StringBuilder selected = new StringBuilder();
+            int included = 0;
+            for (int i = Math.max(0, lines.length - 160); i < lines.length; i++) {
+                String safe = sanitizeServerLogLine(lines[i]);
+                if (safe.isEmpty()) continue;
+                if (selected.length() + safe.length() + 1 > maxBytes) break;
+                selected.append(safe).append('\n');
+                included++;
+            }
+            if (offset > 0) report.append("[older content truncated]\n");
+            if (included == 0) report.append("(empty server log)\n");
+            else report.append(selected);
+            report.append("[sanitized lines=").append(included).append("]\n");
+        } catch (Exception error) {
+            report.append("[read failed] ").append(redact(error.toString())).append('\n');
+        }
+    }
+
+    private static String sanitizeServerLogLine(String line) {
+        if (line == null || line.isEmpty()) return "";
+        String safe = line.replaceAll("\\u001B\\[[;\\d]*[ -/]*[@-~]", "");
+        safe = redact(safe);
+        String[] sensitiveFields = {
+                "prompt", "positive_prompt", "negative_prompt", "positivePrompt",
+                "negativePrompt", "authorization", "cookie", "set-cookie",
+                "request_body", "request body", "response_body", "response body",
+                "requestBody", "responseBody", "api_key", "apiKey", "access_token",
+                "accessToken", "refresh_token", "refreshToken", "password", "secret",
+                "imageData", "base64"
+        };
+        for (String field : sensitiveFields) {
+            String key = Pattern.quote(field);
+            Pattern pattern = Pattern.compile("(?i)([\\\"']?" + key + "[\\\"']?\\s*[:=]\\s*).*$");
+            safe = pattern.matcher(safe).replaceAll("$1[REDACTED]");
+        }
+        safe = safe.replaceAll("(?i)(data:image/)[^\\s\\\"']+", "$1[REDACTED]");
+        safe = safe.replaceAll("(?i)(base64[, :]+)[A-Za-z0-9+/=]{24,}", "$1[REDACTED]");
+        return safe.trim();
     }
 
     private static void appendLogTail(StringBuilder report, File file, int maxBytes, String title) {
