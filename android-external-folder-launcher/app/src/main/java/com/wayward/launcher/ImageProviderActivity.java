@@ -256,33 +256,89 @@ public final class ImageProviderActivity extends Activity {
             item.addView(label(profile.label, 14, TEXT, true));
             addGap(item, 7);
             ArrayList<String> names = new ArrayList<>();
-            names.add("기본 서비스 사용 안 함");
+            names.add("서비스 선택 안 함");
             for (ImageProviderStore.Provider provider : data.providers) {
                 names.add(provider.name + ("".equals(provider.model) ? "" : " · " + provider.model));
             }
-            Spinner spinner = spinner(names);
-            String selectedId = data.defaults.get(profile.id);
-            int selected = 0;
-            if (selectedId != null) {
+
+            item.addView(label("기본 생성 서비스", 12, MUTED, true));
+            Spinner primarySpinner = spinner(names);
+            String primaryId = data.defaults.get(profile.id);
+            int primarySelection = 0;
+            if (primaryId != null) {
                 for (int i = 0; i < data.providers.size(); i++) {
-                    if (selectedId.equals(data.providers.get(i).id)) selected = i + 1;
+                    if (primaryId.equals(data.providers.get(i).id)) primarySelection = i + 1;
                 }
             }
-            spinner.setSelection(selected);
-            spinner.setEnabled(!loadFailed);
-            spinner.setAlpha(loadFailed ? 0.45f : 1f);
-            spinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            primarySpinner.setSelection(primarySelection);
+            primarySpinner.setEnabled(!loadFailed);
+            primarySpinner.setAlpha(loadFailed ? 0.45f : 1f);
+
+            addGap(item, 9);
+            item.addView(label("실패 시 대체 서비스", 12, MUTED, true));
+            Spinner fallbackSpinner = spinner(names);
+            String fallbackId = data.fallbacks.get(profile.id);
+            int fallbackSelection = 0;
+            if (fallbackId != null) {
+                for (int i = 0; i < data.providers.size(); i++) {
+                    if (fallbackId.equals(data.providers.get(i).id)) fallbackSelection = i + 1;
+                }
+            }
+            fallbackSpinner.setSelection(fallbackSelection);
+            fallbackSpinner.setEnabled(!loadFailed);
+            fallbackSpinner.setAlpha(loadFailed ? 0.45f : 1f);
+
+            primarySpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
                 private boolean first = true;
                 @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
                     if (first) { first = false; return; }
                     if (loadFailed) return;
-                    if (position == 0) data.defaults.remove(profile.id);
-                    else data.defaults.put(profile.id, data.providers.get(position - 1).id);
+                    if (position == 0) {
+                        data.defaults.remove(profile.id);
+                        data.fallbacks.remove(profile.id);
+                        fallbackSpinner.setSelection(0);
+                    } else {
+                        String selectedProvider = data.providers.get(position - 1).id;
+                        data.defaults.put(profile.id, selectedProvider);
+                        if (selectedProvider.equals(data.fallbacks.get(profile.id))) {
+                            data.fallbacks.remove(profile.id);
+                            fallbackSpinner.setSelection(0);
+                        }
+                    }
                     persist();
                 }
                 @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
             });
-            item.addView(spinner, new LinearLayout.LayoutParams(-1, dp(48)));
+            fallbackSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+                private boolean first = true;
+                @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                    if (first) { first = false; return; }
+                    if (loadFailed) return;
+                    if (position == 0) {
+                        data.fallbacks.remove(profile.id);
+                    } else {
+                        String selectedProvider = data.providers.get(position - 1).id;
+                        if (selectedProvider.equals(data.defaults.get(profile.id))) {
+                            Toast.makeText(ImageProviderActivity.this,
+                                    "대체 서비스는 기본 서비스와 다른 서비스를 선택해 주세요.",
+                                    Toast.LENGTH_SHORT).show();
+                            data.fallbacks.remove(profile.id);
+                            fallbackSpinner.setSelection(0);
+                            persist();
+                            return;
+                        }
+                        data.fallbacks.put(profile.id, selectedProvider);
+                    }
+                    persist();
+                }
+                @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+            });
+
+            item.addView(primarySpinner, new LinearLayout.LayoutParams(-1, dp(48)));
+            addGap(item, 5);
+            item.addView(fallbackSpinner, new LinearLayout.LayoutParams(-1, dp(48)));
+            addGap(item, 5);
+            item.addView(label("기본 서비스가 실패하면 대체 서비스를 한 번 시도합니다. 대체 요청도 별도 생성 비용이 발생할 수 있습니다.", 10, MUTED, false));
             page.addView(item);
             addGap(page, 8);
         }
