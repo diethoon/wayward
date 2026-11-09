@@ -154,7 +154,7 @@ public final class MainActivity extends Activity {
         comfyUrlInput=new EditText(this);comfyUrlInput.setSingleLine(true);comfyUrlInput.setTextSize(14);comfyUrlInput.setTextColor(Color.WHITE);comfyUrlInput.setHintTextColor(Color.rgb(142,160,148));comfyUrlInput.setHint("http://PC의-LAN-IP:8188 또는 https://PC의-Tailscale-주소:8188");comfyUrlInput.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);comfyUrlInput.setPadding(dp(12),dp(9),dp(12),dp(9));comfyUrlInput.setText(getSharedPreferences(PREFS,MODE_PRIVATE).getString(KEY_COMFY_URL,""));LinearLayout.LayoutParams comfyInputParams=new LinearLayout.LayoutParams(-1,dp(52));comfyInputParams.topMargin=dp(8);comfyInputParams.bottomMargin=dp(7);page.addView(comfyUrlInput,comfyInputParams);
         page.addView(button("NovelAI · EasyGen 서버 실행",true,()->startManagedImageGenServer("novelai","")),buttonParams());
         page.addView(button("ComfyUI 연결 서버 실행",true,this::startComfyConnectionServer),buttonParams());
-        page.addView(button("EasyGen / NovelAI 설정 열기",false,this::openImageGenPanel),buttonParams());
+        page.addView(button("이미지 생성 설정 / 상태 열기",false,this::openImageGenPanel),buttonParams());
         imageGenStatus=new TextView(this);imageGenStatus.setTextColor(Color.rgb(245,210,130));imageGenStatus.setTextSize(12);imageGenStatus.setPadding(dp(10),dp(9),dp(10),dp(9));imageGenStatus.setBackgroundColor(Color.rgb(35,48,40));
         LinearLayout.LayoutParams imageStatusParams=new LinearLayout.LayoutParams(-1,-2);imageStatusParams.topMargin=dp(8);imageStatusParams.bottomMargin=dp(7);page.addView(imageGenStatus,imageStatusParams);
         page.addView(button("이미지 생성 서버 중지",false,this::stopImageGenServer),buttonParams());
@@ -751,7 +751,9 @@ public final class MainActivity extends Activity {
             Toast.makeText(this,"먼저 NovelAI 또는 ComfyUI 연결 서버를 실행해 주세요.",Toast.LENGTH_LONG).show();
             return;
         }
-        startActivity(new Intent(this,ImageGenPanelActivity.class));
+        Intent intent=new Intent(this,ImageGenPanelActivity.class);
+        intent.putExtra(ImageGenPanelActivity.EXTRA_MODE,state.backendVersion.endsWith(":comfy")?"comfy":"novelai");
+        startActivity(intent);
     }
 
     private void startManagedImageGenServer(String mode,String comfyUrl){
