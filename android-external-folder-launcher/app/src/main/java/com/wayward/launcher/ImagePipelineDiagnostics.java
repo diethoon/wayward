@@ -29,6 +29,21 @@ final class ImagePipelineDiagnostics {
     private static final int MAX_LINE = 4096;
     private static final Object LOCK = new Object();
     private static final Pattern EVENT = Pattern.compile("[a-z0-9_]{1,64}");
+    private static final Set<String> ALLOWED_EVENTS = new HashSet<>(Arrays.asList(
+            "capture_started", "log_cleared", "js_bridge_unavailable", "image_element_watch_installed",
+            "js_bridge_installed", "img_element_error", "img_element_loaded", "resolver_received",
+            "resolver_orphaned", "game_generate_rejected", "game_generate_resolved",
+            "data_url_probe_loaded", "data_url_probe_failed", "data_url_probe_setup_failed",
+            "data_url_probe_skipped", "resolver_payload_parse_failed", "provider_list_failed",
+            "game_generate_requested", "game_generate_timeout", "game_generate_dispatched",
+            "game_generate_dispatch_failed", "native_request_rejected", "native_request_received",
+            "native_worker_started", "provider_selection_failed", "provider_selected",
+            "provider_permission_denied", "native_image_received", "native_data_url_built",
+            "native_generation_succeeded", "native_generation_failed", "native_queue_rejected",
+            "native_webview_delivery_started", "native_delivery_failed", "native_delivery_queued",
+            "native_js_evaluate_callback", "native_js_resolver_invoked", "native_js_resolver_missing",
+            "native_webview_evaluate_failed"
+    ));
     private static final Set<String> ALLOWED = new HashSet<>(Arrays.asList(
             "requestId", "providerId", "providerType", "mimeType", "imageBytes",
             "imageWidth", "imageHeight", "imageFormat", "promptLength",
@@ -43,7 +58,7 @@ final class ImagePipelineDiagnostics {
     private ImagePipelineDiagnostics() {}
 
     static void record(Context context, String event, JSONObject details) {
-        if (context == null || event == null || !EVENT.matcher(event).matches()) return;
+        if (context == null || event == null || !EVENT.matcher(event).matches() || !ALLOWED_EVENTS.contains(event)) return;
         try {
             JSONObject line = new JSONObject();
             line.put("timestamp", System.currentTimeMillis());
@@ -96,6 +111,9 @@ final class ImagePipelineDiagnostics {
 
     private static void withLock(Context context, LockedAction action) throws Exception {
         File directory = directory(context);
+        if (!directory.isDirectory() && !directory.mkdirs() && !directory.isDirectory()) {
+            throw new IllegalStateException("진단 로그 폴더를 만들지 못했습니다.");
+        }
         File lockFile = new File(directory, "image-pipeline.lock");
         try (RandomAccessFile raf = new RandomAccessFile(lockFile, "rw");
              FileChannel channel = raf.getChannel();
