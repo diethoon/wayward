@@ -134,7 +134,12 @@ final class ImagePipelineDiagnostics {
             case "srcHost":
                 return value.matches("[A-Za-z0-9.:-]{1,120}");
             case "srcPath":
-                return value.startsWith("/") && value.matches("/[\\p{L}\\p{N}._~!            case "stage":
+                return value.startsWith("/") && value.matches("/[\\p{L}\\p{N}._~!()+,;=:@%/\\-]{0,159}");
+            case "elementId":
+            case "elementClass":
+            case "elementAlt":
+                return value.matches("[\\p{L}\\p{N} ._:-]{1,100}");
+            case "stage":
 '()*+,;=:@%/\\-]{0,159}");
             case "elementId":
             case "elementClass":
@@ -196,8 +201,7 @@ final class ImagePipelineDiagnostics {
                     || lower.contains("bearer") || lower.contains("session")
                     || lower.contains("api_key") || lower.contains("api-key");
             if (sensitive) safe.append("~redacted~");
-            else safe.append(segment.replaceAll("[^\\p{L}\\p{N}._~!    private interface LockedAction { void run() throws Exception; }
-'()*+,;=:@%\\-]", "_"));
+            else safe.append(segment.replaceAll("[^\\p{L}\\p{N}._~!()+,;=:@%\\-]", "_"));
         }
         String result = safe.toString();
         if (result.isEmpty()) result = "/";
