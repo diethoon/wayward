@@ -916,26 +916,6 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private static String readImageGenPackageVersion(File backend)throws Exception{
-        File project=new File(backend,"wayward-imagegen");
-        File pkg=new File(project,"package.json");
-        if(!pkg.isFile())pkg=new File(backend,"package.json");
-        if(!pkg.isFile()||pkg.length()>65536)return null;
-        byte[] data=new byte[65537];
-        int used=0;
-        try(InputStream in=new java.io.FileInputStream(pkg)){
-            while(used<data.length){
-                int count=in.read(data,used,data.length-used);
-                if(count<0)break;
-                if(count==0)continue;
-                used+=count;
-            }
-        }
-        if(used>65536)throw new IllegalStateException("wayward-imagegen package.json가 64KB를 초과합니다.");
-        String version=new JSONObject(new String(data,0,used,StandardCharsets.UTF_8)).optString("version","unknown").trim();
-        return version.isEmpty()?"unknown":version;
-    }
-
     private void startImageGenService(File backend, String version) {
         startImageGenService(backend,version,"default","");
     }
@@ -1243,21 +1223,6 @@ public final class MainActivity extends Activity {
                 }
             }
         }
-        String easyGenBackendVersion() throws Exception {
-            Node modDirectory=resolve("wml/mods/easygen");
-            if(modDirectory==null||!modDirectory.dir)return null;
-            Node modScript=find(modDirectory.id,"mod.js");
-            if(modScript==null||modScript.dir||!"easygen".equals(declared(modScript)))return null;
-            return backendPackageVersion(
-                    "wml/mods/easygen/server/wayward-imagegen/package.json",
-                    "wml/mods/easygen/server/wayward-imagegen/src/cli.ts");
-        }
-
-        boolean hasEasyGenNovelAiClient() throws Exception {
-            return exists("wml/mods/easygen/server/launch.mjs")
-                    &&exists("wml/mods/easygen/server/wayward-imagegen/src/nai/client.ts");
-        }
-
         String imageStudioBackendVersion() throws Exception {
             Node modDirectory = resolve("wml/mods/imagestudio");
             if (modDirectory == null || !modDirectory.dir) return null;
