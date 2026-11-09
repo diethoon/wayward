@@ -196,12 +196,12 @@ Termux를 별도로 설치하거나 명령어를 입력할 필요가 없습니�
 ComfyUI의 GPU 생성 엔진은 PC에서 실행되어야 합니다. 휴대폰에서 실행하는 것은 **Wayward ImageGen 연결 서버**이며, 이 서버가 PC ComfyUI에 요청을 전달합니다.
 
 1. PC에서 ComfyUI를 실행하고 휴대폰과 같은 사설 LAN 또는 Tailscale 네트워크에서 접속할 수 있도록 설정합니다.
-2. PC의 ComfyUI 주소를 확인합니다. 예: `http://192.168.0.20:8188`, `http://192.168.31.41:8188`, 또는 Tailscale MagicDNS 주소 `https://my-pc.tailnet.ts.net:8188`.
+2. PC의 ComfyUI 주소를 확인합니다. Portable/수동 설치는 보통 `8188`, ComfyUI Desktop은 보통 `8000` 포트를 사용합니다. 예: `http://192.168.0.20:8188`, `http://192.168.31.41:8000`, 또는 Tailscale MagicDNS 주소 `https://my-pc.tailnet.ts.net:8188`.
 3. 런처 홈의 ComfyUI 주소 입력란에 PC 주소를 넣고 **ComfyUI 연결 서버 실행**을 누릅니다.
 4. 런처가 EasyGen 서버 백엔드를 우선 찾고, 없으면 Image Studio 백엔드를 찾습니다. 게임 폴더에 없으면 설치된 앱 전용 ZIP 모드에서도 확인합니다.
 5. 준비가 끝나면 상태가 연결됨으로 바뀝니다. **이미지 생성 설정 / 상태 열기**는 ComfyUI 모드에서 로컬 ImageGen 상태/검토 페이지를 엽니다.
 
-이 버튼은 PC의 ComfyUI 프로그램을 켜는 버튼이 아닙니다. PC의 ComfyUI가 꺼져 있거나, PC 방화벽이 휴대폰의 연결을 막거나, ComfyUI가 LAN 요청을 받지 않으면 이미지 생성은 실패합니다. PC에서 ComfyUI의 LAN 수신을 허용하되 방화벽은 집의 사설 네트워크로 제한하세요. 인증 없는 ComfyUI 포트를 인터넷 전체에 공개하거나 공유기에서 공인 포트포워딩하는 방식은 사용하지 마세요.
+이 버튼은 PC의 ComfyUI 프로그램을 켜는 버튼이 아닙니다. PC의 ComfyUI가 꺼져 있거나, PC 방화벽이 휴대폰의 연결을 막거나, ComfyUI가 LAN 요청을 받지 않으면 이미지 생성은 실패합니다. PC에서 ComfyUI가 기본적으로 localhost(`127.0.0.1`)에만 묶여 있다면 Portable 실행 인수에 `--listen 0.0.0.0`을 추가하거나 Desktop의 Server Configuration에서 Listen Address를 `0.0.0.0`으로 바꾸고 재시작하세요. PC에서 ComfyUI의 LAN 수신을 허용하되 방화벽은 집의 사설 네트워크로 제한하세요. 인증 없는 ComfyUI 포트를 인터넷 전체에 공개하거나 공유기에서 공인 포트포워딩하는 방식은 사용하지 마세요.
 
 ### 주소 제한과 서버 중지
 
