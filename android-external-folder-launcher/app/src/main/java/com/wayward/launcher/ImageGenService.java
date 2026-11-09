@@ -195,7 +195,7 @@ public final class ImageGenService extends Service {
         if (!"default".equals(launchMode) && !"novelai".equals(launchMode) && !"comfy".equals(launchMode)) {
             throw new IllegalArgumentException("지원하지 않는 이미지 서버 실행 모드입니다.");
         }
-        String comfyUrl = "comfy".equals(launchMode) ? ComfyEndpoint.normalize(requestedComfyUrl) : "";
+        String comfyUrl = "comfy".equals(launchMode) ? ComfyEndpoint.normalizeOptional(requestedComfyUrl) : "";
         File project = new File(backendRoot, "wayward-imagegen");
         if (!new File(project, "package.json").isFile()) project = backendRoot;
         if (!new File(project, "package.json").isFile() || !new File(project, "src/cli.ts").isFile()) {
@@ -244,12 +244,14 @@ public final class ImageGenService extends Service {
                     command.add("--config");
                     command.add(config.getAbsolutePath());
                 }
-                command.add("--comfy-url");
-                command.add(comfyUrl);
+                if (!comfyUrl.isEmpty()) {
+                    command.add("--comfy-url");
+                    command.add(comfyUrl);
+                }
             }
         }
 
-        updateNotification("이미지 생성 서버 시작 중 · 127.0.0.1:8189");
+        updateNotification("comfy".equals(launchMode) && comfyUrl.isEmpty() ? "ComfyUI 주소 대기 중 · 로컬 서버 시작" : "이미지 생성 서버 시작 중 · 127.0.0.1:8189");
         ProcessBuilder builder = new ProcessBuilder(command).directory(workingDirectory).redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.appendTo(log));
         builder.environment().put("HOME", getFilesDir().getAbsolutePath());
@@ -263,7 +265,7 @@ public final class ImageGenService extends Service {
             if (probeHealth()) {
                 serverReady = true;
                 starting = false;
-                updateNotification("연결됨 · 127.0.0.1:8189");
+                updateNotification("comfy".equals(launchMode) && comfyUrl.isEmpty() ? "ComfyUI 주소 미설정 · 로컬 서버 대기 중 · 127.0.0.1:8189" : "연결됨 · 127.0.0.1:8189");
                 break;
             }
             if (!serverProcess.isAlive()) {
