@@ -26,7 +26,7 @@
     if (src.startsWith("https:")) return "https";
     if (src.startsWith("http:")) return "http";
     if (src.startsWith("file:")) return "file";
-    if (src.startsWith("/")) return "relative";
+    if (src.startsWith("/") || !/^[a-z][a-z0-9+.-]*:/i.test(src)) return "relative";
     return "other";
   }
 
@@ -71,6 +71,9 @@
 
   function imageDetails(img) {
     const raw = String(img.currentSrc || img.src || "");
+    const rawAttributeSrc = typeof img.getAttribute === "function"
+      ? String(img.getAttribute("src") || "") : "";
+    const attributeLocation = rawAttributeSrc ? safeImageLocation(rawAttributeSrc) : {};
     const classValue = typeof img.className === "string"
       ? img.className
       : (typeof img.getAttribute === "function" ? img.getAttribute("class") : "");
@@ -85,6 +88,8 @@
       elementId: safeDomField(idValue, 64),
       elementClass: safeDomField(classValue, 96),
       elementAlt: safeDomField(altValue, 80),
+      srcAttrKind: rawAttributeSrc ? srcKind(rawAttributeSrc) : "empty",
+      srcAttrPath: attributeLocation.srcPath || "",
       ...safeImageLocation(raw),
       srcKind: srcKind(raw),
       srcLength: raw.length,
