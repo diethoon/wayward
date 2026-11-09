@@ -25,8 +25,12 @@ assert.match(main, /zipMods\.extractDirectory\("imagestudio",\s*"backend"/,
   "Image Studio backend must be extractable from the launcher's app-private ZIP overlay");
 assert.match(main, /imageStudioZipBackendVersion\(\)/,
   "Image Studio ZIP backend metadata must be detected when the SAF folder has no usable backend");
-assert.match(main, /zipMods\.open\("wml\/mods\/imagestudio\/backend/,
-  "Image Studio ZIP backend manifest and entrypoint must be read from the active ZIP overlay");
+assert.match(main, /zipMods\.open\(layout\[0\]\)/,
+  "Image Studio ZIP package metadata must be read from the active ZIP overlay");
+assert.match(main, /zipMods\.open\(layout\[1\]\)/,
+  "Image Studio ZIP CLI entrypoint must be verified in the active ZIP overlay");
+assert.match(main, /wml\/mods\/imagestudio\/backend\/wayward-imagegen\/package\.json/,
+  "nested Image Studio ZIP backend layouts must be recognized");
 assert.doesNotMatch(main, /for \(GameProfile profile : profiles\)/,
   "backend lookup must not silently take another registered session's mod");
 assert.match(main, /ImageGenStatusStore\.read\(getFilesDir\(\)\)/,
