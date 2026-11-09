@@ -7,6 +7,9 @@ public final class ComfyEndpointTest {
         equal("http://100.70.2.3:8188", ComfyEndpoint.normalize("http://100.70.2.3:8188"));
         equal("https://my-pc.tailnet.ts.net:8188", ComfyEndpoint.normalize("https://my-pc.tailnet.ts.net"));
         equal("http://wayward-pc.local:8188", ComfyEndpoint.normalize("http://wayward-pc.local:8188"));
+        equal("", ComfyEndpoint.normalizeOptional(""));
+        equal("", ComfyEndpoint.normalizeOptional("   "));
+        equal("http://192.168.31.41:8188", ComfyEndpoint.normalizeOptional("http://192.168.31.41"));
 
         rejects("");
         rejects("http://127.0.0.1:8188");
