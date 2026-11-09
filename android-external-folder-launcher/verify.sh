@@ -8,6 +8,7 @@ else
   DIFF_BASE="HEAD^"
 fi
 git -C "$REPO_ROOT" diff --check "$DIFF_BASE" HEAD
+grep -Fq 'bunProcess(bun, "src/cli.ts", "--no-webp")' app/src/main/java/com/wayward/launcher/ImageGenService.java
 node --check app/src/main/assets/wml-folder-bootstrap.js
 node --check app/src/main/assets/imagegen-proxy.js
 node tests/imagegen-proxy.test.mjs
