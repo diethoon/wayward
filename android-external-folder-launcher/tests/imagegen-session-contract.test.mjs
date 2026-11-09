@@ -52,6 +52,20 @@ assert.match(service, /heartbeat\.scheduleAtFixedRate/,
   "service liveness must be published while install/start work is running");
 assert.match(service, /ACTION_RESTART/,
   "the foreground service must support an explicit restart command");
+assert.match(service, /ANDROID_LINKER_64 = "\/system\/bin\/linker64"/,
+  "Bun in app-private storage must be loaded through Android's system linker to avoid direct execve W^X denial");
+assert.match(service, /command\.add\(ANDROID_LINKER_64\)/,
+  "all Bun commands must start via the system linker");
+assert.match(service, /bunProcess\(bun, "install", "--production"\)/,
+  "dependency installation must use the system-linker launch path");
+assert.match(service, /bunProcess\(bun, "src\/cli\.ts"\)/,
+  "the ImageGen server must use the system-linker launch path");
+assert.match(service, /outFile\.setReadOnly\(\)/,
+  "the extracted runtime must be marked read-only before writing");
+assert.match(service, /executable\.setReadOnly\(\)/,
+  "existing and fresh Bun executables must remain read-only");
+assert.doesNotMatch(service, /new ProcessBuilder\((?:bun|binary|installed)\.getAbsolutePath\(\)/,
+  "Bun must never be passed directly to ProcessBuilder on Android 10+");
 assert.match(main, /imageGenStatusMonitorRunnable[\s\S]*?postDelayed\(this, 2000L\)/,
   "launcher home must refresh server state every two seconds");
 assert.match(main, /probeImageGenHealth\(\)/,
