@@ -15,7 +15,8 @@ const native = {
   listImageProviders() {
     return JSON.stringify({
       providers: [{ id: "a".repeat(32), name: "FLUX Worker", type: "cloudflare-worker" }],
-      defaultProviderId: "a".repeat(32)
+      defaultProviderId: "a".repeat(32),
+      fallbackProviderId: "b".repeat(32)
     });
   },
   generateImageWithProvider(id, providerId, prompt, width, height) {
@@ -37,6 +38,7 @@ vm.runInNewContext(source, { window, Promise, Map, Error, String, Number, Date, 
 const listing = window.WaywardImageProviders.list();
 assert.equal(listing.providers.length, 1);
 assert.equal(listing.defaultProviderId, "a".repeat(32));
+assert.equal(listing.fallbackProviderId, "b".repeat(32));
 
 const result = await window.WaywardImageProviders.generate({
   prompt: "a small orange circle",
