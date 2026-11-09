@@ -100,14 +100,36 @@ final class ImagePipelineDiagnostics {
                 safe.put(key, value);
             } else if (value instanceof String) {
                 String text = (String) value;
-                if (text.length() <= 120 && !text.contains("://")
-                        && !text.toLowerCase(java.util.Locale.ROOT).contains("bearer ")
-                        && !text.toLowerCase(java.util.Locale.ROOT).contains("token")) {
-                    safe.put(key, text);
-                }
+                if (safeString(key, text)) safe.put(key, text);
             }
         }
         return safe;
+    }
+
+    private static boolean safeString(String key, String value) {
+        if (value == null || value.length() > 120) return false;
+        switch (key) {
+            case "requestId":
+            case "providerId":
+                return value.matches("[A-Za-z0-9._-]{1,80}");
+            case "providerType":
+                return value.matches("[a-z0-9_-]{1,32}");
+            case "mimeType":
+            case "responseContentType":
+            case "mimeDetected":
+                return value.matches("(image|application|text)/[a-z0-9.+-]{1,40}");
+            case "imageFormat":
+            case "srcKind":
+            case "stage":
+            case "reasonCode":
+                return value.matches("[a-z0-9_-]{1,48}");
+            case "errorType":
+                return value.matches("[A-Za-z0-9_.$-]{1,80}");
+            case "elementTag":
+                return "img".equals(value);
+            default:
+                return false;
+        }
     }
 
     private interface LockedAction { void run() throws Exception; }
