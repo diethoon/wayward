@@ -453,7 +453,7 @@ public final class ImageProviderActivity extends Activity {
             confirmTest(draft);
         });
         TextView save = action("저장", true, () -> {
-            ImageProviderStore.Provider draft = buildProvider(original, type, name, endpoint, model, key,
+            ImageProviderStore.Provider draft = buildProvider(original, type, name, endpoint, model, key, gameAccess,
                     authHeader, authPrefix, template, responsePath, encoding);
             if (draft == null) return;
             try {
@@ -672,6 +672,7 @@ public final class ImageProviderActivity extends Activity {
         item.responsePath = original.responsePath;
         item.responseEncoding = original.responseEncoding;
         item.enabled = original.enabled;
+        item.allowInGame = original.allowInGame;
         item.allowInGame = original.allowInGame;
         return item;
     }
