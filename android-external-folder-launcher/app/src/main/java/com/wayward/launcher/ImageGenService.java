@@ -240,11 +240,10 @@ public final class ImageGenService extends Service {
             if ("comfy".equals(launchMode)) {
                 File config = new File(backendRoot, "wayward-imagegen.config.json");
                 if (!config.isFile()) config = new File(project, "wayward-imagegen.config.json");
-                if (!config.isFile() || config.length() == 0) {
-                    throw new IllegalStateException("ComfyUI 연결에 필요한 wayward-imagegen.config.json이 없습니다.");
+                if (config.isFile() && config.length() > 0) {
+                    command.add("--config");
+                    command.add(config.getAbsolutePath());
                 }
-                command.add("--config");
-                command.add(config.getAbsolutePath());
                 command.add("--comfy-url");
                 command.add(comfyUrl);
             }
