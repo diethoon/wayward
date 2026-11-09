@@ -132,7 +132,7 @@ def extract(archive: Path, output: Path) -> None:
             "files": dict(sorted(files.items())),
         }
         (staging / "launcher-bundle.json").write_text(
-            json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\\n",
+            json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
             encoding="utf-8",
         )
         if output.exists():
