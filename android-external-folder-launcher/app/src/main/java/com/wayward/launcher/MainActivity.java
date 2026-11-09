@@ -79,7 +79,6 @@ public final class MainActivity extends Activity {
     private final AtomicBoolean imageGenHealthProbeInFlight = new AtomicBoolean(false);
     private volatile boolean imageGenHealthResponding = false;
     private volatile boolean imageGenHealthProbeComplete = false;
-    private boolean pendingGameLoad = false;
     private String lastImageGenDiagnosticFailure = "";
     private long lastImageGenDiagnosticUploadAt = 0L;
     private WebView web;
@@ -116,7 +115,6 @@ public final class MainActivity extends Activity {
         String sessionId=sessionProfileId(intent);
         if(sessionId==null)return;
         if(sessionId.equals(activeProfileId)&&web!=null){
-            if (pendingGameLoad) return;
             if(home!=null)home.setVisibility(View.GONE);
             web.setVisibility(View.VISIBLE);
         }else openProfileSession(sessionId);
@@ -296,7 +294,6 @@ public final class MainActivity extends Activity {
         if(p==null){status("등록된 게임 폴더를 찾지 못했습니다. 홈에서 다시 등록해 주세요.");return;}
         try{
             if(web!=null)destroyWeb();
-            pendingGameLoad = false;
             activeProfileId=p.id;treeUri=Uri.parse(p.uri);tree=new SafTree(treeUri);
             String file=gameFile();if(file==null){DiagnosticsLogger.event(this,"ERROR","launcher","game_html_not_found",null);status("선택한 폴더에서 Wayward HTML을 찾지 못했습니다: "+p.label);return;}
             setTitle("Wayward · "+p.label);
@@ -307,20 +304,29 @@ public final class MainActivity extends Activity {
             String gameUrl=sessionOrigin(activeProfileId)+"/game/"+Uri.encode(file)+"?launcher="+System.currentTimeMillis();
             SafTree sessionTree=tree;
 
-            // Prepare the Image Studio runtime before allowing its first request.
-            // Missing/invalid Image Studio still completes the callback and opens the game.
-            pendingGameLoad = true;
-            ensureImageGenServer(sessionTree,()->{
+            // The game itself must never wait for ImageGen health readiness.
+            // Open the WebView first, then prepare Image Studio independently.
+            if(home!=null)home.setVisibility(View.GONE);
+            web.setVisibility(View.VISIBLE);
+            imageGenSessionMessage = "게임 실행 중 · Image Studio 서버는 백그라운드에서 준비합니다.";
+            DiagnosticsLogger.event(this,"INFO","launcher","game_webview_load_requested",null);
+            web.loadUrl(gameUrl);
+            refreshImageGenStatus();
+
+            // SAF inspection and backend copying may take time; defer them until
+            // after the game navigation has been issued. No game-load callback
+            // is attached to server startup or its health endpoint.
+            imageGenHandler.post(() -> {
                 if(isFinishing()||web==null||!activeProfileId.equals(id))return;
-                pendingGameLoad = false;
-                if(home!=null)home.setVisibility(View.GONE);
-                web.setVisibility(View.VISIBLE);
-                DiagnosticsLogger.event(this,"INFO","launcher","game_webview_load_requested",null);
-                web.loadUrl(gameUrl);
-                refreshImageGenStatus();
+                try {
+                    ensureImageGenServer(sessionTree, null);
+                } catch (Throwable error) {
+                    DiagnosticsLogger.error(this,"imagegen","background_prepare_failed",error);
+                    imageGenSessionMessage = "게임은 실행됨 · Image Studio 백그라운드 준비 실패: " + msg(error);
+                    refreshImageGenStatus();
+                }
             });
         }catch(Exception e){
-            pendingGameLoad = false;
             DiagnosticsLogger.error(this,"launcher","game_session_open_failed",e);
             status("게임 실행 실패: "+msg(e));
         }
