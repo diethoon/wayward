@@ -58,8 +58,8 @@ assert.match(service, /command\.add\(ANDROID_LINKER_64\)/,
   "all Bun commands must start via the system linker");
 assert.match(service, /bunProcess\(bun, "install", "--production"\)/,
   "dependency installation must use the system-linker launch path");
-assert.match(service, /bunProcess\(bun, "src\/cli\.ts"\)/,
-  "the ImageGen server must use the system-linker launch path");
+assert.match(service, /bunProcess\(bun, "src\/cli\.ts", "--no-webp"\)/,
+  "Android must disable WebP because the packaged sharp native binary is not Android ARM64");
 assert.match(service, /outFile\.setReadOnly\(\)/,
   "the extracted runtime must be marked read-only before writing");
 assert.match(service, /executable\.setReadOnly\(\)/,
