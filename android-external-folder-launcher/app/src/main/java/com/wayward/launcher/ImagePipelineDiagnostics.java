@@ -134,13 +134,7 @@ final class ImagePipelineDiagnostics {
             case "srcHost":
                 return value.matches("[A-Za-z0-9.:-]{1,120}");
             case "srcPath":
-                return value.startsWith("/") && value.matches("/[\\p{L}\\p{N}._~!()+,;=:@%/\\-]{0,159}");
-            case "elementId":
-            case "elementClass":
-            case "elementAlt":
-                return value.matches("[\\p{L}\\p{N} ._:-]{1,100}");
-            case "stage":
-'()*+,;=:@%/\\-]{0,159}");
+                return value.startsWith("/") && value.matches("/[\\p{L}\\p{N}._~!()+,;=:@%/\\-]{0,119}");
             case "elementId":
             case "elementClass":
             case "elementAlt":
@@ -205,7 +199,7 @@ final class ImagePipelineDiagnostics {
         }
         String result = safe.toString();
         if (result.isEmpty()) result = "/";
-        if (result.length() > 160) result = result.substring(result.length() - 159);
+        if (result.length() > 120) result = result.substring(result.length() - 119);
         if (!result.startsWith("/")) result = "/" + result;
         return result;
     }
