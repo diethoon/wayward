@@ -110,6 +110,8 @@ final class ImageProviderBridge {
                     put(received, "imageHeight", bounds.outHeight);
                     put(received, "mimeDetected", bounds.outMimeType == null ? "" : bounds.outMimeType);
                     record(context, "native_image_received", received);
+                    record(context, bounds.outWidth > 0 && bounds.outHeight > 0
+                            ? "native_image_decode_bounds_succeeded" : "native_image_decode_bounds_failed", received);
 
                     JSONObject result = new JSONObject();
                     result.put("ok", true);
