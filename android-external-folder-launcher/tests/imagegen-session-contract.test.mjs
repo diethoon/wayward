@@ -11,10 +11,12 @@ assert.match(main, /ensureImageGenServer\(sessionTree,/,
   "session startup must inspect the SafTree captured for the active launch");
 assert.match(main, /web\.loadUrl\(gameUrl\);[\s\S]*?ensureImageGenServer\(sessionTree,/,
   "game navigation must start before optional ImageGen preparation");
-assert.match(main, /String imageStudioBackendVersion\(\)/,
-  "Image Studio ID and backend entrypoints must be detected in that session");
-assert.match(main, /wml\/mods\/imagestudio\/backend\/wayward-imagegen\/package\.json/,
-  "the active session's nested backend layout must be recognized");
+assert.match(main, /String imageStudioModId\(\)/,
+  "the active session must identify the WML Image Studio adapter");
+assert.doesNotMatch(main, /wml\/mods\/imagestudio\/backend\//,
+  "the game folder must not be required to contain the bundled server source");
+assert.match(main, /ImageGenBackendInstaller\.install\(this, imageGenBackendRoot\(\)\)/,
+  "the embedded backend is installed from APK assets, not copied from the game folder");
 const automaticStartup = main.slice(main.indexOf("private void ensureImageGenServer"), main.indexOf("private static boolean sameImageGenVersion"));
 assert.doesNotMatch(automaticStartup, /extractDirectory\(/,
   "automatic Image Studio startup must remain tied to the active physical game folder");
