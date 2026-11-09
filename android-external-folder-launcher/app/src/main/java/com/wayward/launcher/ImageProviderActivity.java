@@ -15,6 +15,7 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -294,6 +295,7 @@ public final class ImageProviderActivity extends Activity {
         identity.addView(label(provider.name, 16, TEXT, true));
         addGap(identity, 3);
         identity.addView(label(typeName(provider.type), 11, AMBER, true));
+        identity.addView(label(provider.allowInGame ? "게임 연결 허용" : "게임 연결 차단", 10, provider.allowInGame ? GREEN : MUTED, true));
         top.addView(identity, new LinearLayout.LayoutParams(0, -2, 1));
         boolean isDefault = data.defaults.containsValue(provider.id);
         TextView state = label(isDefault ? "기본 서비스" : (provider.enabled ? "사용 가능" : "사용 안 함"), 10,
@@ -373,6 +375,16 @@ public final class ImageProviderActivity extends Activity {
         key.setText("");
         fields.addView(fieldBlock("API 키 / 토큰", key));
         addGap(fields, 8);
+        CheckBox gameAccess = new CheckBox(this);
+        gameAccess.setText("게임 WML 모드에서 이 서비스 사용 허용");
+        gameAccess.setTextColor(TEXT);
+        gameAccess.setTextSize(13);
+        gameAccess.setButtonTintList(android.content.res.ColorStateList.valueOf(GREEN));
+        gameAccess.setChecked(existing != null && existing.allowInGame);
+        fields.addView(gameAccess);
+        TextView accessNote = label("켜면 활성화된 게임 모드가 이 서비스로 실제 생성 요청을 보낼 수 있습니다. API 사용량과 비용이 발생할 수 있으며, 기본값은 꺼짐입니다.", 11, MUTED, false);
+        fields.addView(accessNote);
+        addGap(fields, 8);
 
         EditText authHeader = field("Authorization", false, false);
         authHeader.setSingleLine(true);
@@ -421,7 +433,7 @@ public final class ImageProviderActivity extends Activity {
                     : type.getSelectedItemPosition() == 1
                     ? "https://api.example.com"
                     : "https://api.example.com/generate");
-            if (type.getSelectedItemPosition() == 1 && model.getText().length() == 0) model.setText("gpt-image-1");
+            if (type.getSelectedItemPosition() == 1) model.setHint("예: gpt-image-1 또는 제공자 모델 ID");
             if (type.getSelectedItemPosition() == 0 && responsePath.getText().length() == 0) responsePath.setText("image");
         };
         type.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
@@ -435,7 +447,7 @@ public final class ImageProviderActivity extends Activity {
         addGap(page, 10);
         LinearLayout actions = row();
         TextView test = action("실제 생성 테스트", false, () -> {
-            ImageProviderStore.Provider draft = buildProvider(original, type, name, endpoint, model, key,
+            ImageProviderStore.Provider draft = buildProvider(original, type, name, endpoint, model, key, gameAccess,
                     authHeader, authPrefix, template, responsePath, encoding);
             if (draft == null) return;
             confirmTest(draft);
@@ -474,7 +486,7 @@ public final class ImageProviderActivity extends Activity {
     }
 
     private ImageProviderStore.Provider buildProvider(ImageProviderStore.Provider original,
-            Spinner type, EditText name, EditText endpoint, EditText model, EditText key,
+            Spinner type, EditText name, EditText endpoint, EditText model, EditText key, CheckBox gameAccess,
             EditText authHeader, EditText authPrefix, EditText template, EditText responsePath,
             Spinner encoding) {
         ImageProviderStore.Provider provider = original == null ? new ImageProviderStore.Provider() : copy(original);
@@ -493,6 +505,7 @@ public final class ImageProviderActivity extends Activity {
         provider.responsePath = value(responsePath);
         provider.responseEncoding = encodingValue(encoding.getSelectedItemPosition());
         provider.enabled = true;
+        provider.allowInGame = gameAccess.isChecked();
         try {
             ImageProviderStore.validateProvider(provider);
             ImageProviderClient.validateEndpoint(provider.endpoint);
@@ -659,6 +672,7 @@ public final class ImageProviderActivity extends Activity {
         item.responsePath = original.responsePath;
         item.responseEncoding = original.responseEncoding;
         item.enabled = original.enabled;
+        item.allowInGame = original.allowInGame;
         return item;
     }
 
