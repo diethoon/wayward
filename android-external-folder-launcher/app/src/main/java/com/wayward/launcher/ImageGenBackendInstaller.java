@@ -88,7 +88,7 @@ final class ImageGenBackendInstaller {
             }
             for (String child : children) {
                 if (child == null || child.isEmpty() || child.equals(".") || child.equals("..")
-                        || child.indexOf('/') >= 0 || child.indexOf('\\\\') >= 0) {
+                        || child.indexOf('/') >= 0 || child.indexOf('\\') >= 0) {
                     throw new SecurityException("내장 ImageGen 자산 경로가 올바르지 않습니다.");
                 }
                 File target = new File(output, child).getCanonicalFile();
@@ -142,7 +142,7 @@ final class ImageGenBackendInstaller {
         Iterator<String> keys = files.keys();
         while (keys.hasNext()) {
             String relative = keys.next();
-            if (relative.startsWith("/") || relative.indexOf('\\\\') >= 0
+            if (relative.startsWith("/") || relative.indexOf('\\') >= 0
                     || relative.contains("../") || relative.equals("..")) {
                 throw new SecurityException("ImageGen manifest 경로가 올바르지 않습니다.");
             }
@@ -152,7 +152,7 @@ final class ImageGenBackendInstaller {
                 throw new SecurityException("ImageGen 파일이 없거나 크기가 올바르지 않습니다: " + relative);
             }
             total += file.length();
-            if (!manifest.getString("files").equals("") && !sha256(file).equals(files.getString(relative))) {
+            if (!sha256(file).equals(files.getString(relative))) {
                 throw new SecurityException("내장 ImageGen 파일 해시가 일치하지 않습니다: " + relative);
             }
         }
