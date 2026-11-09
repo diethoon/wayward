@@ -1,6 +1,7 @@
 package com.wayward.launcher;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ContentValues;
 import android.content.Intent;
@@ -22,11 +23,13 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.text.InputType;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
@@ -68,7 +71,8 @@ public final class MainActivity extends Activity {
     private FrameLayout root;
     private LinearLayout home, profileList, zipModList;
     private TextView status, folderText, profileSummary, zipSummary, imageGenStatus;
-    private boolean imageGenCopying = false;
+    private String imageGenSessionMessage = "";
+    private static volatile boolean imageGenCopying = false;
     private final Handler imageGenHandler = new Handler(Looper.getMainLooper());
     private final List<Runnable> imageGenReadyCallbacks = new ArrayList<>();
     private Runnable imageGenPollRunnable;
@@ -77,6 +81,8 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle b){
         super.onCreate(b);
+        DiagnosticsLogger.event(this,"INFO","launcher","activity_create",null);
+        DiagnosticsUploader.uploadPending(this);
         zipMods=new ZipModStore(getFilesDir());
         loadProfiles();
         showHome();
@@ -86,6 +92,8 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onResume(){
         super.onResume();
+        DiagnosticsLogger.event(this,"INFO","launcher","activity_resume",null);
+        DiagnosticsUploader.uploadPending(this);
         loadProfiles();
         long revision=getSharedPreferences(PREFS,MODE_PRIVATE).getLong(KEY_ZIP_REV,0);
         if(web!=null&&revision!=loadedZipRevision){loadedZipRevision=revision;web.reload();}
@@ -138,16 +146,52 @@ public final class MainActivity extends Activity {
 
         TextView imageTitle=new TextView(this);imageTitle.setText("이미지 생성 · Image Studio");imageTitle.setTextColor(Color.WHITE);imageTitle.setTextSize(16);imageTitle.setTypeface(null,1);
         LinearLayout.LayoutParams imageTitleParams=new LinearLayout.LayoutParams(-1,-2);imageTitleParams.topMargin=dp(24);imageTitleParams.bottomMargin=dp(7);page.addView(imageTitle,imageTitleParams);
-        TextView imageDesc=new TextView(this);imageDesc.setText("설치된 imagestudio 모드의 wayward-imagegen 서버를 휴대폰에서 실행합니다. NovelAI는 휴대폰에서 직접 연결하며 PC나 Termux가 필요하지 않습니다.");imageDesc.setTextColor(Color.rgb(174,194,181));imageDesc.setTextSize(12);imageDesc.setLineSpacing(dp(2),1f);page.addView(imageDesc);
+        TextView imageDesc=new TextView(this);imageDesc.setText("각 게임 세션의 wml/mods 안에 설치된 Image Studio 모드를 자동 감지합니다. 백엔드는 런처 공통 서버로 실행되어 같은 버전의 여러 세션이 함께 사용할 수 있습니다.");imageDesc.setTextColor(Color.rgb(174,194,181));imageDesc.setTextSize(12);imageDesc.setLineSpacing(dp(2),1f);page.addView(imageDesc);
         imageGenStatus=new TextView(this);imageGenStatus.setTextColor(Color.rgb(245,210,130));imageGenStatus.setTextSize(12);imageGenStatus.setPadding(dp(10),dp(9),dp(10),dp(9));imageGenStatus.setBackgroundColor(Color.rgb(35,48,40));
         LinearLayout.LayoutParams imageStatusParams=new LinearLayout.LayoutParams(-1,-2);imageStatusParams.topMargin=dp(8);imageStatusParams.bottomMargin=dp(7);page.addView(imageGenStatus,imageStatusParams);
-        page.addView(button("이미지 생성 서버 시작 / 연결",true,()->startImageGenServer(true)),buttonParams());
         page.addView(button("이미지 생성 서버 중지",false,this::stopImageGenServer),buttonParams());
+        LinearLayout.LayoutParams diagnosticButtonParams=buttonParams();diagnosticButtonParams.topMargin=dp(18);
+        page.addView(button("진단 로그 자동 전송 설정",false,this::showDiagnosticsSettings),diagnosticButtonParams);
 
         TextView help=new TextView(this);help.setText("ZIP 설치 위치: 이 앱의 비공개 files 저장소\n게임 폴더에는 ZIP이나 압축 해제 파일을 쓰지 않습니다. 설치한 모드는 등록된 게임 세션에서 공통으로 사용할 수 있으며, 모드 활성화/순서는 각 게임 세션의 브라우저 저장소에 따로 보관됩니다.");
         help.setTextColor(Color.rgb(151,171,158));help.setTextSize(12);help.setLineSpacing(dp(3),1f);LinearLayout.LayoutParams hl=new LinearLayout.LayoutParams(-1,-2);hl.topMargin=dp(18);page.addView(help,hl);
         home=page;root.addView(scroll,new FrameLayout.LayoutParams(-1,-1));setContentView(root);
         renderProfiles();renderZipMods();refreshImageGenStatus();
+    }
+
+    private void showDiagnosticsSettings(){
+        boolean configured=DiagnosticsTokenStore.has(this);
+        EditText code=new EditText(this);
+        code.setSingleLine(true);
+        code.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        code.setHint("진단 서버 연결 코드 붙여넣기");
+        AlertDialog.Builder builder=new AlertDialog.Builder(this)
+                .setTitle("진단 로그 자동 전송")
+                .setMessage(configured
+                        ? "진단 서버 연결 코드가 저장되어 있습니다. 새 코드로 교체하거나 연결을 해제할 수 있습니다.\n\n런처 오류와 WebView 오류, ImageGen 서버 상태만 전송합니다. 게임 세이브·이미지·프롬프트·요청 본문·인증 헤더는 수집하지 않습니다."
+                        : "연결 코드를 한 번 입력하면 보관된 로그가 앱 실행/복귀 때 자동 전송됩니다. 게임 세이브·이미지·프롬프트·요청 본문·인증 헤더는 수집하지 않습니다.")
+                .setView(code)
+                .setPositiveButton("연결",null)
+                .setNegativeButton("닫기",(dialog,which)->{});
+        if(configured)builder.setNeutralButton("연결 해제",(dialog,which)->{
+            DiagnosticsTokenStore.clear(this);
+            Toast.makeText(this,"진단 로그 자동 전송을 해제했습니다.",Toast.LENGTH_SHORT).show();
+        });
+        AlertDialog dialog=builder.create();
+        dialog.setOnShowListener(ignored->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            String token=code.getText()==null?"":code.getText().toString().trim();
+            if(token.length()<32){code.setError("연결 코드를 확인해 주세요.");return;}
+            Button connect=dialog.getButton(AlertDialog.BUTTON_POSITIVE);connect.setEnabled(false);
+            DiagnosticsUploader.verifyAndSave(this,token,ok->{
+                connect.setEnabled(true);
+                if(ok){
+                    dialog.dismiss();
+                    Toast.makeText(this,"진단 서버 연결 완료 · 보관된 로그 전송을 시작합니다.",Toast.LENGTH_LONG).show();
+                    DiagnosticsUploader.uploadPending(this);
+                }else Toast.makeText(this,"연결 실패 · 코드와 네트워크를 확인해 주세요.",Toast.LENGTH_LONG).show();
+            });
+        }));
+        dialog.show();
     }
 
     private Button compactButton(String label,boolean primary,Runnable action){
@@ -161,6 +205,7 @@ public final class MainActivity extends Activity {
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
         if(treeUri!=null)i.putExtra(DocumentsContract.EXTRA_INITIAL_URI,treeUri);
         else if(!profiles.isEmpty())try{i.putExtra(DocumentsContract.EXTRA_INITIAL_URI,Uri.parse(profiles.get(profiles.size()-1).uri));}catch(Exception ignored){}
+        DiagnosticsLogger.event(this,"INFO","launcher","folder_picker_opened",null);
         startActivityForResult(i,PICK_TREE);
     }
 
@@ -178,10 +223,14 @@ public final class MainActivity extends Activity {
             return;
         }
         if(req==PICK_TREE){
-            if(result!=RESULT_OK||data==null||data.getData()==null)return;
+            if(result!=RESULT_OK||data==null||data.getData()==null){
+                DiagnosticsLogger.event(this,"WARN","launcher","folder_picker_cancelled",null);
+                return;
+            }
             Uri picked=data.getData();int flags=data.getFlags()&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             try{
                 getContentResolver().takePersistableUriPermission(picked,flags);
+                DiagnosticsLogger.event(this,"INFO","launcher","folder_permission_persisted",null);
                 String value=picked.toString();GameProfile profile=findProfileByUri(value);
                 if(profile==null){
                     String name=new SafTree(picked).rootName();
@@ -190,8 +239,9 @@ public final class MainActivity extends Activity {
                 }
                 activeProfileId=profile.id;treeUri=picked;tree=new SafTree(picked);saveProfiles();
                 refreshStatus();renderProfiles();renderZipMods();
+                DiagnosticsLogger.event(this,"INFO","launcher","game_folder_registered",null);
                 Toast.makeText(this,"게임 폴더를 등록했습니다. 목록에서 실행할 수 있습니다.",Toast.LENGTH_LONG).show();
-            }catch(Exception e){status("폴더 권한 저장 실패: "+msg(e));}
+            }catch(Exception e){DiagnosticsLogger.error(this,"launcher","folder_permission_failed",e);status("폴더 권한 저장 실패: "+msg(e));}
             return;
         }
         if(req==PICK_MOD_ZIP){
@@ -305,12 +355,13 @@ public final class MainActivity extends Activity {
     }
 
     private void openProfileSession(String id){
+        DiagnosticsLogger.event(this,"INFO","launcher","game_session_open_requested",null);
         GameProfile p=findProfile(id);
         if(p==null){status("등록된 게임 폴더를 찾지 못했습니다. 홈에서 다시 등록해 주세요.");return;}
         try{
             if(web!=null)destroyWeb();
             activeProfileId=p.id;treeUri=Uri.parse(p.uri);tree=new SafTree(treeUri);
-            String file=gameFile();if(file==null){status("선택한 폴더에서 Wayward HTML을 찾지 못했습니다: "+p.label);return;}
+            String file=gameFile();if(file==null){DiagnosticsLogger.event(this,"ERROR","launcher","game_html_not_found",null);status("선택한 폴더에서 Wayward HTML을 찾지 못했습니다: "+p.label);return;}
             setTitle("Wayward · "+p.label);
             RUNNING_SESSIONS.add(p.id);
             if(home!=null)home.setVisibility(View.GONE);
@@ -318,17 +369,18 @@ public final class MainActivity extends Activity {
             createWeb();web.setVisibility(View.VISIBLE);
             String origin=sessionOrigin(activeProfileId)+"/game/";
             TextView loading=new TextView(this);
-            loading.setText("Image Studio 서버 연결을 준비하고 있습니다…\n서버가 없는 경우에는 바로 게임을 엽니다.");
+            loading.setText("현재 세션의 Image Studio 모드를 확인하고 있습니다…\n모드가 없거나 서버 시작에 실패해도 게임은 계속 열립니다.");
             loading.setTextColor(Color.WHITE);loading.setTextSize(14);loading.setGravity(android.view.Gravity.CENTER);
             loading.setBackgroundColor(Color.rgb(16,25,21));
             root.addView(loading,new FrameLayout.LayoutParams(-1,-1));
             String gameUrl=origin+Uri.encode(file)+"?launcher="+System.currentTimeMillis();
-            ensureImageGenServer(()->{
+            ensureImageGenServer(tree,()->{
                 if(web==null||!activeProfileId.equals(id))return;
                 if(loading.getParent()==root)root.removeView(loading);
+                DiagnosticsLogger.event(this,"INFO","launcher","game_webview_load_requested",null);
                 web.loadUrl(gameUrl);
             });
-        }catch(Exception e){status("게임 실행 실패: "+msg(e));}
+        }catch(Exception e){DiagnosticsLogger.error(this,"launcher","game_session_open_failed",e);status("게임 실행 실패: "+msg(e));}
     }
 
     private void removeProfile(String id){
@@ -413,6 +465,36 @@ public final class MainActivity extends Activity {
         FolderHandler folderHandler=new FolderHandler(tree,getAssets(),zipMods,origin);
         WebViewAssetLoader loader=new WebViewAssetLoader.Builder().setDomain(domain).addPathHandler("/game/",folderHandler).build();
         web.setWebViewClient(new WebViewClient(){
+            @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){
+                DiagnosticsLogger.event(MainActivity.this,"INFO","webview","page_started",null);
+                super.onPageStarted(view,url,favicon);
+            }
+            @Override public void onPageFinished(WebView view,String url){
+                DiagnosticsLogger.event(MainActivity.this,"INFO","webview","page_finished",null);
+                super.onPageFinished(view,url);
+            }
+            @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error){
+                if(request!=null&&request.isForMainFrame()){
+                    JSONObject details=new JSONObject();
+                    try{details.put("code",error==null?0:error.getErrorCode());}catch(Exception ignored){}
+                    DiagnosticsLogger.event(MainActivity.this,"ERROR","webview","main_frame_load_error",details);
+                }
+                super.onReceivedError(view,request,error);
+            }
+            @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){
+                if(request!=null&&request.isForMainFrame()&&response!=null&&response.getStatusCode()>=400){
+                    JSONObject details=new JSONObject();
+                    try{details.put("status",response.getStatusCode());}catch(Exception ignored){}
+                    DiagnosticsLogger.event(MainActivity.this,"WARN","webview","main_frame_http_error",details);
+                }
+                super.onReceivedHttpError(view,request,response);
+            }
+            @Override public boolean onRenderProcessGone(WebView view,android.webkit.RenderProcessGoneDetail detail){
+                JSONObject details=new JSONObject();
+                try{details.put("didCrash",detail!=null&&detail.didCrash());details.put("priority",detail==null?-1:detail.rendererPriorityAtExit());}catch(Exception ignored){}
+                DiagnosticsLogger.event(MainActivity.this,"ERROR","webview","renderer_process_gone",details);
+                return super.onRenderProcessGone(view,detail);
+            }
             @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest r){
                 Uri u=r.getUrl();WebResourceResponse local=loader.shouldInterceptRequest(u);if(local!=null)return local;
                 if("art.sintention.com".equalsIgnoreCase(u.getHost())&&u.getPath()!=null&&u.getPath().startsWith("/images/"))return folderHandler.serve("images/"+u.getPath().substring(8));
@@ -447,28 +529,21 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private static final Object IMAGEGEN_LOCK = new Object();
+
     private File imageGenBackendRoot() {
         return new File(getFilesDir(), "imagegen/backend");
     }
 
-    private boolean ensureImageGenBackend() throws Exception {
+    private boolean ensureImageGenBackend(SafTree sessionTree) throws Exception {
+        if (sessionTree == null) return false;
+        String version = sessionTree.imageStudioBackendVersion();
+        if (version == null || version.isEmpty()) return false;
         File backend = imageGenBackendRoot();
-        if (new File(backend, "wayward-imagegen/package.json").isFile()
-                && new File(backend, "wayward-imagegen/src/cli.ts").isFile()) return true;
-        if (new File(backend, "package.json").isFile() && new File(backend, "src/cli.ts").isFile()) return true;
-
-        for (GameProfile profile : profiles) {
-            SafTree candidate = new SafTree(Uri.parse(profile.uri));
-            if (candidate.copyDirectory("wml/mods/imagestudio/backend", backend)) {
-                if (hasImageGenProject(backend)) return true;
-                deleteFileTree(backend);
-            }
-        }
-
-        if (zipMods != null && zipMods.extractDirectory("imagestudio", "backend", backend)) {
-            if (hasImageGenProject(backend)) return true;
-            deleteFileTree(backend);
-        }
+        deleteFileTree(backend);
+        if (!sessionTree.copyDirectory("wml/mods/imagestudio/backend", backend)) return false;
+        if (hasImageGenProject(backend)) return true;
+        deleteFileTree(backend);
         return false;
     }
 
@@ -478,61 +553,122 @@ public final class MainActivity extends Activity {
         return new File(project, "package.json").isFile() && new File(project, "src/cli.ts").isFile();
     }
 
-    private void ensureImageGenServer(Runnable afterReady) {
-        startImageGenServer(false, afterReady);
-    }
-
-    private void startImageGenServer(boolean showFeedback) {
-        startImageGenServer(showFeedback, null);
-    }
-
-    private void startImageGenServer(boolean showFeedback, Runnable afterReady) {
+    private void ensureImageGenServer(SafTree sessionTree, Runnable afterReady) {
         if (afterReady != null) imageGenReadyCallbacks.add(afterReady);
-        if (ImageGenService.serverReady) {
-            refreshImageGenStatus();
+        if (sessionTree == null) {
+            imageGenSessionMessage = "현재 게임 세션의 폴더를 확인할 수 없어 이미지 서버 자동 시작을 건너뛰었습니다.";
             finishImageGenCallbacks();
-            if (showFeedback) Toast.makeText(this, "이미지 생성 서버가 이미 실행 중입니다.", Toast.LENGTH_SHORT).show();
+            refreshImageGenStatus();
             return;
         }
-        if (ImageGenService.starting || imageGenCopying) {
+
+        if (imageGenCopying) {
             waitForImageGenReady();
             return;
         }
-        imageGenCopying = true;
-        if (imageGenStatus != null) imageGenStatus.setText("Image Studio 백엔드를 확인하고 앱 내부 저장소에 준비하고 있습니다…");
-        new Thread(() -> {
-            String error = null;
-            File backend = imageGenBackendRoot();
-            try {
-                if (!ensureImageGenBackend()) {
-                    throw new IllegalStateException("imagestudio 모드의 backend/wayward-imagegen을 찾지 못했습니다. Image Studio 모드 ZIP을 먼저 설치하세요.");
-                }
-            } catch (Exception e) {
-                error = msg(e);
+
+        final String version;
+        try {
+            String detected = sessionTree.imageStudioBackendVersion();
+            if (detected == null) {
+                imageGenSessionMessage = "현재 세션의 WML Image Studio 모드가 없어 이미지 서버를 시작하지 않았습니다.";
+                refreshImageGenStatus();
+                finishImageGenCallbacks();
+                return;
             }
-            final String problem = error;
-            runOnUiThread(() -> {
-                imageGenCopying = false;
-                if (problem != null) {
-                    ImageGenService.statusMessage = problem;
-                    if (imageGenStatus != null) imageGenStatus.setText(problem);
-                    if (showFeedback) Toast.makeText(this, problem, Toast.LENGTH_LONG).show();
+            if (detected.isEmpty()) {
+                imageGenSessionMessage = "Image Studio 모드는 감지했지만 backend/wayward-imagegen 또는 src/cli.ts를 찾지 못했습니다.";
+                refreshImageGenStatus();
+                finishImageGenCallbacks();
+                return;
+            }
+            version = detected;
+        } catch (Exception e) {
+            imageGenSessionMessage = "현재 세션의 Image Studio 모드 검사 실패: " + msg(e);
+            refreshImageGenStatus();
+            finishImageGenCallbacks();
+            return;
+        }
+
+        ImageGenStatusStore.State shared = ImageGenStatusStore.read(getFilesDir());
+        if (shared.isReady() || shared.isStarting()) {
+            if (!sameImageGenVersion(shared.backendVersion, version)) {
+                imageGenSessionMessage = "현재 세션 Image Studio 버전(" + version + ")이 실행 중 서버 버전("
+                        + safeVersion(shared.backendVersion) + ")과 달라 공유하지 않았습니다. 실행 중인 서버를 중지한 뒤 세션을 다시 열어 주세요.";
+                refreshImageGenStatus();
+                finishImageGenCallbacks();
+                return;
+            }
+            imageGenSessionMessage = "현재 세션의 Image Studio " + version + "을 공통 이미지 서버에 연결합니다.";
+            waitForImageGenReady();
+            return;
+        }
+
+        synchronized (IMAGEGEN_LOCK) {
+            shared = ImageGenStatusStore.read(getFilesDir());
+            if (shared.isReady() || shared.isStarting()) {
+                if (!sameImageGenVersion(shared.backendVersion, version)) {
+                    imageGenSessionMessage = "다른 세션에서 다른 Image Studio 버전의 서버가 실행 중입니다. 현재 서버를 중지한 뒤 다시 시도해 주세요.";
+                    refreshImageGenStatus();
                     finishImageGenCallbacks();
                     return;
                 }
-                startImageGenService(backend);
+                waitForImageGenReady();
+                return;
+            }
+            if (imageGenCopying) {
+                waitForImageGenReady();
+                return;
+            }
+            imageGenCopying = true;
+        }
+
+        imageGenSessionMessage = "현재 세션의 Image Studio 백엔드를 확인하고 런처 서버에 연결하는 중입니다…";
+        refreshImageGenStatus();
+        new Thread(() -> {
+            String problem = null;
+            File backend = imageGenBackendRoot();
+            try {
+                synchronized (IMAGEGEN_LOCK) {
+                    if (!ensureImageGenBackend(sessionTree)) {
+                        throw new IllegalStateException("현재 세션의 wml/mods/imagestudio/backend에서 wayward-imagegen을 찾지 못했습니다.");
+                    }
+                }
+            } catch (Throwable error) {
+                problem = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+            }
+            final String failure = problem;
+            runOnUiThread(() -> {
+                imageGenCopying = false;
+                if (failure != null) {
+                    imageGenSessionMessage = "Image Studio 백엔드 준비 실패: " + failure;
+                    refreshImageGenStatus();
+                    finishImageGenCallbacks();
+                    return;
+                }
+                startImageGenService(backend, version);
                 waitForImageGenReady();
             });
-        }, "wayward-imagegen-prepare").start();
+        }, "wayward-imagegen-session-prepare").start();
+    }
+
+    private static boolean sameImageGenVersion(String running, String requested) {
+        return running != null && requested != null && !running.isEmpty()
+                && running.equals(requested);
+    }
+
+    private static String safeVersion(String version) {
+        return version == null || version.isEmpty() ? "알 수 없음" : version;
     }
 
     private void waitForImageGenReady() {
         if (imageGenReadyCallbacks.isEmpty() || imageGenPollRunnable != null) return;
-        final long deadline = System.currentTimeMillis() + 6L * 60L * 1000L;
+        final long deadline = System.currentTimeMillis() + 18L * 60L * 1000L;
         imageGenPollRunnable = new Runnable() {
             @Override public void run() {
-                boolean finished = ImageGenService.serverReady
-                        || (!ImageGenService.starting && !imageGenCopying)
+                ImageGenStatusStore.State state = ImageGenStatusStore.read(getFilesDir());
+                boolean finished = state.isReady()
+                        || (!state.isStarting() && !imageGenCopying)
                         || System.currentTimeMillis() >= deadline;
                 if (finished) {
                     imageGenPollRunnable = null;
@@ -558,41 +694,50 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private void startImageGenService(File backend) {
+    private void startImageGenService(File backend, String version) {
         Intent intent = new Intent(this, ImageGenService.class);
         intent.setAction(ImageGenService.ACTION_START);
         intent.putExtra(ImageGenService.EXTRA_BACKEND_ROOT, backend.getAbsolutePath());
-        ImageGenService.serverReady = false;
-        ImageGenService.starting = true;
-        ImageGenService.statusMessage = "이미지 생성 서버 시작 요청을 전달했습니다.";
+        intent.putExtra(ImageGenService.EXTRA_BACKEND_VERSION, version);
         try {
             if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
             else startService(intent);
-            if (imageGenStatus != null) imageGenStatus.setText("이미지 생성 서버 시작 중 · 첫 실행은 런타임/패키지 설치로 시간이 걸릴 수 있습니다.");
-        } catch (Exception e) {
-            ImageGenService.starting = false;
-            ImageGenService.statusMessage = "이미지 서버 시작 실패: " + msg(e);
-            if (imageGenStatus != null) imageGenStatus.setText(ImageGenService.statusMessage);
+            imageGenSessionMessage = "Image Studio " + version + " 서버 시작 요청을 전달했습니다.";
+            refreshImageGenStatus();
+        } catch (Throwable error) {
+            DiagnosticsLogger.error(this,"imagegen","service_start_request_failed",error);
+            String message = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+            imageGenSessionMessage = "이미지 서버 시작 요청 실패: " + message;
+            try {
+                ImageGenStatusStore.write(getFilesDir(), false, false, imageGenSessionMessage, version);
+            } catch (Exception ignored) {}
+            refreshImageGenStatus();
             finishImageGenCallbacks();
         }
     }
 
     private void stopImageGenServer() {
+        DiagnosticsLogger.event(this,"INFO","imagegen","stop_requested",null);
         Intent intent = new Intent(this, ImageGenService.class).setAction(ImageGenService.ACTION_STOP);
         try {
             startService(intent);
         } catch (Exception ignored) {
             stopService(new Intent(this, ImageGenService.class));
         }
-        if (imageGenStatus != null) imageGenStatus.setText("이미지 생성 서버 중지 요청을 보냈습니다.");
+        imageGenSessionMessage = "이미지 생성 서버 중지 요청을 보냈습니다.";
+        if (imageGenStatus != null) imageGenStatus.setText(imageGenSessionMessage);
     }
 
     private void refreshImageGenStatus() {
         if (imageGenStatus == null) return;
-        if (ImageGenService.serverReady) imageGenStatus.setText("연결됨 · 휴대폰 이미지 생성 서버 127.0.0.1:8189");
-        else if (ImageGenService.starting) imageGenStatus.setText(ImageGenService.statusMessage);
-        else if (imageGenCopying) imageGenStatus.setText("Image Studio 백엔드 준비 중…");
-        else imageGenStatus.setText(ImageGenService.statusMessage);
+        ImageGenStatusStore.State state = ImageGenStatusStore.read(getFilesDir());
+        if (state.isReady()) imageGenStatus.setText("연결됨 · 공통 이미지 생성 서버 127.0.0.1:8189 · Image Studio " + safeVersion(state.backendVersion));
+        else if (state.isStarting()) imageGenStatus.setText(state.message.isEmpty() ? "이미지 생성 서버 시작 중…" : state.message);
+        else if (imageGenCopying) imageGenStatus.setText("현재 세션 Image Studio 백엔드 준비 중…");
+        else if (state.ready && !state.isFresh()) imageGenStatus.setText("이미지 생성 서비스 heartbeat가 끊겼습니다. 현재 세션을 다시 열면 서버를 재시작합니다.");
+        else if (imageGenSessionMessage != null && !imageGenSessionMessage.isEmpty()) imageGenStatus.setText(imageGenSessionMessage);
+        else if (!state.message.isEmpty()) imageGenStatus.setText(state.message);
+        else imageGenStatus.setText("서버가 실행되지 않았습니다.");
     }
 
     private static void deleteFileTree(File file) {
@@ -609,11 +754,12 @@ public final class MainActivity extends Activity {
     @Override public void onBackPressed(){if(web!=null&&web.getVisibility()==View.VISIBLE){if(web.canGoBack())web.goBack();else showHomePanel();return;}super.onBackPressed();}
     @Override protected void onDestroy(){
         String sessionId=sessionProfileId(getIntent());if(sessionId!=null)RUNNING_SESSIONS.remove(sessionId);
+        DiagnosticsLogger.event(this,"INFO","launcher","activity_destroy",null);
         destroyWeb();super.onDestroy();
     }
     private String msg(Throwable e){return e==null||e.getMessage()==null?"알 수 없는 오류":e.getMessage();}
     private final class HostBridge{
-        @JavascriptInterface public String version(){return "0.3.0";}
+        @JavascriptInterface public String version(){return "0.3.2";}
         @JavascriptInterface public void imageGenProxyFetch(String requestId,String method,String path,String headersJson,String bodyBase64){
             ImageGenProxy.dispatch(web,requestId,method,path,headersJson,bodyBase64);
         }
@@ -745,6 +891,42 @@ public final class MainActivity extends Activity {
                 }
             }
         }
+        String imageStudioBackendVersion() throws Exception {
+            Node modDirectory = resolve("wml/mods/imagestudio");
+            if (modDirectory == null || !modDirectory.dir) return null;
+            Node modScript = find(modDirectory.id, "mod.js");
+            if (modScript == null || modScript.dir || !"imagestudio".equals(declared(modScript))) return null;
+
+            String nestedVersion = backendPackageVersion(
+                    "wml/mods/imagestudio/backend/wayward-imagegen/package.json",
+                    "wml/mods/imagestudio/backend/wayward-imagegen/src/cli.ts");
+            if (nestedVersion != null) return nestedVersion;
+
+            String rootVersion = backendPackageVersion(
+                    "wml/mods/imagestudio/backend/package.json",
+                    "wml/mods/imagestudio/backend/src/cli.ts");
+            return rootVersion == null ? "" : rootVersion;
+        }
+
+        private String backendPackageVersion(String packagePath, String cliPath) throws Exception {
+            if (!exists(packagePath) || !exists(cliPath)) return null;
+            try (InputStream in = open(packagePath)) {
+                if (in == null) return null;
+                byte[] bytes = new byte[65537];
+                int used = 0;
+                while (used < bytes.length) {
+                    int n = in.read(bytes, used, bytes.length - used);
+                    if (n < 0) break;
+                    if (n == 0) continue;
+                    used += n;
+                }
+                if (used > 65536) throw new IllegalStateException("Image Studio package.json가 64KB를 초과합니다.");
+                JSONObject pkg = new JSONObject(new String(bytes, 0, used, StandardCharsets.UTF_8));
+                String version = pkg.optString("version", "unknown").trim();
+                return version.isEmpty() ? "unknown" : version;
+            }
+        }
+
         List<String> listModIds()throws Exception{
             List<String> ids=new ArrayList<>();Node mods=resolve("wml/mods");if(mods==null||!mods.dir)return ids;
             for(Node d:children(mods.id)){if(!d.dir||!ID.matcher(d.name).matches())continue;Node f=find(d.id,"mod.js");if(f==null||f.dir)continue;String id=declared(f);if(id!=null&&(id.isEmpty()||id.equals(d.name)))ids.add(d.name);}
