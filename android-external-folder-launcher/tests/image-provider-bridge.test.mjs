@@ -1,0 +1,57 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import vm from "node:vm";
+import { fileURLToPath } from "node:url";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const source = fs.readFileSync(
+  path.join(here, "../app/src/main/assets/image-provider-bridge.js"),
+  "utf8"
+);
+
+const calls = [];
+const native = {
+  listImageProviders() {
+    return JSON.stringify({
+      providers: [{ id: "a".repeat(32), name: "FLUX Worker", type: "cloudflare-worker" }],
+      defaultProviderId: "a".repeat(32)
+    });
+  },
+  generateImageWithProvider(id, providerId, prompt, width, height) {
+    calls.push({ id, providerId, prompt, width, height });
+    queueMicrotask(() => window.__waywardImageProvidersResolve(id, JSON.stringify({
+      ok: true,
+      providerId: "a".repeat(32),
+      mimeType: "image/jpeg",
+      dataUrl: "data:image/jpeg;base64,AA=="
+    })));
+  }
+};
+const window = {
+  crypto: { randomUUID: () => "test-request-id" },
+  WMLHost: native
+};
+vm.runInNewContext(source, { window, Promise, Map, Error, String, Number, Date, Math, JSON, setTimeout, clearTimeout });
+
+const listing = window.WaywardImageProviders.list();
+assert.equal(listing.providers.length, 1);
+assert.equal(listing.defaultProviderId, "a".repeat(32));
+
+const result = await window.WaywardImageProviders.generate({
+  prompt: "a small orange circle",
+  width: 512,
+  height: 512
+});
+assert.equal(result.ok, true);
+assert.equal(calls.length, 1);
+assert.equal(calls[0].providerId, "");
+assert.equal(calls[0].prompt, "a small orange circle");
+assert.equal(calls[0].width, 512);
+assert.equal(calls[0].height, 512);
+
+await assert.rejects(
+  window.WaywardImageProviders.generate({ prompt: " " }),
+  /프롬프트/
+);
+console.log("Image provider bridge contract: PASS");
