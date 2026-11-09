@@ -56,7 +56,7 @@ const window = {
   WMLHost: native
 };
 vm.runInNewContext(source, {
-  window, Promise, Map, Error, String, Number, Date, Math, JSON,
+  window, Promise, Map, Error, String, Number, Date, Math, JSON, URL,
   Boolean, Object, setTimeout, clearTimeout, queueMicrotask
 });
 
