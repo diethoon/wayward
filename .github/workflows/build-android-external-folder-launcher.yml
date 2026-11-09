@@ -65,9 +65,15 @@ jobs:
                           remaining -= len(chunk)
                   print("AUDIT_FILE", relative.as_posix(), entry.file_size)
           PY
+      - name: Guard the one-time Cloudflare FLUX smoke request
+        id: flux_smoke_once
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/wayward-flux-smoke-once/complete
+          key: wayward-flux-smoke-once-20261110
       - name: Generate one real Cloudflare FLUX smoke image
         id: flux_smoke
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.sha == '7ed7cc2dca4a427bedd86cce76661c8fbb6b4aaa'
+        if: steps.flux_smoke_once.outputs.cache-hit != 'true'
         continue-on-error: true
         shell: bash
         run: |
@@ -102,6 +108,8 @@ jobs:
           fs.writeFileSync(root + '/result.txt',
             'provider=Cloudflare FLUX Worker\\nhttp=200\\nmimeType=' + (response.mimeType || mime) +
             '\\nbytes=' + bytes.length + '\\nsha256=' + sha + '\\nfile=' + output + '\\n');
+          fs.mkdirSync(process.env.RUNNER_TEMP + '/wayward-flux-smoke-once', { recursive: true });
+          fs.writeFileSync(process.env.RUNNER_TEMP + '/wayward-flux-smoke-once/complete', 'success\\n');
           console.log(fs.readFileSync(root + '/result.txt', 'utf8'));
           JS
       - uses: actions/setup-java@v4
