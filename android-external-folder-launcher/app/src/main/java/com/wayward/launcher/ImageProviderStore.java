@@ -211,7 +211,7 @@ final class ImageProviderStore {
                 list.put(item);
             }
             root.put("providers", list);
-            root.put("defaultProviderId", snapshot.defaults.get(profileId));
+            root.put("defaultProviderId", snapshot.defaults.containsKey(profileId) ? snapshot.defaults.get(profileId) : JSONObject.NULL);
             return root.toString();
         } catch (Exception error) {
             try {
