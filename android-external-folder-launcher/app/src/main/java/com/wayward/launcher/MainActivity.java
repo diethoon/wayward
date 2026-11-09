@@ -14,6 +14,7 @@ import android.os.Looper;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.text.InputType;
 import android.view.View;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
@@ -22,6 +23,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -54,7 +56,7 @@ import java.util.regex.Pattern;
 public final class MainActivity extends Activity {
     private static final int PICK_TREE=4101, PICK_MOD_ZIP=4102;
     private static final String PREFS="wayward_launcher";
-    private static final String KEY_TREE="game_tree_uri", KEY_PROFILES="game_profiles", KEY_ZIP_REV="zip_mod_revision";
+    private static final String KEY_TREE="game_tree_uri", KEY_PROFILES="game_profiles", KEY_ZIP_REV="zip_mod_revision", KEY_COMFY_URL="comfy_server_url";
     private static final String KO="Wayward_WML_ko.html", EN="Wayward_WML.html";
     private static final String BUILTIN_COMPANIONS_MOD_ID = "launcher-mobile-companions";
     private static final String BUILTIN_COMPANIONS_MOD_FILE = "wml/mods/" + BUILTIN_COMPANIONS_MOD_ID + "/mod.js";
@@ -70,6 +72,7 @@ public final class MainActivity extends Activity {
     private FrameLayout root;
     private LinearLayout home, profileList, zipModList;
     private TextView status, folderText, profileSummary, zipSummary, imageGenStatus;
+    private EditText comfyUrlInput;
     private String imageGenSessionMessage = "";
     private static volatile boolean imageGenCopying = false;
     private final Handler imageGenHandler = new Handler(Looper.getMainLooper());
@@ -145,11 +148,16 @@ public final class MainActivity extends Activity {
 
         TextView imageTitle=new TextView(this);imageTitle.setText("이미지 생성 서비스");imageTitle.setTextColor(Color.WHITE);imageTitle.setTextSize(16);imageTitle.setTypeface(null,1);
         LinearLayout.LayoutParams imageTitleParams=new LinearLayout.LayoutParams(-1,-2);imageTitleParams.topMargin=dp(24);imageTitleParams.bottomMargin=dp(7);page.addView(imageTitle,imageTitleParams);
-        TextView imageDesc=new TextView(this);imageDesc.setText("Cloudflare FLUX, OpenAI 호환 API, 사용자 지정 REST 서비스를 등록하고 Wayward/Faith별 기본 생성 엔진을 선택합니다.");imageDesc.setTextColor(Color.rgb(174,194,181));imageDesc.setTextSize(12);imageDesc.setLineSpacing(dp(2),1f);page.addView(imageDesc);
+        TextView imageDesc=new TextView(this);imageDesc.setText("Cloudflare FLUX 등 외부 API 관리와 함께, EasyGen NovelAI 및 PC ComfyUI 연결용 Wayward ImageGen 서버를 앱에서 실행합니다.");imageDesc.setTextColor(Color.rgb(174,194,181));imageDesc.setTextSize(12);imageDesc.setLineSpacing(dp(2),1f);page.addView(imageDesc);
         page.addView(button("이미지 서비스 관리 · 등록 / 테스트",true,()->startActivity(new Intent(MainActivity.this,ImageProviderActivity.class))),buttonParams());
+        TextView runtimeHint=new TextView(this);runtimeHint.setText("NovelAI는 EasyGen 서버를 휴대폰 안에서 실행합니다. ComfyUI는 PC에서 먼저 실행하고, 아래에 PC의 사설 LAN 또는 Tailscale 주소를 입력하세요.");runtimeHint.setTextColor(Color.rgb(174,194,181));runtimeHint.setTextSize(12);runtimeHint.setLineSpacing(dp(2),1f);LinearLayout.LayoutParams runtimeHintParams=new LinearLayout.LayoutParams(-1,-2);runtimeHintParams.topMargin=dp(10);page.addView(runtimeHint,runtimeHintParams);
+        comfyUrlInput=new EditText(this);comfyUrlInput.setSingleLine(true);comfyUrlInput.setTextSize(14);comfyUrlInput.setTextColor(Color.WHITE);comfyUrlInput.setHintTextColor(Color.rgb(142,160,148));comfyUrlInput.setHint("http://PC의-LAN-IP:8188 또는 https://PC의-Tailscale-주소:8188");comfyUrlInput.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);comfyUrlInput.setPadding(dp(12),dp(9),dp(12),dp(9));comfyUrlInput.setText(getSharedPreferences(PREFS,MODE_PRIVATE).getString(KEY_COMFY_URL,""));LinearLayout.LayoutParams comfyInputParams=new LinearLayout.LayoutParams(-1,dp(52));comfyInputParams.topMargin=dp(8);comfyInputParams.bottomMargin=dp(7);page.addView(comfyUrlInput,comfyInputParams);
+        page.addView(button("NovelAI · EasyGen 서버 실행",true,()->startManagedImageGenServer("novelai","")),buttonParams());
+        page.addView(button("ComfyUI 연결 서버 실행",true,this::startComfyConnectionServer),buttonParams());
+        page.addView(button("EasyGen / NovelAI 설정 열기",false,this::openImageGenPanel),buttonParams());
         imageGenStatus=new TextView(this);imageGenStatus.setTextColor(Color.rgb(245,210,130));imageGenStatus.setTextSize(12);imageGenStatus.setPadding(dp(10),dp(9),dp(10),dp(9));imageGenStatus.setBackgroundColor(Color.rgb(35,48,40));
         LinearLayout.LayoutParams imageStatusParams=new LinearLayout.LayoutParams(-1,-2);imageStatusParams.topMargin=dp(8);imageStatusParams.bottomMargin=dp(7);page.addView(imageGenStatus,imageStatusParams);
-        page.addView(button("Image Studio 로컬 서버 중지",false,this::stopImageGenServer),buttonParams());
+        page.addView(button("이미지 생성 서버 중지",false,this::stopImageGenServer),buttonParams());
 
         TextView help=new TextView(this);help.setText("ZIP 설치 위치: 이 앱의 비공개 files 저장소\n게임 폴더에는 ZIP이나 압축 해제 파일을 쓰지 않습니다. 설치한 모드는 등록된 게임 세션에서 공통으로 사용할 수 있으며, 모드 활성화/순서는 각 게임 세션의 브라우저 저장소에 따로 보관됩니다.");
         help.setTextColor(Color.rgb(151,171,158));help.setTextSize(12);help.setLineSpacing(dp(3),1f);LinearLayout.LayoutParams hl=new LinearLayout.LayoutParams(-1,-2);hl.topMargin=dp(18);page.addView(help,hl);
@@ -725,15 +733,153 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void startComfyConnectionServer(){
+        try{
+            String url=ComfyEndpoint.normalize(comfyUrlInput==null?"":comfyUrlInput.getText().toString());
+            getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString(KEY_COMFY_URL,url).apply();
+            startManagedImageGenServer("comfy",url);
+        }catch(IllegalArgumentException error){
+            imageGenSessionMessage="ComfyUI 주소 확인: "+msg(error);
+            refreshImageGenStatus();
+            Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void openImageGenPanel(){
+        ImageGenStatusStore.State state=ImageGenStatusStore.read(getFilesDir());
+        if(!state.isReady()){
+            Toast.makeText(this,"먼저 NovelAI 또는 ComfyUI 연결 서버를 실행해 주세요.",Toast.LENGTH_LONG).show();
+            return;
+        }
+        startActivity(new Intent(this,ImageGenPanelActivity.class));
+    }
+
+    private void startManagedImageGenServer(String mode,String comfyUrl){
+        ImageGenStatusStore.State running=ImageGenStatusStore.read(getFilesDir());
+        if(running.ready||running.starting){
+            imageGenSessionMessage="이미 이미지 서버가 실행 중이거나 시작 중입니다. 다른 엔진으로 바꾸려면 먼저 서버를 중지하세요.";
+            refreshImageGenStatus();
+            Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
+            return;
+        }
+        GameProfile selected=findProfile(activeProfileId);
+        if(selected==null&&!profiles.isEmpty())selected=profiles.get(profiles.size()-1);
+        final GameProfile sourceProfile=selected;
+        final File backend=imageGenBackendRoot();
+        imageGenSessionMessage=("novelai".equals(mode)?"EasyGen NovelAI":"ComfyUI 연결")+" 서버 백엔드를 확인하고 있습니다…";
+        refreshImageGenStatus();
+        new Thread(()->{
+            String source=null;
+            String version=null;
+            String failure=null;
+            try{
+                if(sourceProfile!=null){
+                    SafTree sourceTree=new SafTree(Uri.parse(sourceProfile.uri));
+                    String easyVersion=sourceTree.easyGenBackendVersion();
+                    if(easyVersion!=null&&!easyVersion.isEmpty()){
+                        if("novelai".equals(mode)&&!sourceTree.hasEasyGenNovelAiClient()){
+                            throw new IllegalStateException("EasyGen 서버의 src/nai/client.ts를 찾지 못했습니다. NovelAI 엔진이 포함된 EasyGen 모드팩을 설치해 주세요.");
+                        }
+                        if(sourceTree.copyDirectory("wml/mods/easygen/server",backend)){
+                            source="easygen";
+                            version=easyVersion;
+                        }
+                    }
+                    if(source==null&&"comfy".equals(mode)){
+                        String studioVersion=sourceTree.imageStudioBackendVersion();
+                        if(studioVersion!=null&&!studioVersion.isEmpty()
+                                &&sourceTree.copyDirectory("wml/mods/imagestudio/backend",backend)){
+                            source="imagestudio";
+                            version=studioVersion;
+                        }
+                    }
+                }
+                if(source==null&&zipMods!=null){
+                    List<String> installed=zipMods.listModIds();
+                    if(installed.contains("easygen")&&zipMods.extractDirectory("easygen","server",backend)){
+                        source="easygen";
+                        version=readImageGenPackageVersion(backend);
+                    }
+                    if(source==null&&"comfy".equals(mode)&&installed.contains("imagestudio")
+                            &&zipMods.extractDirectory("imagestudio","backend",backend)){
+                        source="imagestudio";
+                        version=readImageGenPackageVersion(backend);
+                    }
+                }
+                if(source==null||version==null||version.isEmpty()){
+                    throw new IllegalStateException("등록된 게임 폴더 또는 앱 전용 ZIP 모드에서 EasyGen 서버를 찾지 못했습니다. NovelAI에는 easygen/server, ComfyUI에는 easygen/server 또는 imagestudio/backend가 필요합니다.");
+                }
+                File project=new File(backend,"wayward-imagegen");
+                if(!new File(project,"package.json").isFile())project=backend;
+                if(!new File(project,"src/cli.ts").isFile()){
+                    throw new IllegalStateException("wayward-imagegen/src/cli.ts가 없습니다.");
+                }
+                if("novelai".equals(mode)){
+                    if(!new File(backend,"launch.mjs").isFile()||new File(backend,"launch.mjs").length()==0
+                            ||!new File(project,"src/nai/client.ts").isFile()){
+                        throw new IllegalStateException("NovelAI 실행 파일이 없습니다. EasyGen server/launch.mjs와 wayward-imagegen/src/nai/client.ts를 확인해 주세요.");
+                    }
+                }
+            }catch(Throwable error){
+                failure=error.getMessage()==null?error.getClass().getSimpleName():error.getMessage();
+            }
+            final String resolvedSource=source;
+            final String resolvedVersion=version;
+            final String problem=failure;
+            runOnUiThread(()->{
+                if(problem!=null){
+                    imageGenSessionMessage="이미지 서버 준비 실패: "+problem;
+                    refreshImageGenStatus();
+                    Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
+                    return;
+                }
+                String launchVersion=resolvedSource+":"+resolvedVersion+":"+mode;
+                imageGenReadyCallbacks.add(()->{
+                    ImageGenStatusStore.State state=ImageGenStatusStore.read(getFilesDir());
+                    if(!state.isReady())imageGenSessionMessage=state.message;
+                    refreshImageGenStatus();
+                });
+                startImageGenService(backend,launchVersion,mode,comfyUrl);
+                waitForImageGenReady();
+            });
+        },"wayward-imagegen-manual-prepare").start();
+    }
+
+    private static String readImageGenPackageVersion(File backend)throws Exception{
+        File project=new File(backend,"wayward-imagegen");
+        File pkg=new File(project,"package.json");
+        if(!pkg.isFile())pkg=new File(backend,"package.json");
+        if(!pkg.isFile()||pkg.length()>65536)return null;
+        byte[] data=new byte[65537];
+        int used=0;
+        try(InputStream in=new java.io.FileInputStream(pkg)){
+            while(used<data.length){
+                int count=in.read(data,used,data.length-used);
+                if(count<0)break;
+                if(count==0)continue;
+                used+=count;
+            }
+        }
+        if(used>65536)throw new IllegalStateException("wayward-imagegen package.json가 64KB를 초과합니다.");
+        String version=new JSONObject(new String(data,0,used,StandardCharsets.UTF_8)).optString("version","unknown").trim();
+        return version.isEmpty()?"unknown":version;
+    }
+
     private void startImageGenService(File backend, String version) {
+        startImageGenService(backend,version,"default","");
+    }
+
+    private void startImageGenService(File backend,String version,String launchMode,String comfyUrl){
         Intent intent = new Intent(this, ImageGenService.class);
         intent.setAction(ImageGenService.ACTION_START);
         intent.putExtra(ImageGenService.EXTRA_BACKEND_ROOT, backend.getAbsolutePath());
         intent.putExtra(ImageGenService.EXTRA_BACKEND_VERSION, version);
+        intent.putExtra(ImageGenService.EXTRA_LAUNCH_MODE, launchMode);
+        intent.putExtra(ImageGenService.EXTRA_COMFY_URL, comfyUrl==null?"":comfyUrl);
         try {
             if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
             else startService(intent);
-            imageGenSessionMessage = "Image Studio " + version + " 서버 시작 요청을 전달했습니다.";
+            imageGenSessionMessage = "Wayward ImageGen " + version + " 서버 시작 요청을 전달했습니다.";
             refreshImageGenStatus();
         } catch (Throwable error) {
             DiagnosticsLogger.error(this,"imagegen","service_start_request_failed",error);
@@ -766,8 +912,8 @@ public final class MainActivity extends Activity {
         else if (state.isStarting()) imageGenStatus.setText(state.message.isEmpty() ? "이미지 생성 서버 시작 중…" : state.message);
         else if (imageGenCopying) imageGenStatus.setText("현재 세션 Image Studio 백엔드 준비 중…");
         else if (state.ready && !state.isFresh()) imageGenStatus.setText("이미지 생성 서비스 heartbeat가 끊겼습니다. 현재 세션을 다시 열면 서버를 재시작합니다.");
-        else if (imageGenSessionMessage != null && !imageGenSessionMessage.isEmpty()) imageGenStatus.setText(imageGenSessionMessage);
         else if (!state.message.isEmpty()) imageGenStatus.setText(state.message);
+        else if (imageGenSessionMessage != null && !imageGenSessionMessage.isEmpty()) imageGenStatus.setText(imageGenSessionMessage);
         else imageGenStatus.setText("서버가 실행되지 않았습니다.");
     }
 
@@ -1018,6 +1164,21 @@ public final class MainActivity extends Activity {
                 }
             }
         }
+        String easyGenBackendVersion() throws Exception {
+            Node modDirectory=resolve("wml/mods/easygen");
+            if(modDirectory==null||!modDirectory.dir)return null;
+            Node modScript=find(modDirectory.id,"mod.js");
+            if(modScript==null||modScript.dir||!"easygen".equals(declared(modScript)))return null;
+            return backendPackageVersion(
+                    "wml/mods/easygen/server/wayward-imagegen/package.json",
+                    "wml/mods/easygen/server/wayward-imagegen/src/cli.ts");
+        }
+
+        boolean hasEasyGenNovelAiClient() throws Exception {
+            return exists("wml/mods/easygen/server/launch.mjs")
+                    &&exists("wml/mods/easygen/server/wayward-imagegen/src/nai/client.ts");
+        }
+
         String imageStudioBackendVersion() throws Exception {
             Node modDirectory = resolve("wml/mods/imagestudio");
             if (modDirectory == null || !modDirectory.dir) return null;
