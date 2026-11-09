@@ -345,7 +345,7 @@ public final class ImageGenService extends Service {
                     if (found) throw new SecurityException("Bun ZIP에 실행 파일이 중복되어 있습니다.");
                     File outFile = new File(staging, "bun");
                     try (FileOutputStream out = new FileOutputStream(outFile)) {
-                        // Android 14+ requires dynamically loaded code to be read-only.
+                        // Keep the extracted native runtime non-writable before it can be executed.
                         // Mark it immediately after opening, before writing through this descriptor.
                         if (!outFile.setReadOnly()) {
                             throw new IllegalStateException("Bun 실행 파일을 추출 단계에서 읽기 전용으로 설정하지 못했습니다.");
