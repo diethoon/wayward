@@ -8,6 +8,10 @@ else
   DIFF_BASE="HEAD^"
 fi
 git -C "$REPO_ROOT" diff --check "$DIFF_BASE" HEAD
+python3 -c "compile(open('scripts/embed_imagegen_backend.py', encoding='utf-8').read(), 'scripts/embed_imagegen_backend.py', 'exec')"
+test -s app/src/main/assets/imagegen-backend/launcher-bundle.json
+test -s app/src/main/assets/imagegen-backend/wayward-imagegen/src/cli.ts
+test -s app/src/main/assets/imagegen-backend/wayward-imagegen/src/nai/client.ts
 node --check app/src/main/assets/wml-folder-bootstrap.js
 node --check app/src/main/assets/imagegen-proxy.js
 node --check app/src/main/assets/image-provider-bridge.js
@@ -41,4 +45,26 @@ java -cp "$ZIP_TEST_BUILD" com.wayward.launcher.ComfyEndpointTest
 test -s ../Wayward_WML_ko.html
 gradle --no-daemon assembleDebug
 test -s app/build/outputs/apk/debug/app-debug.apk
+python3 - <<'PY'
+import json
+import zipfile
+
+apk = "app/build/outputs/apk/debug/app-debug.apk"
+with zipfile.ZipFile(apk) as bundle:
+    names = set(bundle.namelist())
+    root = "assets/imagegen-backend/"
+    manifest_path = root + "launcher-bundle.json"
+    package_path = root + "wayward-imagegen/package.json"
+    nai_path = root + "wayward-imagegen/src/nai/client.ts"
+    cli_path = root + "wayward-imagegen/src/cli.ts"
+    for path in (manifest_path, package_path, nai_path, cli_path):
+        assert path in names, "APK is missing embedded server file: " + path
+    manifest = json.loads(bundle.read(manifest_path))
+    package = json.loads(bundle.read(package_path))
+    assert package.get("version") == "0.8.4"
+    assert manifest.get("backendVersion") == "0.8.4"
+    assert manifest.get("fileCount", 0) > 0
+    assert manifest.get("sourceArchiveSha256") == "dfd25e050dd0b98ec1c99c09634bd92b509efac428788273f84884e713e2c553"
+print("APK embedded ImageGen assets verified.")
+PY
 "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
