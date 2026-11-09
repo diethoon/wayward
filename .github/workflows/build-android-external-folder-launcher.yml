@@ -194,6 +194,68 @@ jobs:
       - name: Verify and build
         working-directory: android-external-folder-launcher
         run: bash ./verify.sh
+      - name: Enable KVM for Android launcher smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and launch APK on Android 15 emulator
+        id: android_emulator_smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            APK="$GITHUB_WORKSPACE/android-external-folder-launcher/app/build/outputs/apk/debug/app-debug.apk"
+            PACKAGE="com.wayward.launcher.imagegen039"
+            OUT="$RUNNER_TEMP/android-launcher-smoke"
+            mkdir -p "$OUT"
+            adb wait-for-device
+            adb install -r "$APK" | tee "$OUT/install.txt"
+            adb shell am force-stop "$PACKAGE"
+            adb shell monkey -p "$PACKAGE" 1 | tee "$OUT/launch.txt"
+            launched=0
+            for attempt in $(seq 1 45); do
+              if adb shell pidof "$PACKAGE" >/dev/null 2>&1; then
+                if adb shell dumpsys activity activities | grep -E "mResumedActivity.*\${PACKAGE}|topResumedActivity.*\${PACKAGE}" >/dev/null; then
+                  launched=1
+                  break
+                fi
+              fi
+              sleep 1
+            done
+            test "$launched" = "1"
+            adb shell dumpsys activity activities > "$OUT/activities.txt"
+            adb shell dumpsys package "$PACKAGE" > "$OUT/package.txt"
+            adb logcat -d -t 3000 > "$OUT/logcat.txt"
+            if grep -E "FATAL EXCEPTION|Process: \${PACKAGE}" "$OUT/logcat.txt"; then
+              echo "Android launcher process crashed; see logcat artifact." >&2
+              exit 1
+            fi
+            {
+              echo "device=Android 15 API 35 x86_64 emulator"
+              echo "package=$PACKAGE"
+              echo "install=PASS"
+              echo "launcher_activity=RESUMED"
+              echo "process_alive=PASS"
+              echo "fatal_exception=NONE"
+              echo "note=emulator smoke only; not a Galaxy S25 Ultra or Wayward game image-generation test"
+            } | tee "$OUT/result.txt"
+      - name: Upload Android launcher emulator smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WaywardLauncher-Android15-emulator-smoke
+          path: ${{ runner.temp }}/android-launcher-smoke
+          if-no-files-found: warn
+          retention-days: 7
       - name: Upload ImageGen server runtime smoke
         if: always()
         uses: actions/upload-artifact@v4
