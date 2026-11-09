@@ -57,7 +57,7 @@ final class ImagePipelineDiagnostics {
             "naturalWidth", "naturalHeight", "complete", "reasonCode", "errorType",
             "queueDepth", "hasProvider", "mimeDetected", "stage", "success",
             "elementTag", "pendingCount", "srcHost", "srcPath", "elementId",
-            "elementClass", "elementAlt", "repeatCount"
+            "elementClass", "elementAlt", "repeatCount", "srcAttrKind", "srcAttrPath"
     ));
 
     private ImagePipelineDiagnostics() {}
@@ -131,9 +131,16 @@ final class ImagePipelineDiagnostics {
                         || "https".equals(value) || "http".equals(value) || "file".equals(value)
                         || "relative".equals(value) || "other".equals(value)
                         || "game_asset".equals(value) || "external".equals(value);
+            case "srcAttrKind":
+                return "empty".equals(value) || "data".equals(value) || "blob".equals(value)
+                        || "https".equals(value) || "http".equals(value) || "file".equals(value)
+                        || "relative".equals(value) || "other".equals(value)
+                        || "game_asset".equals(value) || "external".equals(value);
             case "srcHost":
                 return value.matches("[A-Za-z0-9.:-]{1,120}");
             case "srcPath":
+                return value.startsWith("/") && value.matches("/[\\p{L}\\p{N}._~!()+,;=:@%/\\-]{0,119}");
+            case "srcAttrPath":
                 return value.startsWith("/") && value.matches("/[\\p{L}\\p{N}._~!()+,;=:@%/\\-]{0,119}");
             case "elementId":
             case "elementClass":
