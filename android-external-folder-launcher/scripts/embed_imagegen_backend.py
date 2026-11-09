@@ -37,7 +37,7 @@ def sha256_file(path: Path) -> str:
 
 
 def safe_relative(name: str) -> str:
-    normalized = name.replace("\\\\", "/")
+    normalized = name.replace("\\", "/")
     path = PurePosixPath(normalized)
     if path.is_absolute() or any(part in ("", ".", "..") for part in path.parts):
         fail("unsafe ZIP path: " + name)
@@ -63,7 +63,7 @@ def extract(archive: Path, output: Path) -> None:
         with zipfile.ZipFile(archive, "r") as bundle:
             seen: set[str] = set()
             for entry in bundle.infolist():
-                raw_name = entry.filename.replace("\\\\", "/")
+                raw_name = entry.filename.replace("\\", "/")
                 if not raw_name.startswith(PREFIX):
                     continue
                 relative = raw_name[len(PREFIX):]
