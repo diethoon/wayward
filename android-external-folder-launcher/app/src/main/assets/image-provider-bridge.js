@@ -58,7 +58,7 @@
       });
       let path = safeSegments.join("/");
       if (!path.startsWith("/")) path = "/" + path;
-      if (path.length > 160) path = path.slice(-159);
+      if (path.length > 120) path = path.slice(-119);
       if (!path.startsWith("/")) path = "/" + path;
       return {
         srcHost: String(parsed.hostname || "").toLowerCase().slice(0, 120),
