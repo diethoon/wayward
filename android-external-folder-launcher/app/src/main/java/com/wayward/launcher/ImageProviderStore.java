@@ -85,6 +85,7 @@ final class ImageProviderStore {
     static final class Snapshot {
         final ArrayList<Provider> providers = new ArrayList<>();
         final LinkedHashMap<String, String> defaults = new LinkedHashMap<>();
+        final LinkedHashMap<String, String> fallbacks = new LinkedHashMap<>();
     }
 
     private final File target;
@@ -129,17 +130,8 @@ final class ImageProviderStore {
                 }
             }
         }
-        JSONObject defaults = root.optJSONObject("defaults");
-        if (defaults != null) {
-            java.util.Iterator<String> keys = defaults.keys();
-            while (keys.hasNext()) {
-                String profileId = keys.next();
-                String providerId = defaults.optString(profileId, "");
-                if (profileId.matches("[a-f0-9]{32}") && providerId.matches("[a-f0-9]{32}")) {
-                    snapshot.defaults.put(profileId, providerId);
-                }
-            }
-        }
+        readProfileMap(root.optJSONObject("defaults"), snapshot.defaults);
+        readProfileMap(root.optJSONObject("fallbacks"), snapshot.fallbacks);
         return snapshot;
     }
 
@@ -162,6 +154,13 @@ final class ImageProviderStore {
             }
         }
         root.put("defaults", defaults);
+        JSONObject fallbacks = new JSONObject();
+        for (Map.Entry<String, String> entry : snapshot.fallbacks.entrySet()) {
+            if (entry.getKey().matches("[a-f0-9]{32}") && entry.getValue().matches("[a-f0-9]{32}")) {
+                fallbacks.put(entry.getKey(), entry.getValue());
+            }
+        }
+        root.put("fallbacks", fallbacks);
 
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.ENCRYPT_MODE, getKey(true));
@@ -222,6 +221,18 @@ final class ImageProviderStore {
                 return result.toString();
             } catch (Exception ignored) {
                 return "{\"providers\":[],\"defaultProviderId\":null}";
+            }
+        }
+    }
+
+    private static void readProfileMap(JSONObject values, Map<String, String> target) {
+        if (values == null) return;
+        java.util.Iterator<String> keys = values.keys();
+        while (keys.hasNext()) {
+            String profileId = keys.next();
+            String providerId = values.optString(profileId, "");
+            if (profileId.matches("[a-f0-9]{32}") && providerId.matches("[a-f0-9]{32}")) {
+                target.put(profileId, providerId);
             }
         }
     }
