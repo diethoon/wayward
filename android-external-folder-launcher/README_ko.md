@@ -1,4 +1,4 @@
-# Wayward Android Launcher 0.3.10 · SAF 신캐 이미지 진단 빌드
+# Wayward Android Launcher 0.3.11 · ImageGen 서버 우선 준비 빌드
 
 Android SAF 폴더 실행기입니다. 게임 원본 폴더는 직접 읽고, 일반 WML ZIP 모드는 앱 내부에 보관해 가상 제공하며, 여러 게임 폴더를 독립 세션으로 실행합니다. Image Studio 백엔드는 별도 ZIP 설치를 요구하지 않고 각 세션의 실제 WML 모드 폴더에서 감지합니다.
 
@@ -123,3 +123,13 @@ CI에서 Android APK 컴파일·서명 검증을 수행합니다. 실제 Android
 - 화면 우측 아래의 `동료` 버튼으로 패널을 열고 닫습니다. 열었을 때만 Companions 원본 카드 생성·갱신 API를 호출해 초상화를 렌더링합니다.
 - UI_customize의 창 배치·플로팅 레이아웃 코드는 호출하지 않습니다. Companions의 게임 상태·저장 데이터·캐릭터 행동은 변경하지 않습니다.
 - 이 단계는 모바일 WebView에서의 실제 기기 검증 전이며, 실제 Companions 및 이미지팩 조합 검증은 별도로 필요합니다.
+
+
+## 12. ImageGen 서버 우선 준비 (0.3.11)
+
+- 테스트 패키지: `com.wayward.launcher.imagegen0311` (기존 0.3.10 앱과 별도 설치)
+- Image Studio 준비가 완료되거나 실패 상태가 확정될 때까지 게임 WebView 탐색을 보류합니다. Image Studio가 없는 세션은 즉시 게임으로 진입합니다.
+- Image Studio가 앱 전용 ZIP 모드에 설치된 경우에도 ZIP 내부 `backend/wayward-imagegen`을 탐지하고 앱 내부 작업 폴더로 추출합니다.
+- 기존 0.3.10 앱은 삭제하지 마세요. 패키지가 다르므로 새 앱에서 게임 폴더를 다시 선택해야 하며, 앱 전용 ZIP 모드를 사용했다면 새 앱에도 다시 설치해야 합니다. 기존 앱의 데이터는 그대로 남습니다.
+- 0.3.10과 0.3.11은 ImageGen 루프백 포트 `127.0.0.1:8189`를 공유합니다. 새 앱을 테스트하기 전에 기존 런처의 ImageGen 서버를 알림창에서 중지하세요.
+- 이 빌드는 CI 컴파일/서명과 자동 계약 테스트를 통과한 테스트 APK입니다. 실제 Android 기기의 Bun 런타임 설치, Image Studio 백엔드 의존성 설치, NovelAI 요청 및 생성 결과 표시까지는 아직 실기기 검증이 필요합니다.
