@@ -43,7 +43,7 @@ final class ImagePipelineDiagnostics {
             "native_webview_delivery_started", "native_delivery_failed", "native_delivery_queued",
             "native_js_evaluate_callback", "native_js_resolver_invoked", "native_js_resolver_missing",
             "native_webview_evaluate_failed", "provider_http_response",
-            "provider_http_error", "provider_http_request_failed",
+            "provider_http_error", "provider_http_request_failed", "webview_image_network_error",
             "native_image_decode_bounds_succeeded", "native_image_decode_bounds_failed", "webview_image_http_error",
             "webview_image_resource_error", "webview_image_resource_slow"
     ));
@@ -51,7 +51,7 @@ final class ImagePipelineDiagnostics {
             "requestId", "providerId", "providerType", "mimeType", "imageBytes",
             "imageWidth", "imageHeight", "imageFormat", "promptLength",
             "requestedWidth", "requestedHeight", "elapsedMs", "fallbackUsed",
-            "responseStatus", "responseContentType", "responseBytes", "dataUrlLength", "providerType",
+            "responseStatus", "responseContentType", "responseBytes", "dataUrlLength", "providerType", "networkErrorCode",
             "deliveryQueued", "webViewUrlPresent", "srcKind", "srcLength",
             "naturalWidth", "naturalHeight", "complete", "reasonCode", "errorType",
             "queueDepth", "hasProvider", "mimeDetected", "stage", "success",
