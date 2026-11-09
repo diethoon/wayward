@@ -51,6 +51,7 @@ const window = {
   crypto: { randomUUID: () => "test-request-id" },
   Image: FakeImage,
   document: {
+    baseURI: "https://game.example/game/index.html",
     addEventListener(name, callback) { imageListeners[name] = callback; }
   },
   WMLHost: native
@@ -97,6 +98,7 @@ imageListeners.error({
     id: "portrait-main",
     className: "character portrait",
     alt: "Mika portrait",
+    getAttribute(name) { return name === "src" ? "./images/portrait.png" : ""; },
     naturalWidth: 0,
     naturalHeight: 0,
     complete: true
@@ -110,6 +112,8 @@ assert.equal(imageError.details.srcPath, "/private/portrait.png");
 assert.equal(imageError.details.elementId, "portrait-main");
 assert.equal(imageError.details.elementClass, "character portrait");
 assert.equal(imageError.details.elementAlt, "Mika portrait");
+assert.equal(imageError.details.srcAttrKind, "relative");
+assert.equal(imageError.details.srcAttrPath, "/game/images/portrait.png");
 assert.equal(imageError.details.repeatCount, 1);
 assert.equal(JSON.stringify(imageError.details).includes("token=hidden"), false);
 assert.equal(JSON.stringify(imageError.details).includes("hidden"), false);
@@ -130,6 +134,29 @@ imageListeners.error({
 });
 const repeatedImageError = diagnostics.filter(item => item.event === "img_element_error").at(-1);
 assert.equal(repeatedImageError.details.repeatCount, 2);
+
+imageListeners.error({
+  type: "error",
+  target: {
+    tagName: "IMG",
+    src: "https://account:password@example.invalid/v1/session/secret.png?access_token=hidden#fragment",
+    currentSrc: "https://account:password@example.invalid/v1/session/secret.png?access_token=hidden#fragment",
+    id: "remote-art",
+    className: "character remote",
+    alt: "Remote art",
+    getAttribute(name) { return name === "src" ? "https://account:password@example.invalid/v1/session/secret.png?access_token=hidden#fragment" : ""; },
+    naturalWidth: 0,
+    naturalHeight: 0,
+    complete: true
+  }
+});
+const redactedImageError = diagnostics.filter(item => item.event === "img_element_error").at(-1);
+assert.equal(redactedImageError.details.srcHost, "example.invalid");
+assert.equal(redactedImageError.details.srcPath, "/v1/~redacted~/~redacted~");
+assert.equal(JSON.stringify(redactedImageError.details).includes("account"), false);
+assert.equal(JSON.stringify(redactedImageError.details).includes("password"), false);
+assert.equal(JSON.stringify(redactedImageError.details).includes("hidden"), false);
+assert.equal(JSON.stringify(redactedImageError.details).includes("fragment"), false);
 
 await assert.rejects(
   window.WaywardImageProviders.generate({ prompt: " " }),
