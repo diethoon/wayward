@@ -31,40 +31,96 @@ jobs:
           git cat-file -e "${SOURCE_COMMIT}:mods.zip"
           git show "${SOURCE_COMMIT}:mods.zip" > "$RUNNER_TEMP/wayward-mods.zip"
           python3 android-external-folder-launcher/scripts/embed_imagegen_backend.py "$RUNNER_TEMP/wayward-mods.zip"
-      - name: Extract pinned EasyGen source for runtime compatibility audit
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.0'
+      - name: Run the bundled ImageGen server without provider credentials
+        id: imagegen_runtime
         shell: bash
         run: |
           set -euo pipefail
-          python3 - "$RUNNER_TEMP/wayward-mods.zip" "$RUNNER_TEMP/easygen-server-audit" <<'PY'
-          import os, pathlib, sys, zipfile
-          archive, output = map(pathlib.Path, sys.argv[1:])
-          prefix = "wml/mods/easygen/"
-          output.mkdir(parents=True, exist_ok=True)
-          with zipfile.ZipFile(archive) as bundle:
-              entries = [entry for entry in bundle.infolist()
-                         if entry.filename.replace("\\\\", "/").startswith(prefix)
-                         and not entry.is_dir()]
-              launchers = [entry for entry in entries
-                           if entry.filename.replace("\\\\", "/") == prefix + "server/launch.mjs"]
-              print("EasyGen entries:", len(entries))
-              print("EasyGen launcher found:", bool(launchers))
-              for entry in entries:
-                  name = entry.filename.replace("\\\\", "/")
-                  relative = pathlib.PurePosixPath(name[len(prefix):])
-                  if relative.is_absolute() or any(part in ("", ".", "..") for part in relative.parts):
-                      raise SystemExit("Unsafe EasyGen archive path: " + name)
-                  target = output.joinpath(*relative.parts)
-                  target.parent.mkdir(parents=True, exist_ok=True)
-                  with bundle.open(entry) as source, target.open("wb") as destination:
-                      remaining = entry.file_size
-                      while remaining:
-                          chunk = source.read(min(4096, remaining))
-                          if not chunk:
-                              raise SystemExit("Truncated EasyGen entry: " + name)
-                          destination.write(chunk)
-                          remaining -= len(chunk)
-                  print("AUDIT_FILE", relative.as_posix(), entry.file_size)
-          PY
+          BACKEND="$GITHUB_WORKSPACE/android-external-folder-launcher/app/src/main/assets/imagegen-backend/wayward-imagegen"
+          SMOKE="$RUNNER_TEMP/imagegen-runtime-smoke"
+          mkdir -p "$SMOKE/images" "$SMOKE/state"
+          cat > "$SMOKE/config.json" <<JSON
+          {
+            "host": "127.0.0.1",
+            "port": 8189,
+            "imagesDir": "$SMOKE/images",
+            "stateDir": "$SMOKE/state",
+            "comfyUrl": "http://127.0.0.1:8188",
+            "imageProvider": "nai",
+            "naiModel": "nai-diffusion-5-full",
+            "naiToken": "",
+            "webp": false,
+            "requireWebp": false
+          }
+          JSON
+          bun --version
+          test "$(cd "$BACKEND" && bun src/cli.ts --version)" = "0.8.4"
+          (
+            cd "$BACKEND"
+            nohup bun src/cli.ts --config "$SMOKE/config.json" --no-webp --verbose > "$SMOKE/server.log" 2>&1 &
+            echo $! > "$SMOKE/server.pid"
+          )
+          cleanup() {
+            if [ -f "$SMOKE/server.pid" ]; then
+              kill "$(cat "$SMOKE/server.pid")" 2>/dev/null || true
+              wait "$(cat "$SMOKE/server.pid")" 2>/dev/null || true
+            fi
+          }
+          trap cleanup EXIT
+          before_code="000"
+          for attempt in $(seq 1 30); do
+            before_code="$(curl --silent --output "$SMOKE/health-before.json" --write-out '%{http_code}' http://127.0.0.1:8189/api/image/health || true)"
+            if [ "$before_code" = "503" ]; then break; fi
+            sleep 1
+          done
+          test "$before_code" = "503"
+          kill -0 "$(cat "$SMOKE/server.pid")"
+          panel_code="$(curl --silent --output "$SMOKE/panel.html" --write-out '%{http_code}' 'http://127.0.0.1:8189/?panel=anima')"
+          test "$panel_code" = "200"
+          grep -qi 'NovelAI' "$SMOKE/panel.html"
+          save_code="$(curl --silent --show-error --output "$SMOKE/save.json" --write-out '%{http_code}' \
+            -X PUT http://127.0.0.1:8189/api/generation/settings \
+            -H 'content-type: application/json' \
+            --data '{"imageProvider":"nai","naiToken":"ci-smoke-token-not-valid"}')"
+          test "$save_code" = "200"
+          after_code="$(curl --silent --show-error --output "$SMOKE/health-after.json" --write-out '%{http_code}' http://127.0.0.1:8189/api/image/health)"
+          test "$after_code" = "200"
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const root = process.env.RUNNER_TEMP + '/imagegen-runtime-smoke';
+          const before = JSON.parse(fs.readFileSync(root + '/health-before.json', 'utf8'));
+          const saveText = fs.readFileSync(root + '/save.json', 'utf8');
+          const saved = JSON.parse(saveText);
+          const after = JSON.parse(fs.readFileSync(root + '/health-after.json', 'utf8'));
+          if (before.status !== 'error' || before.imageProvider !== 'nai' || before.novelai !== 'unconfigured') {
+            throw new Error('No-token health response did not correctly report an unconfigured NovelAI provider.');
+          }
+          if (saved.saved !== true || saved.settings?.naiTokenConfigured !== true || 'naiToken' in (saved.settings || {})) {
+            throw new Error('The settings endpoint did not safely save the provider token state.');
+          }
+          if (saveText.includes('ci-smoke-token-not-valid')) throw new Error('The settings response leaked the test token.');
+          if (after.status !== 'ok' || after.imageProvider !== 'nai' || after.novelai !== 'configured' || after.comfyui !== 'connected') {
+            throw new Error('Health did not become ready after provider settings were saved.');
+          }
+          const log = fs.readFileSync(root + '/server.log', 'utf8');
+          if (!log.includes('wayward-imagegen 0.8.4') || !log.includes('listening')) {
+            throw new Error('The bundled image-generation process did not report its startup banner.');
+          }
+          const report = [
+            'runtime=wayward-imagegen 0.8.4',
+            'bun=1.4.0',
+            'server_start_without_token=PASS (process alive; provider health 503/unconfigured as designed)',
+            'image_panel_http=200',
+            'provider_settings_save=PASS (token redacted in response)',
+            'health_after_provider_setup=200/connected',
+            'novelai_remote_generation=NOT_RUN (no real NovelAI account token supplied)',
+          ].join('\\n') + '\\n';
+          fs.writeFileSync(root + '/result.txt', report);
+          console.log(report);
+          JS
       - name: Guard the one-time Cloudflare FLUX smoke request
         id: flux_smoke_once
         uses: actions/cache@v4
@@ -138,6 +194,16 @@ jobs:
       - name: Verify and build
         working-directory: android-external-folder-launcher
         run: bash ./verify.sh
+      - name: Upload ImageGen server runtime smoke
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wayward-ImageGen-server-runtime-smoke
+          path: |
+            ${{ runner.temp }}/imagegen-runtime-smoke/result.txt
+            ${{ runner.temp }}/imagegen-runtime-smoke/server.log
+          if-no-files-found: warn
+          retention-days: 7
       - name: Upload real FLUX smoke image
         if: steps.flux_smoke.outcome == 'success'
         uses: actions/upload-artifact@v4
@@ -148,14 +214,6 @@ jobs:
             ${{ runner.temp }}/flux-smoke/result.txt
           if-no-files-found: error
           retention-days: 7
-      - name: Upload pinned EasyGen source audit bundle
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: EasyGen-runtime-source-audit
-          path: ${{ runner.temp }}/easygen-server-audit
-          if-no-files-found: warn
-          retention-days: 3
       - uses: actions/upload-artifact@v4
         with:
           name: WaywardLauncher-image-diagnostics-v0.3.12
