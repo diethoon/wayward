@@ -45,6 +45,9 @@ final class ImageProviderBridge {
                     if (provider == null || !provider.enabled) {
                         throw new IllegalStateException("이 게임 프로필에 사용할 기본 이미지 서비스가 없습니다. 런처에서 서비스를 등록하고 지정해 주세요.");
                     }
+                    if (!provider.allowInGame) {
+                        throw new IllegalStateException("이 서비스는 게임 내 WML 사용이 꺼져 있습니다. 런처의 이미지 서비스 설정에서 게임 WML 모드 사용을 켜 주세요.");
+                    }
                     ImageProviderClient.Result image = ImageProviderClient.generate(provider, prompt, width, height);
                     JSONObject result = new JSONObject();
                     result.put("ok", true);
