@@ -33,6 +33,17 @@ assert.match(uploader, /try \(UploadLock lock = tryAcquireUploadLock\(app\)\)/);
 assert.doesNotMatch(uploader, /Authorization|DiagnosticsTokenStore|verifyAndSave/);
 assert.doesNotMatch(main, /진단 로그 자동 전송 설정|진단 서버 연결 코드|showDiagnosticsSettings|DiagnosticsTokenStore/);
 assert.match(main, /DiagnosticsUploader\.uploadPending\(this\)/);
+assert.match(main, /failure\.startsWith\("서버 시작 실패"\)/,
+  "the home status monitor must detect ImageGen startup failures");
+assert.match(main, /now - lastImageGenDiagnosticUploadAt >= 30_000L/,
+  "diagnostic upload retries must be rate limited");
+assert.match(main, /compactButton\("진단 로그 공유",false,this::shareDiagnostics\)/);
+assert.match(main, /Intent\.ACTION_SEND/);
+assert.match(logger, /static String exportText\(Context context\)/);
+assert.match(logger, /startup\.log/);
+assert.match(logger, /bun-version\.log/);
+assert.doesNotMatch(logger, /new File\(imageGen, "server\.log"\)/,
+  "manual diagnostics must not include server logs that may contain prompts or request data");
 assert.doesNotMatch(ingestApi, /authorized\(/);
 assert.match(ingestApi, /parseBody\(req\)/);
 assert.match(common, /MAX_IP_BATCHES_PER_MINUTE/);
