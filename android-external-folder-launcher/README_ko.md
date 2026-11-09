@@ -1,4 +1,4 @@
-# Wayward Android Launcher 0.3.8 · SAF/ZIP 런타임 최적화
+# Wayward Android Launcher 0.3.9 · SAF/ZIP 및 이미지 서비스 관리
 
 Android SAF 폴더 실행기입니다. 게임 원본 폴더는 직접 읽고, 일반 WML ZIP 모드는 앱 내부에 보관해 가상 제공하며, 여러 게임 폴더를 독립 세션으로 실행합니다. Image Studio 백엔드는 별도 ZIP 설치를 요구하지 않고 각 세션의 실제 WML 모드 폴더에서 감지합니다.
 
@@ -58,7 +58,7 @@ ZIP 1개는 WML 모드 1개를 포함해야 합니다. mod.js가 없거나, WML.
 
 ## 5. 설치 패키지
 
-0.3.8 테스트 빌드는 `com.wayward.launcher.imagegen038` 패키지로 설치됩니다. 기존 0.3.6 (`com.wayward.launcher.imagegen036`), 0.3.5 (`com.wayward.launcher.imagegen035`), 0.3.4 (`com.wayward.launcher.imagegen034`) 및 구버전과 별도 앱으로 공존하므로 기존 앱을 삭제하거나 덮어쓰지 않습니다. 앱 데이터는 패키지별로 분리되므로 새 앱에서 게임 폴더를 다시 선택하고, 이전 앱에 보관한 앱 전용 ZIP 모드를 다시 설치해야 합니다. 기존 앱의 WebView localStorage/IndexedDB, 설정, 세이브 데이터는 자동 이전되지 않으며 기존 앱에 그대로 남습니다. 두 버전은 `127.0.0.1:8189` 포트를 공유하므로 다른 런처 앱에서 Image Studio 서버를 중지한 뒤 새 버전을 실행하세요. 기존 앱은 삭제하지 마세요.
+0.3.9 테스트 빌드는 `com.wayward.launcher.imagegen038` 패키지 ID를 유지해 0.3.8 계열 테스트 빌드 위에 업데이트할 수 있도록 합니다. 기존 0.3.6 (`com.wayward.launcher.imagegen036`), 0.3.5 (`com.wayward.launcher.imagegen035`), 0.3.4 (`com.wayward.launcher.imagegen034`) 및 구버전과 별도 앱으로 공존하므로 기존 앱을 삭제하거나 덮어쓰지 않습니다. 앱 데이터는 패키지별로 분리되므로 새 앱에서 게임 폴더를 다시 선택하고, 이전 앱에 보관한 앱 전용 ZIP 모드를 다시 설치해야 합니다. 기존 앱의 WebView localStorage/IndexedDB, 설정, 세이브 데이터는 자동 이전되지 않으며 기존 앱에 그대로 남습니다. 두 버전은 `127.0.0.1:8189` 포트를 공유하므로 다른 런처 앱에서 Image Studio 서버를 중지한 뒤 새 버전을 실행하세요. 기존 앱은 삭제하지 마세요.
 
 ## 6. 세션별 Image Studio 자동 감지와 공통 서버
 
@@ -117,3 +117,62 @@ CI에서 Android APK 컴파일·서명 검증을 수행합니다. 실제 Android
 - 화면 우측 아래의 `동료` 버튼으로 패널을 열고 닫습니다. 열었을 때만 Companions 원본 카드 생성·갱신 API를 호출해 초상화를 렌더링합니다.
 - UI_customize의 창 배치·플로팅 레이아웃 코드는 호출하지 않습니다. Companions의 게임 상태·저장 데이터·캐릭터 행동은 변경하지 않습니다.
 - 이 단계는 모바일 WebView에서의 실제 기기 검증 전이며, 실제 Companions 및 이미지팩 조합 검증은 별도로 필요합니다.
+
+
+## 11. 이미지 생성 서비스 등록과 관리 (0.3.9)
+
+런처 홈의 **이미지 서비스 관리 · 등록 / 테스트**에서 생성 서비스를 등록합니다. 이 기능은 Cloudflare 전용 화면이 아니라 서비스 정의를 저장하는 공통 카탈로그입니다.
+
+### 제공 템플릿
+
+- **Cloudflare FLUX Worker**: Worker URL에 프롬프트 JSON을 POST하고 { "success": true, "image": "<Base64>", "mimeType": "image/jpeg" } 형식으로 받은 이미지를 표시합니다. Worker가 내부 모델을 고정한다면 모델 입력은 비워도 됩니다.
+- **OpenAI 호환 Images API**: 기본 주소 또는 /v1 주소를 입력합니다. 런처가 /v1/images/generations를 구성하고, 모델 ID·프롬프트·크기·1장 요청을 전송합니다. data[0].b64_json 및 data[0].url 응답을 처리합니다.
+- **사용자 지정 REST · JSON**: 동기식 JSON POST를 구성합니다. 요청 본문 템플릿에서 {{prompt}}, {{model}}, {{width}}, {{height}}, {{size}} 값을 사용할 수 있고, 응답의 이미지 JSON 경로를 지정할 수 있습니다. 응답은 Base64, data URL 또는 이미지 URL을 지원합니다.
+
+### 등록 순서
+
+1. 서비스 이름과 API 주소를 입력하고 템플릿을 선택합니다.
+2. 필요한 경우 모델 ID와 API 키/토큰을 입력합니다.
+3. 사용자 지정 REST라면 요청 JSON, 응답 이미지 경로, 반환 형식을 설정합니다.
+4. **실제 생성 테스트**를 실행해 요청·인증·이미지 응답과 미리보기를 확인합니다. 이 테스트는 실제 생성 요청이므로 제공자의 요금/크레딧을 사용할 수 있습니다.
+5. 저장한 다음 게임별 기본 생성 서비스와 실패 시 대체 서비스를 지정합니다. Wayward와 Faith는 각각 독립된 기본/대체 서비스 값을 가집니다. 대체 서비스는 기본 서비스 요청이 실패했을 때 한 번만 호출되며, 이 경우에도 별도 생성 비용이 발생할 수 있습니다.
+
+기존 서비스 편집 시 API 키 입력란을 비워두면 저장된 키를 유지합니다. 키를 변경하려면 새 키를 입력하세요. 서비스 삭제 시 해당 서비스가 기본값으로 지정된 게임 프로필의 기본값도 함께 해제합니다.
+
+### 보안과 게임 사용 권한
+
+- 서비스 설정과 API 키는 Android 앱 내부 파일에 저장되며 AES-256-GCM으로 암호화됩니다. 암호화 키는 Android Keystore에 보관합니다.
+- WML 브리지와 게임 JavaScript에는 API 키·인증 헤더를 전달하지 않습니다. 등록된 서비스의 ID·이름·종류·모델과 프로필 기본값만 공개합니다.
+- 새 서비스의 **게임 WML 모드에서 사용 허용**은 기본적으로 꺼져 있습니다. 켜야만 게임 모드가 그 서비스를 호출할 수 있습니다. 서비스 관리 화면의 실제 생성 테스트는 이 권한과 무관하게 사용할 수 있습니다.
+- 외부 인터넷 서비스는 HTTPS 주소만 허용합니다. HTTP는 사설 LAN 주소에만 허용합니다. 이미지 URL의 리디렉션은 거부합니다.
+- API 키는 진단 로그에 기록하지 않습니다. 로그에는 성공/실패, 서비스 ID·종류, 이미지 바이트 수와 오류 분류만 기록합니다.
+- 암호화된 서비스 설정 파일은 Android 클라우드 백업과 기기 간 데이터 전송에서 제외합니다. 앱을 새 기기로 옮길 때는 이미지 서비스와 API 키를 새 기기에서 다시 등록해야 합니다.
+
+### WML 모드 연결 API
+
+런처 WebView는 문서 시작 시 window.WaywardImageProviders를 제공합니다.
+
+~~~js
+const { providers, defaultProviderId, fallbackProviderId } = window.WaywardImageProviders.list();
+
+const result = await window.WaywardImageProviders.generate({
+  // 생략하거나 빈 문자열이면 현재 게임 프로필의 기본 서비스 사용
+  providerId: defaultProviderId || "",
+  prompt: "a small orange circle on a warm off-white background",
+  width: 1024,
+  height: 1024
+});
+
+// result.dataUrl을 img.src 등에 연결
+console.log(result.mimeType, result.fallbackUsed, result.dataUrl);
+~~~
+
+generate()는 이미지 생성이 끝난 뒤 { ok, providerId, fallbackUsed, mimeType, dataUrl }을 돌려줍니다. providerId를 지정하지 않으면 현재 게임 프로필의 기본 서비스를 사용하고, 그 요청이 실패하면 프로필의 대체 서비스를 한 번 시도합니다. providerId를 직접 지정하면 해당 서비스만 호출합니다. 서비스가 등록되지 않았거나 게임 사용 권한이 꺼져 있으면 오류로 끝납니다. 네이티브 브리지는 동시 실행을 제한하고 API 키를 반환하지 않습니다.
+
+### 현재 지원 범위와 미지원 프로토콜
+
+현재 공통 클라이언트가 구현한 것은 **한 번의 JSON HTTP 요청으로 작업을 제출하고 이미지 또는 Base64/URL을 바로 반환하는 동기식 API**입니다. OpenAI 호환 API와 사용자 지정 JSON 형식이라도 요청 JSON과 응답 이미지가 이 흐름에 맞으면 등록할 수 있습니다.
+
+ComfyUI의 /prompt + WebSocket/히스토리 조회, Replicate·fal.ai 등의 비동기 작업 제출/폴링, multipart 업로드, OAuth 브라우저 로그인, 이미지 편집용 입력 파일 전송은 아직 구현하지 않았습니다. 이 서비스들은 서비스 등록 화면에 URL만 입력한다고 동작하지 않습니다. 해당 프로토콜의 작업 ID·상태·결과 응답을 처리하는 전용 어댑터를 추가해야 합니다.
+
+또한 이 런처 브리지가 제공된다고 해서 기존 Image Studio 모드가 자동으로 이 브리지를 사용하도록 바뀌는 것은 아닙니다. 현재 저장소에는 Image Studio의 실제 WML 클라이언트 소스가 없어, 그 모드의 기존 NovelAI/ComfyUI 선택 흐름을 이 카탈로그에 자동 연결했다고 주장하지 않습니다. WML 모드는 위 WaywardImageProviders API를 호출하도록 연결해야 합니다. 기존 Image Studio 로컬 서버 경로는 별도로 보존됩니다.
