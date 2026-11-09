@@ -15,8 +15,13 @@ assert.match(main, /String imageStudioBackendVersion\(\)/,
   "Image Studio ID and backend entrypoints must be detected in that session");
 assert.match(main, /wml\/mods\/imagestudio\/backend\/wayward-imagegen\/package\.json/,
   "the active session's nested backend layout must be recognized");
-assert.doesNotMatch(main, /zipMods\.extractDirectory\("imagestudio"/,
-  "Image Studio must not require a separate launcher ZIP installation");
+const automaticStartup = main.slice(main.indexOf("private void ensureImageGenServer"), main.indexOf("private static boolean sameImageGenVersion"));
+assert.doesNotMatch(automaticStartup, /extractDirectory\\(/,
+  "automatic Image Studio startup must remain tied to the active physical game folder");
+assert.match(main, /zipMods\\.extractDirectory\\("easygen","server"/,
+  "manual EasyGen startup may extract its backend from an installed app-only ZIP");
+assert.match(main, /zipMods\\.extractDirectory\\("imagestudio","backend"/,
+  "manual ComfyUI startup may use an installed Image Studio backend ZIP")
 assert.doesNotMatch(main, /for \(GameProfile profile : profiles\)/,
   "backend lookup must not silently take another registered session's mod");
 assert.match(main, /ImageGenStatusStore\.read\(getFilesDir\(\)\)/,
