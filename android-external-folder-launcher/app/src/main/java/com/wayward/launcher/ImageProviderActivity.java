@@ -211,7 +211,7 @@ public final class ImageProviderActivity extends Activity {
             try {
                 data.novelAiToken = token;
                 store.save(data);
-                Toast.makeText(this, "NovelAI 토큰을 암호화해 저장했습니다.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "NovelAI 토큰을 암호화해 저장했습니다. NovelAI 서버가 실행 중이라면 중지 후 다시 시작해야 새 토큰이 반영됩니다.", Toast.LENGTH_LONG).show();
                 renderList();
             } catch (Exception error) {
                 showError("토큰을 저장하지 못했습니다", error.getMessage());

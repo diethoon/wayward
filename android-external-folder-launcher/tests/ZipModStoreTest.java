@@ -68,6 +68,8 @@ public final class ZipModStoreTest {
             imageStudioEntries.put("imagestudio-root/other-asset.txt", "not copied");
             writeZip(imageStudioZip, imageStudioEntries);
             store.install(imageStudioZip);
+            check(read(store.open("wml/mods/imagestudio/mod.js")).contains("id: 'imagestudio'"),
+                    "Image Studio ZIP adapter marker is readable through the same overlay used by the game");
 
             File backend = new File(temp, "private-imagegen-backend");
             check(store.extractDirectory("imagestudio", "backend", backend), "ImageGen backend folder extracted");

@@ -8,6 +8,7 @@ const panel = read("../app/src/main/java/com/wayward/launcher/ImageGenPanelActiv
 const installer = read("../app/src/main/java/com/wayward/launcher/ImageGenBackendInstaller.java");
 const store = read("../app/src/main/java/com/wayward/launcher/ImageProviderStore.java");
 const providerUi = read("../app/src/main/java/com/wayward/launcher/ImageProviderActivity.java");
+const providerClient = read("../app/src/main/java/com/wayward/launcher/ImageProviderClient.java");
 const manifest = read("../app/src/main/AndroidManifest.xml");
 const endpoint = read("../app/src/main/java/com/wayward/launcher/ComfyEndpoint.java");
 const embed = read("../scripts/embed_imagegen_backend.py");
@@ -19,6 +20,10 @@ assert.match(main, /startOrSwitchManagedImageGenServer/);
 assert.match(main, /waitForImageGenStopThenStart/);
 assert.match(main, /ImageGenBackendInstaller\.install\(this,backend\)/);
 assert.match(main, /writeImageGenRuntimeConfig\(backend,mode,requestedUrl\)/);
+assert.match(main, /zipMods\.open\("wml\/mods\/imagestudio\/mod\.js"\)/,
+  "auto-start must detect an Image Studio adapter installed as a WML ZIP mod");
+assert.match(main, /launcher-imagegen:" \+ ImageGenBackendInstaller\.VERSION \+ ":novelai"/,
+  "auto-start must launch the NovelAI-compatible EasyGen panel, not hardcode ComfyUI");
 assert.match(main, /PC 주소 미설정 · 연결 대기 중/);
 assert.match(main, /런처 내장 ImageGen /);
 
@@ -58,6 +63,22 @@ assert.match(service, /command\.add\("--config"\)/);
 assert.match(service, /command\.add\("--no-webp"\)/);
 assert.match(service, /NAI_TOKEN/);
 assert.match(service, /ImageProviderStore\.readNovelAiToken\(this\)/);
+assert.match(service, /token != null && !token\.trim\(\)\.isEmpty\(\)/,
+  "the NovelAI token must be optional at server startup");
+assert.doesNotMatch(service, /NovelAI API 토큰이 등록되지 않았습니다/,
+  "missing NovelAI credentials must not prevent the local server from starting");
+assert.doesNotMatch(providerClient, /NAI_TOKEN|readNovelAiToken/,
+  "Cloudflare and other direct providers must not depend on the NovelAI credential");
+assert.match(providerClient, /provider\.apiKey/,
+  "direct provider credentials are isolated to each provider record");
+assert.doesNotMatch(between(main, "private void startManagedImageGenServer", "private void writeImageGenRuntimeConfig"),
+  /readNovelAiToken/,
+  "manual server startup must not reject missing NovelAI credentials");
+function between(source, start, end) {
+  const from = source.indexOf(start);
+  const to = source.indexOf(end, from);
+  return from >= 0 && to > from ? source.slice(from, to) : "";
+}
 assert.doesNotMatch(service, /bun\.getAbsolutePath\(\), "install"/,
   "the pinned Android runtime must not install sharp or resolve host-specific npm binaries");
 assert.match(service, /ComfyEndpoint\.normalizeOptional/);

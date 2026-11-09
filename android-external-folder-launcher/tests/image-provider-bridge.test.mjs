@@ -11,6 +11,21 @@ const source = fs.readFileSync(
 );
 
 const calls = [];
+const diagnostics = [];
+const imageListeners = {};
+class FakeImage {
+  constructor() {
+    this.naturalWidth = 0;
+    this.naturalHeight = 0;
+  }
+  set src(value) {
+    this._src = value;
+    this.naturalWidth = 512;
+    this.naturalHeight = 512;
+    queueMicrotask(() => this.onload && this.onload());
+  }
+  get src() { return this._src; }
+}
 const native = {
   listImageProviders() {
     return JSON.stringify({
@@ -18,6 +33,9 @@ const native = {
       defaultProviderId: "a".repeat(32),
       fallbackProviderId: "b".repeat(32)
     });
+  },
+  logImageProviderDiagnostic(event, details) {
+    diagnostics.push({ event, details: JSON.parse(details || "{}") });
   },
   generateImageWithProvider(id, providerId, prompt, width, height) {
     calls.push({ id, providerId, prompt, width, height });
@@ -31,9 +49,17 @@ const native = {
 };
 const window = {
   crypto: { randomUUID: () => "test-request-id" },
+  Image: FakeImage,
+  document: {
+    baseURI: "https://game.example/game/index.html",
+    addEventListener(name, callback) { imageListeners[name] = callback; }
+  },
   WMLHost: native
 };
-vm.runInNewContext(source, { window, Promise, Map, Error, String, Number, Date, Math, JSON, setTimeout, clearTimeout });
+vm.runInNewContext(source, {
+  window, Promise, Map, Error, String, Number, Date, Math, JSON, URL,
+  Boolean, Object, setTimeout, clearTimeout, queueMicrotask
+});
 
 const listing = window.WaywardImageProviders.list();
 assert.equal(listing.providers.length, 1);
@@ -51,9 +77,89 @@ assert.equal(calls[0].providerId, "");
 assert.equal(calls[0].prompt, "a small orange circle");
 assert.equal(calls[0].width, 512);
 assert.equal(calls[0].height, 512);
+await new Promise(resolve => setTimeout(resolve, 0));
+
+assert.ok(diagnostics.some(item => item.event === "js_bridge_installed"));
+assert.ok(diagnostics.some(item => item.event === "game_generate_requested"));
+assert.ok(diagnostics.some(item => item.event === "game_generate_dispatched"));
+assert.ok(diagnostics.some(item => item.event === "resolver_received"));
+assert.ok(diagnostics.some(item => item.event === "game_generate_resolved"));
+assert.ok(diagnostics.some(item => item.event === "data_url_probe_loaded"));
+const requestLog = diagnostics.find(item => item.event === "game_generate_requested");
+assert.equal(requestLog.details.promptLength, "a small orange circle".length);
+assert.equal(JSON.stringify(diagnostics).includes("a small orange circle"), false);
+
+imageListeners.error({
+  type: "error",
+  target: {
+    tagName: "IMG",
+    src: "https://example.invalid/private/portrait.png?token=hidden",
+    currentSrc: "https://example.invalid/private/portrait.png?token=hidden",
+    id: "portrait-main",
+    className: "character portrait",
+    alt: "Mika portrait",
+    getAttribute(name) { return name === "src" ? "./images/portrait.png" : ""; },
+    naturalWidth: 0,
+    naturalHeight: 0,
+    complete: true
+  }
+});
+const imageError = diagnostics.find(item => item.event === "img_element_error");
+assert.ok(imageError);
+assert.equal(imageError.details.srcKind, "https");
+assert.equal(imageError.details.srcHost, "example.invalid");
+assert.equal(imageError.details.srcPath, "/private/portrait.png");
+assert.equal(imageError.details.elementId, "portrait-main");
+assert.equal(imageError.details.elementClass, "character portrait");
+assert.equal(imageError.details.elementAlt, "Mika portrait");
+assert.equal(imageError.details.srcAttrKind, "relative");
+assert.equal(imageError.details.srcAttrPath, "/game/images/portrait.png");
+assert.equal(imageError.details.repeatCount, 1);
+assert.equal(JSON.stringify(imageError.details).includes("token=hidden"), false);
+assert.equal(JSON.stringify(imageError.details).includes("hidden"), false);
+
+imageListeners.error({
+  type: "error",
+  target: {
+    tagName: "IMG",
+    src: "https://example.invalid/private/portrait.png?different=ignored",
+    currentSrc: "https://example.invalid/private/portrait.png?different=ignored",
+    id: "portrait-main",
+    className: "character portrait",
+    alt: "Mika portrait",
+    naturalWidth: 0,
+    naturalHeight: 0,
+    complete: true
+  }
+});
+const repeatedImageError = diagnostics.filter(item => item.event === "img_element_error").at(-1);
+assert.equal(repeatedImageError.details.repeatCount, 2);
+
+imageListeners.error({
+  type: "error",
+  target: {
+    tagName: "IMG",
+    src: "https://account:password@example.invalid/v1/session/secret.png?access_token=hidden#fragment",
+    currentSrc: "https://account:password@example.invalid/v1/session/secret.png?access_token=hidden#fragment",
+    id: "remote-art",
+    className: "character remote",
+    alt: "Remote art",
+    getAttribute(name) { return name === "src" ? "https://account:password@example.invalid/v1/session/secret.png?access_token=hidden#fragment" : ""; },
+    naturalWidth: 0,
+    naturalHeight: 0,
+    complete: true
+  }
+});
+const redactedImageError = diagnostics.filter(item => item.event === "img_element_error").at(-1);
+assert.equal(redactedImageError.details.srcHost, "example.invalid");
+assert.equal(redactedImageError.details.srcPath, "/v1/~redacted~/~redacted~");
+assert.equal(JSON.stringify(redactedImageError.details).includes("account"), false);
+assert.equal(JSON.stringify(redactedImageError.details).includes("password"), false);
+assert.equal(JSON.stringify(redactedImageError.details).includes("hidden"), false);
+assert.equal(JSON.stringify(redactedImageError.details).includes("fragment"), false);
 
 await assert.rejects(
   window.WaywardImageProviders.generate({ prompt: " " }),
   /프롬프트/
 );
-console.log("Image provider bridge contract: PASS");
+console.log("Image provider bridge diagnostics contract: PASS");

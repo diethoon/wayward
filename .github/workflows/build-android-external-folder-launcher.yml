@@ -31,6 +31,143 @@ jobs:
           git cat-file -e "${SOURCE_COMMIT}:mods.zip"
           git show "${SOURCE_COMMIT}:mods.zip" > "$RUNNER_TEMP/wayward-mods.zip"
           python3 android-external-folder-launcher/scripts/embed_imagegen_backend.py "$RUNNER_TEMP/wayward-mods.zip"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.0'
+      - name: Run the bundled ImageGen server without provider credentials
+        id: imagegen_runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          BACKEND="$GITHUB_WORKSPACE/android-external-folder-launcher/app/src/main/assets/imagegen-backend/wayward-imagegen"
+          SMOKE="$RUNNER_TEMP/imagegen-runtime-smoke"
+          mkdir -p "$SMOKE/images" "$SMOKE/state"
+          cat > "$SMOKE/config.json" <<JSON
+          {
+            "host": "127.0.0.1",
+            "port": 8189,
+            "imagesDir": "$SMOKE/images",
+            "stateDir": "$SMOKE/state",
+            "comfyUrl": "http://127.0.0.1:8188",
+            "imageProvider": "nai",
+            "naiModel": "nai-diffusion-5-full",
+            "naiToken": "",
+            "webp": false,
+            "requireWebp": false
+          }
+          JSON
+          bun --version
+          test "$(cd "$BACKEND" && bun src/cli.ts --version)" = "0.8.4"
+          (
+            cd "$BACKEND"
+            nohup bun src/cli.ts --config "$SMOKE/config.json" --no-webp --verbose > "$SMOKE/server.log" 2>&1 &
+            echo $! > "$SMOKE/server.pid"
+          )
+          cleanup() {
+            if [ -f "$SMOKE/server.pid" ]; then
+              kill "$(cat "$SMOKE/server.pid")" 2>/dev/null || true
+              wait "$(cat "$SMOKE/server.pid")" 2>/dev/null || true
+            fi
+          }
+          trap cleanup EXIT
+          before_code="000"
+          for attempt in $(seq 1 30); do
+            before_code="$(curl --silent --output "$SMOKE/health-before.json" --write-out '%{http_code}' http://127.0.0.1:8189/api/image/health || true)"
+            if [ "$before_code" = "503" ]; then break; fi
+            sleep 1
+          done
+          test "$before_code" = "503"
+          kill -0 "$(cat "$SMOKE/server.pid")"
+          panel_code="$(curl --silent --output "$SMOKE/panel.html" --write-out '%{http_code}' 'http://127.0.0.1:8189/?panel=anima')"
+          test "$panel_code" = "200"
+          grep -qi 'NovelAI' "$SMOKE/panel.html"
+          save_code="$(curl --silent --show-error --output "$SMOKE/save.json" --write-out '%{http_code}' \
+            -X PUT http://127.0.0.1:8189/api/generation/settings \
+            -H 'content-type: application/json' \
+            --data '{"imageProvider":"nai","naiToken":"ci-smoke-token-not-valid"}')"
+          test "$save_code" = "200"
+          after_code="$(curl --silent --show-error --output "$SMOKE/health-after.json" --write-out '%{http_code}' http://127.0.0.1:8189/api/image/health)"
+          test "$after_code" = "200"
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const root = process.env.RUNNER_TEMP + '/imagegen-runtime-smoke';
+          const before = JSON.parse(fs.readFileSync(root + '/health-before.json', 'utf8'));
+          const saveText = fs.readFileSync(root + '/save.json', 'utf8');
+          const saved = JSON.parse(saveText);
+          const after = JSON.parse(fs.readFileSync(root + '/health-after.json', 'utf8'));
+          if (before.status !== 'error' || before.imageProvider !== 'nai' || before.novelai !== 'unconfigured') {
+            throw new Error('No-token health response did not correctly report an unconfigured NovelAI provider.');
+          }
+          if (saved.saved !== true || saved.settings?.naiTokenConfigured !== true || 'naiToken' in (saved.settings || {})) {
+            throw new Error('The settings endpoint did not safely save the provider token state.');
+          }
+          if (saveText.includes('ci-smoke-token-not-valid')) throw new Error('The settings response leaked the test token.');
+          if (after.status !== 'ok' || after.imageProvider !== 'nai' || after.novelai !== 'configured' || after.comfyui !== 'connected') {
+            throw new Error('Health did not become ready after provider settings were saved.');
+          }
+          const log = fs.readFileSync(root + '/server.log', 'utf8');
+          if (!log.includes('wayward-imagegen 0.8.4') || !log.includes('listening')) {
+            throw new Error('The bundled image-generation process did not report its startup banner.');
+          }
+          const report = [
+            'runtime=wayward-imagegen 0.8.4',
+            'bun=1.4.0',
+            'server_start_without_token=PASS (process alive; provider health 503/unconfigured as designed)',
+            'image_panel_http=200',
+            'provider_settings_save=PASS (token redacted in response)',
+            'health_after_provider_setup=200/connected',
+            'novelai_remote_generation=NOT_RUN (no real NovelAI account token supplied)',
+          ].join('\\n') + '\\n';
+          fs.writeFileSync(root + '/result.txt', report);
+          console.log(report);
+          JS
+      - name: Guard the one-time Cloudflare FLUX smoke request
+        id: flux_smoke_once
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/wayward-flux-smoke-once/complete
+          key: wayward-flux-smoke-once-20261110
+      - name: Generate one real Cloudflare FLUX smoke image
+        id: flux_smoke
+        if: steps.flux_smoke_once.outputs.cache-hit != 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/flux-smoke"
+          curl --fail --silent --show-error --max-time 240 \
+            -H 'content-type: application/json' \
+            --data '{"prompt":"An original cozy fantasy shopkeeper in a small woodland general store, polished anime illustration, warm afternoon sunlight, full body, detailed but clean composition, no text"}' \
+            'https://wayward-image-worker.trpgengine.workers.dev' \
+            -o "$RUNNER_TEMP/flux-smoke/response.json"
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          const root = process.env.RUNNER_TEMP + '/flux-smoke';
+          const response = JSON.parse(fs.readFileSync(root + '/response.json', 'utf8'));
+          if (response.success !== true || typeof response.image !== 'string' || !response.image.length) {
+            throw new Error('Cloudflare Worker did not return success=true and a base64 image.');
+          }
+          const bytes = Buffer.from(response.image, 'base64');
+          const mime = String(response.mimeType || 'image/jpeg').toLowerCase();
+          const signatures = [
+            ['image/jpeg', bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff, 'jpg'],
+            ['image/png', bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])), 'png'],
+            ['image/webp', bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP', 'webp']
+          ];
+          const detected = signatures.find(([, ok]) => ok);
+          if (!detected) throw new Error('Worker response is not a recognized JPEG/PNG/WebP image.');
+          const ext = detected[2];
+          const output = root + '/cloudflare-flux-smoke.' + ext;
+          fs.writeFileSync(output, bytes);
+          const sha = crypto.createHash('sha256').update(bytes).digest('hex');
+          fs.writeFileSync(root + '/result.txt',
+            'provider=Cloudflare FLUX Worker\\nhttp=200\\nmimeType=' + (response.mimeType || mime) +
+            '\\nbytes=' + bytes.length + '\\nsha256=' + sha + '\\nfile=' + output + '\\n');
+          fs.mkdirSync(process.env.RUNNER_TEMP + '/wayward-flux-smoke-once', { recursive: true });
+          fs.writeFileSync(process.env.RUNNER_TEMP + '/wayward-flux-smoke-once/complete', 'success\\n');
+          console.log(fs.readFileSync(root + '/result.txt', 'utf8'));
+          JS
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -57,9 +194,91 @@ jobs:
       - name: Verify and build
         working-directory: android-external-folder-launcher
         run: bash ./verify.sh
+      - name: Enable KVM for Android launcher smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and launch APK on Android 15 emulator
+        id: android_emulator_smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            APK="$GITHUB_WORKSPACE/android-external-folder-launcher/app/build/outputs/apk/debug/app-debug.apk"
+            PACKAGE="com.wayward.launcher.imagegen039"
+            OUT="$RUNNER_TEMP/android-launcher-smoke"
+            mkdir -p "$OUT"
+            adb wait-for-device
+            adb install -r "$APK" | tee "$OUT/install.txt"
+            adb shell am force-stop "$PACKAGE"
+            adb shell monkey -p "$PACKAGE" 1 | tee "$OUT/launch.txt"
+            launched=0
+            for attempt in $(seq 1 45); do
+              if adb shell pidof "$PACKAGE" >/dev/null 2>&1; then
+                if adb shell dumpsys activity activities | grep -E "mResumedActivity.*\${PACKAGE}|topResumedActivity.*\${PACKAGE}" >/dev/null; then
+                  launched=1
+                  break
+                fi
+              fi
+              sleep 1
+            done
+            test "$launched" = "1"
+            adb shell dumpsys activity activities > "$OUT/activities.txt"
+            adb shell dumpsys package "$PACKAGE" > "$OUT/package.txt"
+            adb logcat -d -t 3000 > "$OUT/logcat.txt"
+            if grep -E "FATAL EXCEPTION|Process: \${PACKAGE}" "$OUT/logcat.txt"; then
+              echo "Android launcher process crashed; see logcat artifact." >&2
+              exit 1
+            fi
+            {
+              echo "device=Android 15 API 35 x86_64 emulator"
+              echo "package=$PACKAGE"
+              echo "install=PASS"
+              echo "launcher_activity=RESUMED"
+              echo "process_alive=PASS"
+              echo "fatal_exception=NONE"
+              echo "note=emulator smoke only; not a Galaxy S25 Ultra or Wayward game image-generation test"
+            } | tee "$OUT/result.txt"
+      - name: Upload Android launcher emulator smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WaywardLauncher-Android15-emulator-smoke
+          path: ${{ runner.temp }}/android-launcher-smoke
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload ImageGen server runtime smoke
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wayward-ImageGen-server-runtime-smoke
+          path: |
+            ${{ runner.temp }}/imagegen-runtime-smoke/result.txt
+            ${{ runner.temp }}/imagegen-runtime-smoke/server.log
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload real FLUX smoke image
+        if: steps.flux_smoke.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wayward-Cloudflare-FLUX-real-image
+          path: |
+            ${{ runner.temp }}/flux-smoke/cloudflare-flux-smoke.*
+            ${{ runner.temp }}/flux-smoke/result.txt
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
-          name: WaywardLauncher-comfy-wait-v0.3.11
+          name: WaywardLauncher-image-diagnostics-v0.3.12
           path: android-external-folder-launcher/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
