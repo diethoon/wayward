@@ -118,6 +118,54 @@ final class DiagnosticsLogger {
         return result;
     }
 
+    static String exportText(Context context) {
+        Context app = context == null ? null : context.getApplicationContext();
+        if (app == null) return "Wayward Launcher 진단 정보를 읽을 수 없습니다.";
+        StringBuilder report = new StringBuilder(48 * 1024);
+        report.append("Wayward Launcher diagnostics\\n")
+                .append("appVersion=").append(appVersion(app))
+                .append(" sdk=").append(Build.VERSION.SDK_INT).append('\\n');
+        try {
+            JSONArray events = readPending(app, 16);
+            report.append("\\n[Pending structured diagnostics]\\n");
+            report.append(events.length() == 0 ? "(no pending events)\\n" : redact(events.toString()) + "\\n");
+        } catch (Exception error) {
+            report.append("\\n[Pending structured diagnostics unavailable]\\n")
+                    .append(redact(error.toString())).append('\\n');
+        }
+        File imageGen = new File(app.getFilesDir(), "imagegen");
+        appendLogTail(report, new File(imageGen, "startup.log"), 32 * 1024, "ImageGen startup.log");
+        appendLogTail(report, new File(imageGen, "bun-version.log"), 4 * 1024, "Bun version probe");
+        report.append("\\n[Privacy] server.log is intentionally excluded because it may contain generated prompts or request data.\\n");
+        return report.toString();
+    }
+
+    private static void appendLogTail(StringBuilder report, File file, int maxBytes, String title) {
+        report.append("\\n[").append(title).append("]\\n");
+        if (file == null || !file.isFile()) {
+            report.append("(not present)\\n");
+            return;
+        }
+        try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
+            long length = input.length();
+            long offset = Math.max(0L, length - maxBytes);
+            int count = (int) Math.min(length - offset, maxBytes);
+            byte[] bytes = new byte[count];
+            input.seek(offset);
+            input.readFully(bytes);
+            String content = new String(bytes, StandardCharsets.UTF_8);
+            if (offset > 0) {
+                int newline = content.indexOf('\\n');
+                content = newline >= 0 ? content.substring(newline + 1) : "";
+                report.append("[older content truncated]\\n");
+            }
+            report.append(redact(content));
+            if (!content.endsWith("\\n")) report.append('\\n');
+        } catch (Exception error) {
+            report.append("[read failed] ").append(redact(error.toString())).append('\\n');
+        }
+    }
+
     static void acknowledge(Context context, Set<String> uploadedIds) throws Exception {
         if (uploadedIds == null || uploadedIds.isEmpty()) return;
         synchronized (LOCK) {
