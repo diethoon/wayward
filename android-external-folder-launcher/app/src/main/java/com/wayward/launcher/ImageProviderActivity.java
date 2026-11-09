@@ -204,7 +204,7 @@ public final class ImageProviderActivity extends Activity {
                 showError("토큰이 비어 있습니다", "새 토큰을 입력해 주세요. 기존 토큰은 변경되지 않았습니다.");
                 return;
             }
-            if (token.length() > 4096 || token.indexOf('\\r') >= 0 || token.indexOf('\\n') >= 0) {
+            if (token.length() > 4096 || token.indexOf('\r') >= 0 || token.indexOf('\n') >= 0) {
                 showError("토큰 형식 확인", "토큰은 줄바꿈 없이 4096자 이내로 입력해 주세요.");
                 return;
             }
