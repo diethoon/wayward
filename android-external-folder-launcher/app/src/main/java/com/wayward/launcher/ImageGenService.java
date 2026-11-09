@@ -188,6 +188,7 @@ public final class ImageGenService extends Service {
         String message = shortMessage(error);
         statusMessage = "서버 시작 실패: " + message;
         appendDiagnostic(stackTrace(error));
+        persistState();
         updateNotification(statusMessage);
     }
 
