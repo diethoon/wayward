@@ -17,7 +17,9 @@ import android.widget.Toast;
 
 /** In-app EasyGen settings panel served by the app-private ImageGen server. */
 public final class ImageGenPanelActivity extends Activity {
-    private static final String PANEL_URL = "http://127.0.0.1:8189/?panel=anima";
+    static final String EXTRA_MODE = "imagegen.panel.mode";
+    private static final String NOVELAI_PANEL_URL = "http://127.0.0.1:8189/?panel=anima";
+    private static final String COMFY_PANEL_URL = "http://127.0.0.1:8189/";
     private WebView web;
 
     @Override protected void onCreate(Bundle state) {
@@ -35,7 +37,8 @@ public final class ImageGenPanelActivity extends Activity {
         back.setOnClickListener(v -> finish());
         toolbar.addView(back, new LinearLayout.LayoutParams(-2, -2));
         TextView title = new TextView(this);
-        title.setText("EasyGen · NovelAI 설정");
+        String mode=getIntent()==null?"novelai":getIntent().getStringExtra(EXTRA_MODE);
+        title.setText("comfy".equals(mode)?"ComfyUI 이미지 서버":"EasyGen · NovelAI 설정");
         title.setTextColor(Color.WHITE);
         title.setTextSize(16);
         title.setPadding(14, 0, 0, 0);
@@ -90,7 +93,8 @@ public final class ImageGenPanelActivity extends Activity {
         });
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1f));
         setContentView(root);
-        web.loadUrl(PANEL_URL);
+        String mode=getIntent()==null?"novelai":getIntent().getStringExtra(EXTRA_MODE);
+        web.loadUrl("comfy".equals(mode)?COMFY_PANEL_URL:NOVELAI_PANEL_URL);
     }
 
     @Override public void onBackPressed() {
