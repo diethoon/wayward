@@ -470,6 +470,12 @@ public final class MainActivity extends Activity {
                             details.put("status",response.getStatusCode());
                             details.put("mainFrame",request.isForMainFrame());
                         }catch(Exception ignored){}
+                        JSONObject pipeline=new JSONObject();
+                        try{
+                            pipeline.put("responseStatus",response.getStatusCode());
+                            pipeline.put("srcKind",domain.equalsIgnoreCase(failedUri.getHost())?"game_asset":"external");
+                        }catch(Exception ignored){}
+                        ImagePipelineDiagnostics.record(MainActivity.this,"webview_image_http_error",pipeline);
                         DiagnosticsLogger.event(MainActivity.this,"WARN","webview","image_http_error",details);
                     }else if(request.isForMainFrame()){
                         JSONObject details=new JSONObject();
@@ -540,6 +546,13 @@ public final class MainActivity extends Activity {
                 details.put("status",status);
                 details.put("elapsedMs",elapsedMs);
             }catch(Exception ignored){}
+            JSONObject pipeline=new JSONObject();
+            try{
+                pipeline.put("responseStatus",status);
+                pipeline.put("elapsedMs",elapsedMs);
+                pipeline.put("srcKind","game_asset");
+            }catch(Exception ignored){}
+            ImagePipelineDiagnostics.record(this,status>=400?"webview_image_resource_error":"webview_image_resource_slow",pipeline);
             DiagnosticsLogger.event(this,"WARN","webview","image_resource_slow_or_failed",details);
         }
         return response;
