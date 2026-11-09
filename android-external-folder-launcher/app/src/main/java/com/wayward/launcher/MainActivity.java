@@ -577,14 +577,12 @@ public final class MainActivity extends Activity {
 
     private boolean ensureImageGenBackend(SafTree sessionTree) throws Exception {
         if (sessionTree == null) return false;
-        String version = sessionTree.imageStudioBackendVersion();
-        if (version == null || version.isEmpty()) return false;
-        File backend = imageGenBackendRoot();
-        deleteFileTree(backend);
-        if (!sessionTree.copyDirectory("wml/mods/imagestudio/backend", backend)) return false;
-        if (hasImageGenProject(backend)) return true;
-        deleteFileTree(backend);
-        return false;
+        // The WML mod is only the in-game adapter. The server implementation is
+        // shipped in the launcher APK and never copied from the selected game.
+        String modVersion = sessionTree.imageStudioBackendVersion();
+        if (modVersion == null) return false;
+        File backend = ImageGenBackendInstaller.install(this, imageGenBackendRoot());
+        return hasImageGenProject(backend);
     }
 
     private boolean hasImageGenProject(File backend) {
@@ -622,13 +620,9 @@ public final class MainActivity extends Activity {
                 finishImageGenCallbacks();
                 return;
             }
-            if (detected.isEmpty()) {
-                imageGenSessionMessage = "Image Studio 모드는 감지했지만 backend/wayward-imagegen 또는 src/cli.ts를 찾지 못했습니다.";
-                refreshImageGenStatus();
-                finishImageGenCallbacks();
-                return;
-            }
-            version = detected;
+            // The mod identifies whether the current game uses Image Studio;
+            // its backend files are embedded in the launcher APK.
+            version = "launcher-imagegen:" + ImageGenBackendInstaller.VERSION + ":comfy";
         } catch (Exception e) {
             imageGenSessionMessage = "현재 세션의 Image Studio 모드 검사 실패: " + msg(e);
             refreshImageGenStatus();
@@ -677,9 +671,11 @@ public final class MainActivity extends Activity {
             try {
                 synchronized (IMAGEGEN_LOCK) {
                     if (!ensureImageGenBackend(sessionTree)) {
-                        throw new IllegalStateException("현재 세션의 wml/mods/imagestudio/backend에서 wayward-imagegen을 찾지 못했습니다.");
+                        throw new IllegalStateException("현재 런처 APK에 포함된 ImageGen 서버 자산을 찾지 못했습니다.");
                     }
                 }
+                writeImageGenRuntimeConfig(backend, "comfy",
+                        getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_COMFY_URL, ""));
             } catch (Throwable error) {
                 problem = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
             }
@@ -692,7 +688,8 @@ public final class MainActivity extends Activity {
                     finishImageGenCallbacks();
                     return;
                 }
-                startImageGenService(backend, version);
+                startImageGenService(backend, version, "comfy",
+                        getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_COMFY_URL, ""));
                 waitForImageGenReady();
             });
         }, "wayward-imagegen-session-prepare").start();
@@ -700,7 +697,9 @@ public final class MainActivity extends Activity {
 
     private static boolean sameImageGenVersion(String running, String requested) {
         if(running==null||requested==null||running.isEmpty()||requested.isEmpty())return false;
-        return running.equals(requested)||running.startsWith("imagestudio:"+requested+":comfy");
+        return running.equals(requested)
+                || (running.startsWith("launcher-imagegen:" + ImageGenBackendInstaller.VERSION + ":")
+                    && requested.startsWith("launcher-imagegen:" + ImageGenBackendInstaller.VERSION + ":"));
     }
 
     private static String safeVersion(String version) {
