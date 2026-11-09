@@ -11,12 +11,14 @@ assert.match(main, /ensureImageGenServer\(sessionTree,/,
   "session startup must inspect the SafTree captured for the active launch");
 const launchMethod = main.match(/private void openProfileSession\(String id\)\{[\s\S]*?\n    \}\n\n    private void removeProfile/)?.[0] || "";
 assert.ok(launchMethod, "profile launch method must be present");
-assert.match(launchMethod, /pendingGameLoad\s*=\s*true[\s\S]*?ensureImageGenServer\(sessionTree,[\s\S]*?web\.loadUrl\(gameUrl\)/,
-  "the game WebView must not navigate until ImageGen startup completes");
-assert.doesNotMatch(launchMethod, /web\.loadUrl\(gameUrl\);[\s\S]*?ensureImageGenServer\(sessionTree,/,
-  "game navigation must not race asynchronous ImageGen startup");
+assert.match(launchMethod, /web\.setVisibility\(View\.VISIBLE\)[\s\S]*?web\.loadUrl\(gameUrl\);[\s\S]*?imageGenHandler\.post\(\(\)\s*->\s*\{[\s\S]*?ensureImageGenServer\(sessionTree,\s*null\)/,
+  "the game WebView must launch immediately while ImageGen preparation runs independently");
+assert.doesNotMatch(launchMethod, /pendingGameLoad\s*=\s*true|ensureImageGenServer\(sessionTree,\s*\(\)\s*->/,
+  "ImageGen startup and health readiness must never gate game navigation");
 assert.match(main, /if\s*\(pendingGameLoad\)\s*return;/,
   "duplicate session intents must not bypass the ImageGen readiness gate");
+assert.match(main, /private void ensureImageGenServer\(SafTree sessionTree, Runnable afterReady\)/,
+  "ImageGen background preparation remains available independently of game navigation");
 assert.match(main, /String imageStudioBackendVersion\(\)/,
   "Image Studio ID and backend entrypoints must be detected in that session");
 assert.match(main, /wml\/mods\/imagestudio\/backend\/wayward-imagegen\/package\.json/,
