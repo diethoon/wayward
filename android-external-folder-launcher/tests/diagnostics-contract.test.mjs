@@ -55,7 +55,12 @@ assert.match(service, /exitCode/);
 assert.match(service, /serverLogBytes/);
 assert.match(logger, /file bytes=/);
 assert.match(logger, /line\.trim\(\)\.startsWith\("at "\)/,
-  "runtime stack frames must be included in the filtered server log");
+  "runtime stack frames must be included in the filtered install log");
+assert.match(logger, /appendSanitizedServerLogTail/);
+assert.match(logger, /sanitizeServerLogLine/);
+assert.match(logger, /Pattern\.quote\(field\)/,
+  "server diagnostics must redact sensitive fields without dropping the entire error line");
+assert.match(logger, /ImageGen server\.log \(sanitized\)/);
 
 assert.doesNotMatch(ingestApi, /authorized\(/);
 assert.match(ingestApi, /parseBody\(req\)/);
