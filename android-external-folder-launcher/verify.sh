@@ -18,7 +18,7 @@ grep -Fq 'imageGenRestartButton.setEnabled(true)' app/src/main/java/com/wayward/
 grep -Fq 'imageGenStopButton.setEnabled(true)' app/src/main/java/com/wayward/launcher/MainActivity.java
 grep -Fq 'web.loadUrl(gameUrl);' app/src/main/java/com/wayward/launcher/MainActivity.java
 grep -Fq 'ensureImageGenServer(sessionTree, null)' app/src/main/java/com/wayward/launcher/MainActivity.java
-! grep -Fq 'pendingGameLoad = true' app/src/main/java/com/wayward/launcher/MainActivity.java
+! grep -Fq 'pendingGameLoad' app/src/main/java/com/wayward/launcher/MainActivity.java
 node --check app/src/main/assets/wml-folder-bootstrap.js
 node --check app/src/main/assets/imagegen-proxy.js
 node tests/imagegen-proxy.test.mjs
