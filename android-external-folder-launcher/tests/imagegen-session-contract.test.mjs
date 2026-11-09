@@ -18,10 +18,15 @@ assert.match(main, /wml\/mods\/imagestudio\/backend\/wayward-imagegen\/package\.
 const automaticStartup = main.slice(main.indexOf("private void ensureImageGenServer"), main.indexOf("private static boolean sameImageGenVersion"));
 assert.doesNotMatch(automaticStartup, /extractDirectory\(/,
   "automatic Image Studio startup must remain tied to the active physical game folder");
-assert.match(main, /zipMods\.extractDirectory\("easygen","server"/,
-  "manual EasyGen startup may extract its backend from an installed app-only ZIP");
-assert.match(main, /zipMods\.extractDirectory\("imagestudio","backend"/,
-  "manual ComfyUI startup may use an installed Image Studio backend ZIP");
+assert.match(main, /ImageGenBackendInstaller\.install\(this,backend\)/,
+  "manual startup must install the server embedded in the launcher APK");
+assert.match(main, /launcher-imagegen:/,
+  "server version identity must identify the bundled launcher backend");
+assert.match(main, /writeImageGenRuntimeConfig\(backend,mode,requestedUrl\)/,
+  "the selected provider and ComfyUI endpoint must be configured in app-private storage");
+const manualStartup = main.slice(main.indexOf("private void startManagedImageGenServer"), main.indexOf("private void writeImageGenRuntimeConfig"));
+assert.doesNotMatch(manualStartup, /new SafTree|zipMods|wml\/mods\//,
+  "manual startup must not search game folders or extract WML ZIP mods");
 assert.doesNotMatch(main, /for \(GameProfile profile : profiles\)/,
   "backend lookup must not silently take another registered session's mod");
 assert.match(main, /ImageGenStatusStore\.read\(getFilesDir\(\)\)/,
