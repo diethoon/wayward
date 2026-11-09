@@ -1279,7 +1279,6 @@ public final class MainActivity extends Activity {
                 if(opened!=null){
                     details.put("cacheState",opened.cacheState);
                     details.put("openInputStreamMs",opened.openInputStreamMs);
-                    details.put("cacheReadMs",opened.cacheReadMs);
                     details.put("cacheWaitMs",opened.cacheWaitMs);
                     details.put("cacheOpenMs",opened.cacheOpenMs);
                 }else{

@@ -49,7 +49,7 @@ final class SafImageCache {
 
     OpenResult open(ContentResolver resolver, Uri documentUri, String documentId,
                     long expectedSize, long lastModified) throws Exception {
-        if (resolver == null || documentUri == null) return new OpenResult(null, "missing", 0L, 0L, 0L, 0L);
+        if (resolver == null || documentUri == null) return new OpenResult(null, "missing", 0L, 0L, 0L);
         if (documentId == null || documentId.isEmpty() || expectedSize <= 0L
                 || expectedSize > MAX_SINGLE_IMAGE_BYTES || lastModified <= 0L) {
             return openDirect(resolver, documentUri, "bypass");
@@ -73,7 +73,7 @@ final class SafImageCache {
                     InputStream stream = new FileInputStream(ready);
                     long cacheOpenMs = (System.nanoTime() - cacheOpenStarted) / 1_000_000L;
                     ready.setLastModified(System.currentTimeMillis());
-                    return new OpenResult(stream, "shared", 0L, 0L, waitMs, cacheOpenMs);
+                    return new OpenResult(stream, "shared", 0L, waitMs, cacheOpenMs);
                 }
             } catch (InterruptedException error) {
                 Thread.currentThread().interrupt();
@@ -95,13 +95,13 @@ final class SafImageCache {
         long openMs = (System.nanoTime() - openStarted) / 1_000_000L;
         if (source == null) {
             candidate.fail();
-            return new OpenResult(null, "missing", openMs, 0L, 0L, 0L);
+            return new OpenResult(null, "missing", openMs, 0L, 0L);
         }
         if (!candidate.begin()) {
-            return new OpenResult(source, "fallback", openMs, 0L, 0L, 0L);
+            return new OpenResult(source, "fallback", openMs, 0L, 0L);
         }
         return new OpenResult(new TeeInputStream(source, candidate), "loading",
-                openMs, 0L, 0L, 0L);
+                openMs, 0L, 0L);
     }
 
     private OpenResult openDirect(ContentResolver resolver, Uri documentUri, String state) throws Exception {
@@ -121,7 +121,7 @@ final class SafImageCache {
             InputStream input = new FileInputStream(target);
             long openMs = (System.nanoTime() - started) / 1_000_000L;
             target.setLastModified(System.currentTimeMillis());
-            return new OpenResult(input, "hit", 0L, 0L, 0L, openMs);
+            return new OpenResult(input, "hit", 0L, 0L, openMs);
         } catch (IOException error) {
             target.delete();
             return null;
@@ -145,10 +145,11 @@ final class SafImageCache {
         }
     }
 
-    private void recordCacheCompleted(long readMs, long copiedBytes, boolean success) {
+    private void recordCacheCompleted(long sourceReadMs, long cacheWriteMs, long copiedBytes, boolean success) {
         try {
             org.json.JSONObject details = new org.json.JSONObject();
-            details.put("cacheReadMs", readMs);
+            details.put("sourceReadMs", sourceReadMs);
+            details.put("cacheWriteMs", cacheWriteMs);
             details.put("imageSizeBytes", copiedBytes);
             details.put("cacheState", success ? "cached" : "failed");
             ImagePipelineDiagnostics.record(context, "saf_image_cache_completed", details);
@@ -173,7 +174,8 @@ final class SafImageCache {
         final CompletableFuture<File> completed = new CompletableFuture<>();
         FileOutputStream output;
         long copiedBytes;
-        long readNanos;
+        long sourceReadNanos;
+        long cacheWriteNanos;
         boolean active = true;
         boolean finished;
 
@@ -204,16 +206,19 @@ final class SafImageCache {
                 failLocked();
                 return;
             }
+            long writeStarted = System.nanoTime();
             try {
                 output.write(bytes, offset, length);
                 copiedBytes += length;
             } catch (IOException error) {
                 failLocked();
+            } finally {
+                cacheWriteNanos += Math.max(0L, System.nanoTime() - writeStarted);
             }
         }
 
-        synchronized void recordReadDuration(long nanos) {
-            if (active && !finished) readNanos += Math.max(0L, nanos);
+        synchronized void recordSourceReadDuration(long nanos) {
+            if (active && !finished) sourceReadNanos += Math.max(0L, nanos);
         }
 
         synchronized void finish() {
@@ -241,7 +246,7 @@ final class SafImageCache {
                 active = false;
                 completed.complete(target);
                 inFlight.remove(key, this);
-                recordCacheCompleted(readNanos / 1_000_000L, copiedBytes, true);
+                recordCacheCompleted(sourceReadNanos / 1_000_000L, cacheWriteNanos / 1_000_000L, copiedBytes, true);
             } catch (Exception error) {
                 failLocked();
             }
@@ -262,7 +267,7 @@ final class SafImageCache {
             if (part.exists()) part.delete();
             completed.completeExceptionally(new IOException("SAF image cache fill failed"));
             inFlight.remove(key, this);
-            recordCacheCompleted(readNanos / 1_000_000L, copiedBytes, false);
+            recordCacheCompleted(sourceReadNanos / 1_000_000L, cacheWriteNanos / 1_000_000L, copiedBytes, false);
             finished = true;
         }
     }
@@ -278,42 +283,44 @@ final class SafImageCache {
 
         @Override
         public int read() throws IOException {
+            int value;
             long started = System.nanoTime();
             try {
-                int value = in.read();
-                if (value >= 0) {
-                    byte[] one = {(byte) value};
-                    load.append(one, 0, 1);
-                } else {
-                    load.finish();
-                }
-                return value;
+                value = in.read();
             } catch (IOException error) {
+                load.recordSourceReadDuration(System.nanoTime() - started);
                 load.fail();
                 throw error;
-            } finally {
-                load.recordReadDuration(System.nanoTime() - started);
             }
+            load.recordSourceReadDuration(System.nanoTime() - started);
+            if (value >= 0) {
+                byte[] one = {(byte) value};
+                load.append(one, 0, 1);
+            } else {
+                load.finish();
+            }
+            return value;
         }
 
         @Override
         public int read(byte[] buffer, int offset, int length) throws IOException {
             if (length == 0) return 0;
+            int count;
             long started = System.nanoTime();
             try {
-                int count = in.read(buffer, offset, length);
-                if (count > 0) {
-                    load.append(buffer, offset, count);
-                } else if (count < 0) {
-                    load.finish();
-                }
-                return count;
+                count = in.read(buffer, offset, length);
             } catch (IOException error) {
+                load.recordSourceReadDuration(System.nanoTime() - started);
                 load.fail();
                 throw error;
-            } finally {
-                load.recordReadDuration(System.nanoTime() - started);
             }
+            load.recordSourceReadDuration(System.nanoTime() - started);
+            if (count > 0) {
+                load.append(buffer, offset, count);
+            } else if (count < 0) {
+                load.finish();
+            }
+            return count;
         }
 
         @Override
@@ -360,16 +367,14 @@ final class SafImageCache {
         final InputStream stream;
         final String cacheState;
         final long openInputStreamMs;
-        final long cacheReadMs;
         final long cacheWaitMs;
         final long cacheOpenMs;
 
         OpenResult(InputStream input, String state, long providerOpenMs,
-                   long readMs, long waitMs, long localOpenMs) {
+                   long waitMs, long localOpenMs) {
             stream = input;
             cacheState = state;
             openInputStreamMs = providerOpenMs;
-            cacheReadMs = readMs;
             cacheWaitMs = waitMs;
             cacheOpenMs = localOpenMs;
         }

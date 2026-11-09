@@ -59,8 +59,8 @@ final class ImagePipelineDiagnostics {
             "queueDepth", "hasProvider", "mimeDetected", "stage", "success",
             "elementTag", "pendingCount", "srcHost", "srcPath", "elementId",
             "elementClass", "elementAlt", "repeatCount", "srcAttrKind", "srcAttrPath",
-            "resolveImageMs", "imageAccessMs", "openInputStreamMs", "cacheReadMs",
-            "cacheWaitMs", "cacheOpenMs", "directoryWaitMs", "directoryQueryMs",
+            "resolveImageMs", "imageAccessMs", "openInputStreamMs", "sourceReadMs",
+            "cacheWriteMs", "cacheWaitMs", "cacheOpenMs", "directoryWaitMs", "directoryQueryMs",
             "directoryChildCount", "imageSizeBytes", "cacheState"
     ));
 
