@@ -436,6 +436,7 @@ public final class MainActivity extends Activity {
         FolderHandler folderHandler=new FolderHandler(tree,getAssets(),zipMods,origin);
         WebViewAssetLoader loader=new WebViewAssetLoader.Builder().setDomain(domain+":"+originPort).addPathHandler("/game/",folderHandler).build();
         final java.util.concurrent.atomic.AtomicInteger imageDiagnostics=new java.util.concurrent.atomic.AtomicInteger();
+        final java.util.LinkedHashMap<String,Integer> imageHttpErrorCounts=new java.util.LinkedHashMap<>();
         web.setWebViewClient(new WebViewClient(){
             @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){
                 DiagnosticsLogger.event(MainActivity.this,"INFO","webview","page_started",null);
@@ -454,6 +455,7 @@ public final class MainActivity extends Activity {
                         try{
                             pipeline.put("networkErrorCode",error==null?0:error.getErrorCode());
                             pipeline.put("srcKind",failedUri!=null&&domain.equalsIgnoreCase(failedUri.getHost())?"game_asset":"external");
+                            ImagePipelineDiagnostics.addSanitizedUrl(pipeline,failedUri==null?null:failedUri.toString());
                         }catch(Exception ignored){}
                         ImagePipelineDiagnostics.record(MainActivity.this,"webview_image_network_error",pipeline);
                     }
@@ -475,18 +477,34 @@ public final class MainActivity extends Activity {
                             ||("art.sintention.com".equalsIgnoreCase(failedUri.getHost())
                                 &&FolderHandler.isLocalOnlyCharacterImagePath(failedPath)));
                     if(imageResource){
-                        JSONObject pipeline=new JSONObject();
-                        try{
-                            pipeline.put("responseStatus",response.getStatusCode());
-                            pipeline.put("srcKind",domain.equalsIgnoreCase(failedUri.getHost())?"game_asset":"external");
-                        }catch(Exception ignored){}
-                        ImagePipelineDiagnostics.record(MainActivity.this,"webview_image_http_error",pipeline);
+                        String safePath=ImagePipelineDiagnostics.sanitizePath(failedPath);
+                        String sampleKey=(failedUri==null?"":String.valueOf(failedUri.getHost()))+"|"+safePath;
+                        int repeatCount;
+                        synchronized(imageHttpErrorCounts){
+                            Integer previous=imageHttpErrorCounts.get(sampleKey);
+                            repeatCount=previous==null?1:previous+1;
+                            if(previous==null&&imageHttpErrorCounts.size()>=256){
+                                String oldest=imageHttpErrorCounts.keySet().iterator().next();
+                                imageHttpErrorCounts.remove(oldest);
+                            }
+                            imageHttpErrorCounts.put(sampleKey,repeatCount);
+                        }
+                        if(repeatCount<=2||repeatCount%10==0){
+                            JSONObject pipeline=new JSONObject();
+                            try{
+                                pipeline.put("responseStatus",response.getStatusCode());
+                                pipeline.put("srcKind",domain.equalsIgnoreCase(failedUri.getHost())?"game_asset":"external");
+                                pipeline.put("repeatCount",repeatCount);
+                                ImagePipelineDiagnostics.addSanitizedUrl(pipeline,failedUri==null?null:failedUri.toString());
+                            }catch(Exception ignored){}
+                            ImagePipelineDiagnostics.record(MainActivity.this,"webview_image_http_error",pipeline);
+                        }
                     }
                     if(imageResource&&!handledByLocalImageLogger&&imageDiagnostics.getAndIncrement()<16){
                         JSONObject details=new JSONObject();
                         try{
                             details.put("host",failedUri==null?"":failedUri.getHost());
-                            details.put("path",failedPath.substring(0,Math.min(failedPath.length(),240)));
+                            details.put("path",ImagePipelineDiagnostics.sanitizePath(failedPath));
                             details.put("status",response.getStatusCode());
                             details.put("mainFrame",request.isForMainFrame());
                         }catch(Exception ignored){}
@@ -556,7 +574,7 @@ public final class MainActivity extends Activity {
         if(response!=null&&(status>=400||elapsedMs>=350)&&samples.getAndIncrement()<16){
             JSONObject details=new JSONObject();
             try{
-                details.put("path",path.substring(0,Math.min(path.length(),240)));
+                details.put("path",ImagePipelineDiagnostics.sanitizePath(path));
                 details.put("status",status);
                 details.put("elapsedMs",elapsedMs);
             }catch(Exception ignored){}
@@ -565,6 +583,7 @@ public final class MainActivity extends Activity {
                 pipeline.put("responseStatus",status);
                 pipeline.put("elapsedMs",elapsedMs);
                 pipeline.put("srcKind","game_asset");
+                ImagePipelineDiagnostics.addSanitizedPath(pipeline,path);
             }catch(Exception ignored){}
             ImagePipelineDiagnostics.record(this,status>=400?"webview_image_resource_error":"webview_image_resource_slow",pipeline);
             DiagnosticsLogger.event(this,"WARN","webview","image_resource_slow_or_failed",details);
