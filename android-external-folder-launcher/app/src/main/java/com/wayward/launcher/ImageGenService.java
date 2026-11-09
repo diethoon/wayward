@@ -249,7 +249,14 @@ public final class ImageGenService extends Service {
         return value.length() > 24000 ? value.substring(0, 24000) : value;
     }
 
+    private void checkStartupActive() throws InterruptedException {
+        if (stopping || Thread.currentThread().isInterrupted()) {
+            throw new InterruptedException("ImageGen 시작 작업이 취소되었습니다.");
+        }
+    }
+
     private void startRuntime(File backendRoot) throws Exception {
+        checkStartupActive();
         if (!backendRoot.isDirectory()) throw new IllegalStateException("Image Studio 백엔드 폴더를 찾지 못했습니다.");
         File project = new File(backendRoot, "wayward-imagegen");
         if (!new File(project, "package.json").isFile()) project = backendRoot;
@@ -260,6 +267,7 @@ public final class ImageGenService extends Service {
         // Do not adopt an arbitrary listener on the shared Android loopback port.
         // Start our own backend and only accept health while our child process is alive.
         File bun = ensureBun();
+        checkStartupActive();
         File log = new File(getFilesDir(), "imagegen/server.log");
         File logParent = log.getParentFile();
         if (logParent != null && !logParent.exists()) logParent.mkdirs();
@@ -270,6 +278,7 @@ public final class ImageGenService extends Service {
             File installLog = new File(getFilesDir(), "imagegen/install.log");
             int install = runCommand(bunProcess(bun, "install", "--production")
                     .directory(project), installLog, 15, TimeUnit.MINUTES);
+            checkStartupActive();
             if (install != 0) throw new IllegalStateException("Bun 종속 패키지 설치 실패(exit " + install + "). 진단 로그 공유에서 설치 로그를 확인하세요.");
         }
 
@@ -279,7 +288,13 @@ public final class ImageGenService extends Service {
         builder.environment().put("HOME", getFilesDir().getAbsolutePath());
         builder.environment().put("TMPDIR", getCacheDir().getAbsolutePath());
         builder.environment().put("BUN_INSTALL", new File(getFilesDir(), "bun-install").getAbsolutePath());
-        serverProcess = startProcess(builder);
+        checkStartupActive();
+        Process child = startProcess(builder);
+        serverProcess = child;
+        if (stopping || Thread.currentThread().isInterrupted()) {
+            stopRuntime();
+            return;
+        }
         DiagnosticsLogger.event(this,"INFO","imagegen_service","bun_server_process_started",null);
 
         // Keep waiting for the health endpoint for as long as the child server
@@ -324,7 +339,10 @@ public final class ImageGenService extends Service {
             }
             Thread.sleep(1000);
         }
-        if (stopping || Thread.currentThread().isInterrupted()) return;
+        if (stopping || Thread.currentThread().isInterrupted()) {
+            stopRuntime();
+            return;
+        }
 
         Process running = serverProcess;
         while (!stopping && !Thread.currentThread().isInterrupted()
@@ -363,6 +381,7 @@ public final class ImageGenService extends Service {
                 }
                 appendDiagnostic("기존 Bun 버전 검증 실패(exit " + existingVersion + "): " + executableDiagnostics(binary));
             } catch (Exception error) {
+                if (stopping || Thread.currentThread().isInterrupted()) throw error;
                 appendDiagnostic("기존 Bun 실제 실행 검증 실패: " + error + " | " + executableDiagnostics(binary));
                 DiagnosticsLogger.error(this,"imagegen_service","bun_existing_binary_invalid",error);
             }
@@ -374,6 +393,7 @@ public final class ImageGenService extends Service {
         }
         if (!root.exists() && !root.mkdirs()) throw new IllegalStateException("Bun 저장 폴더를 만들지 못했습니다.");
 
+        checkStartupActive();
         File archive = new File(getCacheDir(), "bun-android-1.4.4.zip");
         updateNotification("Bun Android 런타임 다운로드 중 (약 49MB)");
         HttpURLConnection connection = (HttpURLConnection) new URL(BUN_URL).openConnection();
@@ -388,6 +408,7 @@ public final class ImageGenService extends Service {
             byte[] buffer = new byte[32768];
             int count;
             while ((count = in.read(buffer)) >= 0) {
+                checkStartupActive();
                 if (count == 0) continue;
                 total += count;
                 if (total > MAX_BUN_ZIP) throw new IllegalStateException("Bun 압축 파일 크기 제한 초과");
@@ -399,6 +420,7 @@ public final class ImageGenService extends Service {
             if (downloadConnection == connection) downloadConnection = null;
             connection.disconnect();
         }
+        checkStartupActive();
         if (!BUN_SHA256.equalsIgnoreCase(hex(digest.digest()))) {
             archive.delete();
             throw new SecurityException("Bun 공식 아카이브 SHA-256 검증 실패");
@@ -412,6 +434,7 @@ public final class ImageGenService extends Service {
         try (ZipInputStream zip = new ZipInputStream(new BufferedInputStream(new FileInputStream(archive)))) {
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
+                checkStartupActive();
                 String name = entry.getName().replace('\\', '/');
                 if (name.startsWith("/") || name.contains("../") || name.equals("..")) {
                     throw new SecurityException("Bun ZIP 경로가 안전하지 않습니다.");
@@ -428,6 +451,7 @@ public final class ImageGenService extends Service {
                         byte[] buffer = new byte[32768];
                         int count;
                         while ((count = zip.read(buffer)) >= 0) {
+                            checkStartupActive();
                             if (count == 0) continue;
                             unpacked += count;
                             if (unpacked > MAX_BUN_UNPACKED) throw new IllegalStateException("Bun 실행 파일 크기 제한 초과");
@@ -441,6 +465,7 @@ public final class ImageGenService extends Service {
         } finally {
             archive.delete();
         }
+        checkStartupActive();
         if (!found) throw new IllegalStateException("Bun ZIP에서 실행 파일을 찾지 못했습니다.");
         File stagedBinary = new File(staging, "bun");
         prepareBunExecutable(stagedBinary);
@@ -452,6 +477,7 @@ public final class ImageGenService extends Service {
         File installed = new File(root, "bun");
         prepareBunExecutable(installed);
         int version = runCommand(bunProcess(installed, "--version"), new File(getFilesDir(), "imagegen/bun-version.log"), 30, TimeUnit.SECONDS);
+        checkStartupActive();
         if (version != 0) throw new IllegalStateException("이 기기에서 Bun Android 실행 파일을 실행하지 못했습니다(exit " + version + "). " + executableDiagnostics(installed));
         if (invalidBinary != null) deleteTree(invalidBinary);
         DiagnosticsLogger.event(this,"INFO","imagegen_service","bun_fresh_install_validated",null);
