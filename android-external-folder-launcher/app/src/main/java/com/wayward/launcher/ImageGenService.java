@@ -191,15 +191,14 @@ public final class ImageGenService extends Service {
     }
 
     private void startRuntime(File backendRoot,String launchMode,String requestedComfyUrl) throws Exception {
-        if (!backendRoot.isDirectory()) throw new IllegalStateException("Wayward ImageGen 백엔드 폴더를 찾지 못했습니다.");
+        if (!backendRoot.isDirectory()) throw new IllegalStateException("런처 내장 ImageGen 백엔드 폴더가 없습니다.");
         if (!"default".equals(launchMode) && !"novelai".equals(launchMode) && !"comfy".equals(launchMode)) {
             throw new IllegalArgumentException("지원하지 않는 이미지 서버 실행 모드입니다.");
         }
         String comfyUrl = "comfy".equals(launchMode) ? ComfyEndpoint.normalizeOptional(requestedComfyUrl) : "";
         File project = new File(backendRoot, "wayward-imagegen");
-        if (!new File(project, "package.json").isFile()) project = backendRoot;
         if (!new File(project, "package.json").isFile() || !new File(project, "src/cli.ts").isFile()) {
-            throw new IllegalStateException("wayward-imagegen/package.json 또는 src/cli.ts가 없습니다.");
+            throw new IllegalStateException("런처 내장 wayward-imagegen/package.json 또는 src/cli.ts가 없습니다.");
         }
 
         if (probeHealth()) {
@@ -214,49 +213,40 @@ public final class ImageGenService extends Service {
         File logParent = log.getParentFile();
         if (logParent != null && !logParent.exists()) logParent.mkdirs();
 
-        File nodeModules = new File(project, "node_modules");
-        if (!nodeModules.isDirectory()) {
-            updateNotification("ImageGen 종속 패키지 설치 중");
-            ProcessBuilder installCommand = new ProcessBuilder(bun.getAbsolutePath(), "install").directory(project);
-            // The EasyGen launch wrapper follows the documented full bun install path.
-            // Existing Image Studio runs keep the production-only install behavior.
-            if (!"novelai".equals(launchMode)) installCommand.command().add("--production");
-            int install = runCommand(installCommand, log, 15, TimeUnit.MINUTES);
-            if (install != 0) throw new IllegalStateException("Bun 종속 패키지 설치 실패(exit " + install + "). 로그: " + log.getAbsolutePath());
+        // The pinned 0.8.4 package has only an optional sharp dependency for
+        // WebP conversion. Android runs with --no-webp and stores PNG, so no
+        // package-manager install or platform-specific native addon is needed.
+        File config = new File(project, "wayward-imagegen.config.json");
+        if (!config.isFile() || config.length() == 0) {
+            throw new IllegalStateException("런처 ImageGen 실행 설정 파일을 만들지 못했습니다.");
         }
 
         java.util.List<String> command = new java.util.ArrayList<>();
         command.add(bun.getAbsolutePath());
-        File workingDirectory = project;
-        if ("novelai".equals(launchMode)) {
-            File launch = new File(backendRoot, "launch.mjs");
-            if (!launch.isFile() || launch.length() == 0) {
-                throw new IllegalStateException("EasyGen server/launch.mjs가 없거나 비어 있습니다.");
-            }
-            command.add(launch.getAbsolutePath());
-            workingDirectory = backendRoot;
-        } else {
-            command.add("src/cli.ts");
-            if ("comfy".equals(launchMode)) {
-                File config = new File(backendRoot, "wayward-imagegen.config.json");
-                if (!config.isFile()) config = new File(project, "wayward-imagegen.config.json");
-                if (config.isFile() && config.length() > 0) {
-                    command.add("--config");
-                    command.add(config.getAbsolutePath());
-                }
-                if (!comfyUrl.isEmpty()) {
-                    command.add("--comfy-url");
-                    command.add(comfyUrl);
-                }
-            }
+        command.add("src/cli.ts");
+        command.add("--config");
+        command.add(config.getAbsolutePath());
+        command.add("--no-webp");
+        if ("comfy".equals(launchMode) && !comfyUrl.isEmpty()) {
+            command.add("--comfy-url");
+            command.add(comfyUrl);
         }
 
-        updateNotification("comfy".equals(launchMode) && comfyUrl.isEmpty() ? "ComfyUI 주소 대기 중 · 로컬 서버 시작" : "이미지 생성 서버 시작 중 · 127.0.0.1:8189");
-        ProcessBuilder builder = new ProcessBuilder(command).directory(workingDirectory).redirectErrorStream(true)
+        updateNotification("comfy".equals(launchMode) && comfyUrl.isEmpty()
+                ? "ComfyUI 주소 대기 중 · 로컬 서버 시작"
+                : "이미지 생성 서버 시작 중 · 127.0.0.1:8189");
+        ProcessBuilder builder = new ProcessBuilder(command).directory(project).redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.appendTo(log));
         builder.environment().put("HOME", getFilesDir().getAbsolutePath());
         builder.environment().put("TMPDIR", getCacheDir().getAbsolutePath());
         builder.environment().put("BUN_INSTALL", new File(getFilesDir(), "bun-install").getAbsolutePath());
+        if ("novelai".equals(launchMode)) {
+            String token = ImageProviderStore.readNovelAiToken(this);
+            if (token == null || token.trim().isEmpty()) {
+                throw new IllegalStateException("NovelAI API 토큰이 등록되지 않았습니다. 이미지 서비스 관리에서 토큰을 저장해 주세요.");
+            }
+            builder.environment().put("NAI_TOKEN", token);
+        }
         serverProcess = startProcess(builder);
         DiagnosticsLogger.event(this,"INFO","imagegen_service","bun_server_process_started",null);
 
