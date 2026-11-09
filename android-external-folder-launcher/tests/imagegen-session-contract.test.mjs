@@ -21,14 +21,12 @@ assert.match(main, /String imageStudioBackendVersion\(\)/,
   "Image Studio ID and backend entrypoints must be detected in that session");
 assert.match(main, /wml\/mods\/imagestudio\/backend\/wayward-imagegen\/package\.json/,
   "the active session's nested backend layout must be recognized");
-assert.match(main, /zipMods\.extractDirectory\("imagestudio",\s*"backend"/,
-  "Image Studio backend must be extractable from the launcher's app-private ZIP overlay");
-assert.match(main, /imageStudioZipBackendVersion\(\)/,
-  "Image Studio ZIP backend metadata must be detected when the SAF folder has no usable backend");
-assert.match(main, /zipMods\.open\(layout\[0\]\)/,
-  "Image Studio ZIP package metadata must be read from the active ZIP overlay");
-assert.match(main, /zipMods\.open\(layout\[1\]\)/,
-  "Image Studio ZIP CLI entrypoint must be verified in the active ZIP overlay");
+assert.doesNotMatch(main, /ZipModStore|zipMods|imageStudioZipBackendVersion|PICK_MOD_ZIP/,
+  "launcher must not retain a global app-private ZIP overlay");
+assert.match(main, /private boolean ensureImageGenBackend\(SafTree sessionTree\)/,
+  "Image Studio backend is copied only from the selected game folder");
+assert.match(main, /sessionTree\.copyDirectory\("wml\/mods\/imagestudio\/backend", backend\)/,
+  "Image Studio backend must come from that session's WML folder");
 assert.match(main, /wml\/mods\/imagestudio\/backend\/wayward-imagegen\/package\.json/,
   "nested Image Studio ZIP backend layouts must be recognized");
 assert.doesNotMatch(main, /for \(GameProfile profile : profiles\)/,
@@ -50,6 +48,18 @@ assert.ok(runtimeStartup.indexOf("if (serverProcess == null || !serverProcess.is
   "the spawned ImageGen process must be alive before health can mark it ready");
 assert.match(service, /heartbeat\.scheduleAtFixedRate/,
   "service liveness must be published while install/start work is running");
+assert.match(service, /ACTION_RESTART/,
+  "the foreground service must support an explicit restart command");
+assert.match(main, /imageGenStatusMonitorRunnable[\s\S]*?postDelayed\(this, 2000L\)/,
+  "launcher home must refresh server state every two seconds");
+assert.match(main, /probeImageGenHealth\(\)/,
+  "launcher must actively probe the ImageGen Health endpoint");
+assert.match(main, /imageGenStartButton[\s\S]*?imageGenRestartButton[\s\S]*?imageGenStopButton/,
+  "launcher must expose start, restart, and stop controls");
+assert.doesNotMatch(main, /launcher-mobile-companions|BUILTIN_COMPANIONS|launcher-companions-mobile-ui/,
+  "the built-in Companion mobile real-time panel must be removed");
+assert.match(main, /new WebFileChooser\(this\)/,
+  "the in-game WML file picker must remain available after removing the app ZIP menu");
 assert.match(proxy, /127\.0\.0\.1:8189/,
   "all session WebViews must target the one shared loopback server");
 

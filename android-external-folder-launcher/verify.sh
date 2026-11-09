@@ -10,10 +10,8 @@ fi
 git -C "$REPO_ROOT" diff --check "$DIFF_BASE" HEAD
 node --check app/src/main/assets/wml-folder-bootstrap.js
 node --check app/src/main/assets/imagegen-proxy.js
-node --check app/src/main/assets/launcher-companions-mobile-ui.js
 node tests/imagegen-proxy.test.mjs
 node tests/wml-folder-bootstrap.test.mjs
-node tests/companions-mobile-ui.test.mjs
 node tests/web-file-chooser-contract.test.mjs
 node tests/imagegen-session-contract.test.mjs
 node tests/image-resource-performance.test.mjs
@@ -27,12 +25,10 @@ node --check diagnostics-vercel/api/v1/read.js
 node --check diagnostics-vercel/api/v1/cleanup.js
 node --check diagnostics-vercel/lib/cleanup.js
 node --check diagnostics-vercel/lib/cleanup-core.js
-ZIP_TEST_BUILD="$(mktemp -d)"
-trap 'rm -rf "$ZIP_TEST_BUILD"' EXIT
-javac -d "$ZIP_TEST_BUILD" app/src/main/java/com/wayward/launcher/ZipModStore.java tests/ZipModStoreTest.java
-java -cp "$ZIP_TEST_BUILD" com.wayward.launcher.ZipModStoreTest
-javac -d "$ZIP_TEST_BUILD" app/src/main/java/com/wayward/launcher/ImageGenStatusStore.java tests/ImageGenStatusStoreTest.java
-java -cp "$ZIP_TEST_BUILD" com.wayward.launcher.ImageGenStatusStoreTest
+STATUS_TEST_BUILD="$(mktemp -d)"
+trap 'rm -rf "$STATUS_TEST_BUILD"' EXIT
+javac -d "$STATUS_TEST_BUILD" app/src/main/java/com/wayward/launcher/ImageGenStatusStore.java tests/ImageGenStatusStoreTest.java
+java -cp "$STATUS_TEST_BUILD" com.wayward.launcher.ImageGenStatusStoreTest
 test -s ../Wayward_WML_ko.html
 gradle --no-daemon assembleDebug
 test -s app/build/outputs/apk/debug/app-debug.apk

@@ -1,7 +1,7 @@
 package com.wayward.launcher;
 
 import android.app.Activity;
-import android.content.ClipData;
+import android.app.AlertDialog;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.database.Cursor;
@@ -13,7 +13,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
-import android.provider.OpenableColumns;
 import android.view.View;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
@@ -40,6 +39,8 @@ import java.io.InputStream;
 import java.io.SequenceInputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -48,33 +49,35 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class MainActivity extends Activity {
-    private static final int PICK_TREE=4101, PICK_MOD_ZIP=4102;
+    private static final int PICK_TREE=4101;
     private static final String PREFS="wayward_launcher";
-    private static final String KEY_TREE="game_tree_uri", KEY_PROFILES="game_profiles", KEY_ZIP_REV="zip_mod_revision";
+    private static final String KEY_TREE="game_tree_uri", KEY_PROFILES="game_profiles";
     private static final String KO="Wayward_WML_ko.html", EN="Wayward_WML.html";
-    private static final String BUILTIN_COMPANIONS_MOD_ID = "launcher-mobile-companions";
-    private static final String BUILTIN_COMPANIONS_MOD_FILE = "wml/mods/" + BUILTIN_COMPANIONS_MOD_ID + "/mod.js";
     private static final Pattern ID=Pattern.compile("^[a-z0-9][a-z0-9._-]*$");
     private static final Set<String> RUNNING_SESSIONS=Collections.synchronizedSet(new HashSet<>());
     private static final Pattern MOD_ID=Pattern.compile("(?:\\bid\\s*:\\s*|[\\\"']id[\\\"']\\s*:\\s*)[\\\"']([a-z0-9][a-z0-9._-]*)[\\\"']");
     private Uri treeUri;
     private SafTree tree;
-    private ZipModStore zipMods;
     private final List<GameProfile> profiles=new ArrayList<>();
     private String activeProfileId="";
-    private long loadedZipRevision=-1;
     private FrameLayout root;
-    private LinearLayout home, profileList, zipModList;
-    private TextView status, folderText, profileSummary, zipSummary, imageGenStatus;
+    private LinearLayout home, profileList;
+    private TextView status, folderText, profileSummary, imageGenStatus;
+    private Button imageGenStartButton, imageGenRestartButton, imageGenStopButton;
     private String imageGenSessionMessage = "";
     private static volatile boolean imageGenCopying = false;
     private final Handler imageGenHandler = new Handler(Looper.getMainLooper());
     private final List<Runnable> imageGenReadyCallbacks = new ArrayList<>();
     private Runnable imageGenPollRunnable;
+    private Runnable imageGenStatusMonitorRunnable;
+    private final AtomicBoolean imageGenHealthProbeInFlight = new AtomicBoolean(false);
+    private volatile boolean imageGenHealthResponding = false;
+    private volatile boolean imageGenHealthProbeComplete = false;
     private boolean pendingGameLoad = false;
     private WebView web;
     private WebFileChooser webFileChooser;
@@ -83,7 +86,6 @@ public final class MainActivity extends Activity {
         super.onCreate(b);
         DiagnosticsLogger.event(this,"INFO","launcher","activity_create",null);
         DiagnosticsUploader.uploadPending(this);
-        zipMods=new ZipModStore(getFilesDir());
         loadProfiles();
         showHome();
         String sessionId=sessionProfileId(getIntent());
@@ -95,9 +97,16 @@ public final class MainActivity extends Activity {
         DiagnosticsLogger.event(this,"INFO","launcher","activity_resume",null);
         DiagnosticsUploader.uploadPending(this);
         loadProfiles();
-        long revision=getSharedPreferences(PREFS,MODE_PRIVATE).getLong(KEY_ZIP_REV,0);
-        if(web!=null&&revision!=loadedZipRevision){loadedZipRevision=revision;web.reload();}
-        if(home!=null&&home.getVisibility()==View.VISIBLE){renderProfiles();renderZipMods();refreshStatus();refreshImageGenStatus();}
+        if(home!=null&&home.getVisibility()==View.VISIBLE){
+            renderProfiles();
+            refreshStatus();
+            refreshImageGenStatus();
+            startImageGenStatusMonitor();
+        }
+    }
+    @Override protected void onPause(){
+        stopImageGenStatusMonitor();
+        super.onPause();
     }
     @Override protected void onNewIntent(Intent intent){
         super.onNewIntent(intent);setIntent(intent);
@@ -128,7 +137,7 @@ public final class MainActivity extends Activity {
         TextView title=new TextView(this);title.setText("WAYWARD");title.setTextColor(Color.WHITE);title.setTextSize(29);title.setTypeface(null,1);page.addView(title);
         TextView desc=new TextView(this);desc.setText("게임 폴더 여러 개를 등록해 각각 독립된 실행 세션으로 엽니다.");desc.setTextColor(Color.rgb(174,194,181));desc.setTextSize(14);
         LinearLayout.LayoutParams dl=new LinearLayout.LayoutParams(-1,-2);dl.topMargin=dp(4);dl.bottomMargin=dp(18);page.addView(desc,dl);
-        TextView detail=new TextView(this);detail.setText("게임 원본 폴더는 직접 읽기만 합니다. ZIP 모드는 압축을 풀지 않고 앱 내부 저장소에 보관한 뒤 WML 경로로 가상 제공됩니다.");detail.setTextColor(Color.rgb(214,224,217));detail.setTextSize(14);detail.setLineSpacing(dp(3),1f);page.addView(detail);
+        TextView detail=new TextView(this);detail.setText("게임 원본 폴더는 직접 읽기만 합니다. 모드 ZIP은 각 게임 안의 WML 모드 관리자에서 선택해 설치합니다.");detail.setTextColor(Color.rgb(214,224,217));detail.setTextSize(14);detail.setLineSpacing(dp(3),1f);page.addView(detail);
         status=new TextView(this);status.setTextColor(Color.rgb(245,210,130));status.setTextSize(13);status.setPadding(dp(13),dp(12),dp(13),dp(12));status.setBackgroundColor(Color.rgb(35,48,40));
         LinearLayout.LayoutParams sl=new LinearLayout.LayoutParams(-1,-2);sl.topMargin=dp(16);sl.bottomMargin=dp(8);page.addView(status,sl);
         folderText=new TextView(this);folderText.setTextColor(Color.rgb(160,180,166));folderText.setTextSize(12);LinearLayout.LayoutParams fl=new LinearLayout.LayoutParams(-1,-2);fl.bottomMargin=dp(12);page.addView(folderText,fl);
@@ -139,23 +148,31 @@ public final class MainActivity extends Activity {
         profileSummary=new TextView(this);profileSummary.setTextColor(Color.rgb(160,180,166));profileSummary.setTextSize(12);page.addView(profileSummary);
         profileList=new LinearLayout(this);profileList.setOrientation(LinearLayout.VERTICAL);LinearLayout.LayoutParams pl=new LinearLayout.LayoutParams(-1,-2);pl.topMargin=dp(7);page.addView(profileList,pl);
 
-        TextView ztitle=new TextView(this);ztitle.setText("앱 전용 ZIP 모드");ztitle.setTextColor(Color.WHITE);ztitle.setTextSize(16);ztitle.setTypeface(null,1);
-        LinearLayout.LayoutParams ztl=new LinearLayout.LayoutParams(-1,-2);ztl.topMargin=dp(24);ztl.bottomMargin=dp(7);page.addView(ztitle,ztl);
-        page.addView(button("모드 ZIP 설치 · 압축 해제 없이 앱에만 저장",false,this::chooseModZip),buttonParams());
-        zipSummary=new TextView(this);zipSummary.setTextColor(Color.rgb(160,180,166));zipSummary.setTextSize(12);LinearLayout.LayoutParams zsl=new LinearLayout.LayoutParams(-1,-2);zsl.topMargin=dp(7);page.addView(zipSummary,zsl);
-        zipModList=new LinearLayout(this);zipModList.setOrientation(LinearLayout.VERTICAL);LinearLayout.LayoutParams zpl=new LinearLayout.LayoutParams(-1,-2);zpl.topMargin=dp(6);page.addView(zipModList,zpl);
-
         TextView imageTitle=new TextView(this);imageTitle.setText("이미지 생성 · Image Studio");imageTitle.setTextColor(Color.WHITE);imageTitle.setTextSize(16);imageTitle.setTypeface(null,1);
         LinearLayout.LayoutParams imageTitleParams=new LinearLayout.LayoutParams(-1,-2);imageTitleParams.topMargin=dp(24);imageTitleParams.bottomMargin=dp(7);page.addView(imageTitle,imageTitleParams);
         TextView imageDesc=new TextView(this);imageDesc.setText("각 게임 세션의 wml/mods 안에 설치된 Image Studio 모드를 자동 감지합니다. 백엔드는 런처 공통 서버로 실행되어 같은 버전의 여러 세션이 함께 사용할 수 있습니다.");imageDesc.setTextColor(Color.rgb(174,194,181));imageDesc.setTextSize(12);imageDesc.setLineSpacing(dp(2),1f);page.addView(imageDesc);
         imageGenStatus=new TextView(this);imageGenStatus.setTextColor(Color.rgb(245,210,130));imageGenStatus.setTextSize(12);imageGenStatus.setPadding(dp(10),dp(9),dp(10),dp(9));imageGenStatus.setBackgroundColor(Color.rgb(35,48,40));
         LinearLayout.LayoutParams imageStatusParams=new LinearLayout.LayoutParams(-1,-2);imageStatusParams.topMargin=dp(8);imageStatusParams.bottomMargin=dp(7);page.addView(imageGenStatus,imageStatusParams);
-        page.addView(button("이미지 생성 서버 중지",false,this::stopImageGenServer),buttonParams());
+        LinearLayout imageGenControls=new LinearLayout(this);
+        imageGenControls.setOrientation(LinearLayout.HORIZONTAL);
+        imageGenStartButton=compactButton("서버 시작",true,this::startImageGenServerManually);
+        imageGenRestartButton=compactButton("재시작",false,this::restartImageGenServerManually);
+        imageGenStopButton=compactButton("서버 중지",false,this::stopImageGenServer);
+        LinearLayout.LayoutParams imageControlButtonParams=new LinearLayout.LayoutParams(0,dp(46),1f);
+        imageControlButtonParams.rightMargin=dp(5);
+        imageGenControls.addView(imageGenStartButton,imageControlButtonParams);
+        LinearLayout.LayoutParams restartParams=new LinearLayout.LayoutParams(0,dp(46),1f);
+        restartParams.rightMargin=dp(5);
+        imageGenControls.addView(imageGenRestartButton,restartParams);
+        imageGenControls.addView(imageGenStopButton,new LinearLayout.LayoutParams(0,dp(46),1f));
+        LinearLayout.LayoutParams imageControlsParams=new LinearLayout.LayoutParams(-1,-2);
+        imageControlsParams.topMargin=dp(3);
+        page.addView(imageGenControls,imageControlsParams);
 
-        TextView help=new TextView(this);help.setText("ZIP 설치 위치: 이 앱의 비공개 files 저장소\n게임 폴더에는 ZIP이나 압축 해제 파일을 쓰지 않습니다. 설치한 모드는 등록된 게임 세션에서 공통으로 사용할 수 있으며, 모드 활성화/순서는 각 게임 세션의 브라우저 저장소에 따로 보관됩니다.");
+        TextView help=new TextView(this);help.setText("모드 ZIP 파일은 게임 안 WML 모드 관리자의 '모드 파일 고르기'로 선택합니다. 모드 설치와 활성화 상태는 각 게임 세션에서 관리됩니다. 런처 공용 ZIP 모드 저장소와 내장 동료 모바일 실시간 창은 제공하지 않습니다.");
         help.setTextColor(Color.rgb(151,171,158));help.setTextSize(12);help.setLineSpacing(dp(3),1f);LinearLayout.LayoutParams hl=new LinearLayout.LayoutParams(-1,-2);hl.topMargin=dp(18);page.addView(help,hl);
         home=page;root.addView(scroll,new FrameLayout.LayoutParams(-1,-1));setContentView(root);
-        renderProfiles();renderZipMods();refreshImageGenStatus();
+        renderProfiles();refreshImageGenStatus();startImageGenStatusMonitor();
     }
 
     private Button compactButton(String label,boolean primary,Runnable action){
@@ -171,13 +188,6 @@ public final class MainActivity extends Activity {
         else if(!profiles.isEmpty())try{i.putExtra(DocumentsContract.EXTRA_INITIAL_URI,Uri.parse(profiles.get(profiles.size()-1).uri));}catch(Exception ignored){}
         DiagnosticsLogger.event(this,"INFO","launcher","folder_picker_opened",null);
         startActivityForResult(i,PICK_TREE);
-    }
-
-    private void chooseModZip(){
-        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);
-        i.setType("*/*");i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/zip","application/x-zip-compressed","application/octet-stream"});i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
-        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        startActivityForResult(i,PICK_MOD_ZIP);
     }
 
     @Override protected void onActivityResult(int req,int result,Intent data){
@@ -202,73 +212,14 @@ public final class MainActivity extends Activity {
                     profiles.add(profile);
                 }
                 activeProfileId=profile.id;treeUri=picked;tree=new SafTree(picked);saveProfiles();
-                refreshStatus();renderProfiles();renderZipMods();
+                refreshStatus();renderProfiles();
                 DiagnosticsLogger.event(this,"INFO","launcher","game_folder_registered",null);
                 Toast.makeText(this,"게임 폴더를 등록했습니다. 목록에서 실행할 수 있습니다.",Toast.LENGTH_LONG).show();
             }catch(Exception e){DiagnosticsLogger.error(this,"launcher","folder_permission_failed",e);status("폴더 권한 저장 실패: "+msg(e));}
             return;
         }
-        if(req==PICK_MOD_ZIP){
-            if(result!=RESULT_OK||data==null)return;
-            List<Uri> selected=collectSelectedUris(data);
-            if(!selected.isEmpty())installModZips(selected);
-        }
-    }
 
-    private List<Uri> collectSelectedUris(Intent data){
-        List<Uri> selected=new ArrayList<>();
-        ClipData clip=data.getClipData();
-        if(clip!=null)for(int i=0;i<clip.getItemCount();i++){
-            Uri uri=clip.getItemAt(i).getUri();
-            if(uri!=null&&!selected.contains(uri))selected.add(uri);
-        }
-        Uri single=data.getData();
-        if(single!=null&&!selected.contains(single))selected.add(single);
-        return selected;
     }
-
-    private String displayName(Uri uri){
-        try(Cursor c=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){
-            if(c!=null&&c.moveToFirst())return c.getString(0);
-        }catch(Exception ignored){}
-        return "mod.zip";
-    }
-
-    private String installModZip(Uri uri)throws Exception{
-        File staged=zipMods.temporaryFile(UUID.randomUUID().toString());
-        try{
-            String name=displayName(uri);
-            if(name==null||!name.toLowerCase(Locale.ROOT).endsWith(".zip"))throw new IllegalArgumentException("확장자가 .zip인 모드 파일을 선택해 주세요.");
-            try(InputStream in=getContentResolver().openInputStream(uri);FileOutputStream out=new FileOutputStream(staged)){
-                if(in==null)throw new IllegalStateException("선택한 ZIP 파일을 열 수 없습니다.");
-                byte[] buffer=new byte[32768];long total=0;int n;
-                while((n=in.read(buffer))!=-1){total+=n;if(total>512L*1024L*1024L)throw new IllegalArgumentException("ZIP은 최대 512MB까지만 설치할 수 있습니다.");out.write(buffer,0,n);}
-                out.flush();
-            }
-            ZipModStore.ModInfo info=ZipModStore.inspect(staged);
-            zipMods.install(staged);
-            return info.id;
-        }finally{if(staged.exists())staged.delete();}
-    }
-
-    private void installModZips(List<Uri> sources){
-        status("ZIP 모드를 앱 내부 저장소에 설치하고 있습니다...");
-        new Thread(()->{
-            List<String> installed=new ArrayList<>(),failed=new ArrayList<>();
-            for(Uri uri:sources)try{installed.add(installModZip(uri));}catch(Exception e){failed.add(displayName(uri)+": "+msg(e));}
-            runOnUiThread(()->{
-                if(!installed.isEmpty()){
-                    bumpZipRevision();renderZipMods();refreshStatus();
-                    if(web!=null){loadedZipRevision=getZipRevision();web.reload();}
-                }else refreshStatus();
-                String report="ZIP 설치 "+installed.size()+"개 완료"+(failed.isEmpty()?"":" · 실패 "+failed.size()+"개: "+failed.get(0));
-                Toast.makeText(this,report,Toast.LENGTH_LONG).show();
-            });
-        },"wml-zip-installer").start();
-    }
-
-    private long getZipRevision(){return getSharedPreferences(PREFS,MODE_PRIVATE).getLong(KEY_ZIP_REV,0);}
-    private void bumpZipRevision(){getSharedPreferences(PREFS,MODE_PRIVATE).edit().putLong(KEY_ZIP_REV,getZipRevision()+1).apply();}
 
     private void loadProfiles(){
         profiles.clear();
@@ -330,7 +281,6 @@ public final class MainActivity extends Activity {
             setTitle("Wayward · "+p.label);
             RUNNING_SESSIONS.add(p.id);
             if(home!=null)home.setVisibility(View.VISIBLE);
-            loadedZipRevision=getZipRevision();
             createWeb();
             web.setVisibility(View.GONE);
             String gameUrl=sessionOrigin(activeProfileId)+"/game/"+Uri.encode(file)+"?launcher="+System.currentTimeMillis();
@@ -381,25 +331,6 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private void renderZipMods(){
-        if(zipModList==null||zipMods==null)return;zipModList.removeAllViews();
-        List<String> ids=zipMods.listModIds();
-        if(zipSummary!=null)zipSummary.setText("앱 전용 ZIP 모드 "+ids.size()+"개 · 게임 폴더에는 파일을 풀거나 쓰지 않습니다.");
-        if(ids.isEmpty()){
-            TextView empty=new TextView(this);empty.setText("아직 설치된 ZIP 모드가 없습니다.");empty.setTextColor(Color.rgb(151,171,158));empty.setTextSize(12);zipModList.addView(empty);return;
-        }
-        for(String id:ids){
-            LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            TextView label=new TextView(this);label.setText(id);label.setTextColor(Color.rgb(214,224,217));label.setTextSize(13);
-            row.addView(label,new LinearLayout.LayoutParams(0,dp(44),1f));
-            Button remove=compactButton("ZIP 제거",false,()->{
-                if(zipMods.uninstall(id)){bumpZipRevision();renderZipMods();refreshStatus();if(web!=null){loadedZipRevision=getZipRevision();web.reload();}}
-                else Toast.makeText(this,"ZIP 모드를 제거하지 못했습니다.",Toast.LENGTH_SHORT).show();
-            });
-            row.addView(remove,new LinearLayout.LayoutParams(dp(100),dp(44)));zipModList.addView(row);
-        }
-    }
-
     private String gameFile(){
         if(tree==null)return null;
         if(tree.exists(KO))return KO;if(tree.exists(EN))return EN;if(tree.exists("index.html"))return "index.html";
@@ -413,13 +344,11 @@ public final class MainActivity extends Activity {
     private List<String> allModIds(){
         Set<String> ids=new TreeSet<>();
         if(tree!=null)try{ids.addAll(tree.listModIds());}catch(Exception ignored){}
-        if(zipMods!=null)ids.addAll(zipMods.listModIds());
-        ids.add(BUILTIN_COMPANIONS_MOD_ID);
         return new ArrayList<>(ids);
     }
     private void refreshStatus(){
         if(tree==null){
-            status("등록된 게임 폴더 "+profiles.size()+"개 · 앱 전용 ZIP 모드 "+(zipMods==null?0:zipMods.listModIds().size())+"개");
+            status("등록된 게임 폴더 "+profiles.size()+"개");
             if(folderText!=null)folderText.setText("");return;
         }
         try{
@@ -427,7 +356,7 @@ public final class MainActivity extends Activity {
             if(folderText!=null)folderText.setText("선택 폴더: "+tree.rootName()+"\n실행 파일: "+(f==null?"없음":f));
         }catch(Exception e){status("폴더를 읽을 수 없습니다. "+msg(e));}
     }
-    private void refreshGame(){if(web!=null&&web.getVisibility()==View.VISIBLE){if(tree!=null)tree.invalidateDirectoryIndex();web.clearCache(true);web.reload();Toast.makeText(this,"게임과 앱 전용 ZIP 모드 및 이미지 캐시를 새로 읽습니다.",Toast.LENGTH_SHORT).show();}else refreshStatus();}
+    private void refreshGame(){if(web!=null&&web.getVisibility()==View.VISIBLE){if(tree!=null)tree.invalidateDirectoryIndex();web.clearCache(true);web.reload();Toast.makeText(this,"게임과 이미지 캐시를 새로 읽습니다.",Toast.LENGTH_SHORT).show();}else refreshStatus();}
 
     private void createWeb(){
         String domain=sessionDomain(activeProfileId);
@@ -435,7 +364,7 @@ public final class MainActivity extends Activity {
         int originPort=sessionPort(activeProfileId);
         web=new WebView(this);WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setDatabaseEnabled(true);s.setUseWideViewPort(true);s.setLoadWithOverviewMode(true);s.setTextZoom(100);s.setSupportZoom(true);s.setBuiltInZoomControls(false);s.setDisplayZoomControls(false);s.setAllowFileAccess(false);s.setAllowContentAccess(false);s.setCacheMode(WebSettings.LOAD_DEFAULT);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);web.addJavascriptInterface(new HostBridge(),"WMLHost");
         installImageGenDocumentStartScript(origin);
-        FolderHandler folderHandler=new FolderHandler(tree,getAssets(),zipMods,origin);
+        FolderHandler folderHandler=new FolderHandler(tree,getAssets(),origin);
         WebViewAssetLoader loader=new WebViewAssetLoader.Builder().setDomain(domain+":"+originPort).addPathHandler("/game/",folderHandler).build();
         final java.util.concurrent.atomic.AtomicInteger imageDiagnostics=new java.util.concurrent.atomic.AtomicInteger();
         web.setWebViewClient(new WebViewClient(){
@@ -574,52 +503,15 @@ public final class MainActivity extends Activity {
         return new File(getFilesDir(), "imagegen/backend");
     }
 
-    private boolean ensureImageGenBackend(SafTree sessionTree, boolean fromZip) throws Exception {
+    private boolean ensureImageGenBackend(SafTree sessionTree) throws Exception {
         File backend = imageGenBackendRoot();
         deleteFileTree(backend);
-        boolean copied = fromZip
-                ? zipMods != null && zipMods.extractDirectory("imagestudio", "backend", backend)
-                : sessionTree != null && sessionTree.copyDirectory("wml/mods/imagestudio/backend", backend);
+        boolean copied = sessionTree != null
+                && sessionTree.copyDirectory("wml/mods/imagestudio/backend", backend);
         if (!copied) return false;
         if (hasImageGenProject(backend)) return true;
         deleteFileTree(backend);
         return false;
-    }
-
-    private String imageStudioZipBackendVersion() throws Exception {
-        if (zipMods == null || !zipMods.listModIds().contains("imagestudio")) return null;
-        String[][] layouts = {
-                {"wml/mods/imagestudio/backend/wayward-imagegen/package.json",
-                        "wml/mods/imagestudio/backend/wayward-imagegen/src/cli.ts"},
-                {"wml/mods/imagestudio/backend/package.json",
-                        "wml/mods/imagestudio/backend/src/cli.ts"}
-        };
-        for (String[] layout : layouts) {
-            try (InputStream packageInput = zipMods.open(layout[0]);
-                 InputStream cliInput = zipMods.open(layout[1])) {
-                if (packageInput == null || cliInput == null) continue;
-                ByteArrayOutputStream output = new ByteArrayOutputStream();
-                byte[] buffer = new byte[4096];
-                int count;
-                while ((count = packageInput.read(buffer)) >= 0) {
-                    if (count == 0) continue;
-                    if (output.size() + count > 65536) {
-                        throw new IllegalStateException("Image Studio ZIP package.json가 64KB를 초과합니다.");
-                    }
-                    output.write(buffer, 0, count);
-                }
-                JSONObject metadata = new JSONObject(output.toString(StandardCharsets.UTF_8.name()));
-                String version = metadata.optString("version", "unknown").trim();
-                return version.isEmpty() ? "unknown" : version;
-            }
-        }
-        return "";
-    }
-
-    private boolean hasImageGenProject(File backend) {
-        File nested = new File(backend, "wayward-imagegen");
-        File project = new File(nested, "src/cli.ts").isFile() ? nested : backend;
-        return new File(project, "package.json").isFile() && new File(project, "src/cli.ts").isFile();
     }
 
     private void ensureImageGenServer(SafTree sessionTree, Runnable afterReady) {
@@ -637,21 +529,8 @@ public final class MainActivity extends Activity {
         }
 
         final String version;
-        final boolean fromZipBackend;
         try {
             String detected = sessionTree.imageStudioBackendVersion();
-            boolean zipBackend = false;
-            if (detected == null || detected.isEmpty()) {
-                String zipVersion = imageStudioZipBackendVersion();
-                if (zipVersion != null) {
-                    if (!zipVersion.isEmpty()) {
-                        detected = zipVersion;
-                        zipBackend = true;
-                    } else if (detected == null) {
-                        detected = "";
-                    }
-                }
-            }
             if (detected == null) {
                 imageGenSessionMessage = "현재 세션의 WML Image Studio 모드가 없어 이미지 서버를 시작하지 않았습니다.";
                 refreshImageGenStatus();
@@ -659,13 +538,12 @@ public final class MainActivity extends Activity {
                 return;
             }
             if (detected.isEmpty()) {
-                imageGenSessionMessage = "Image Studio 모드는 감지했지만 폴더/ZIP에서 backend/wayward-imagegen 또는 src/cli.ts를 찾지 못했습니다.";
+                imageGenSessionMessage = "Image Studio 모드는 감지했지만 현재 게임 폴더의 backend/wayward-imagegen 또는 src/cli.ts를 찾지 못했습니다.";
                 refreshImageGenStatus();
                 finishImageGenCallbacks();
                 return;
             }
             version = detected;
-            fromZipBackend = zipBackend;
         } catch (Exception e) {
             imageGenSessionMessage = "현재 세션의 Image Studio 모드 검사 실패: " + msg(e);
             refreshImageGenStatus();
@@ -713,7 +591,7 @@ public final class MainActivity extends Activity {
             File backend = imageGenBackendRoot();
             try {
                 synchronized (IMAGEGEN_LOCK) {
-                    if (!ensureImageGenBackend(sessionTree, fromZipBackend)) {
+                    if (!ensureImageGenBackend(sessionTree)) {
                         throw new IllegalStateException("현재 세션의 Image Studio 폴더/ZIP backend에서 wayward-imagegen을 찾지 못했습니다.");
                     }
                 }
@@ -799,6 +677,91 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void startImageGenServerManually() {
+        if (profiles.isEmpty()) {
+            imageGenSessionMessage = "먼저 게임 폴더를 등록해야 Image Studio 서버를 시작할 수 있습니다.";
+            refreshImageGenStatus();
+            return;
+        }
+        GameProfile active = findProfile(activeProfileId);
+        if (active != null && tree != null) {
+            try {
+                String version = tree.imageStudioBackendVersion();
+                if (version != null && !version.isEmpty()) {
+                    startImageGenForProfile(active, tree);
+                    return;
+                }
+            } catch (Exception ignored) {}
+        }
+        if (profiles.size() == 1) {
+            startImageGenForProfile(profiles.get(0), null);
+            return;
+        }
+        String[] labels = new String[profiles.size()];
+        for (int i = 0; i < profiles.size(); i++) labels[i] = profiles.get(i).label;
+        new AlertDialog.Builder(this)
+                .setTitle("Image Studio가 설치된 게임 선택")
+                .setItems(labels, (dialog, which) -> {
+                    if (which >= 0 && which < profiles.size()) {
+                        startImageGenForProfile(profiles.get(which), null);
+                    }
+                })
+                .setNegativeButton("취소", null)
+                .show();
+    }
+
+    private void startImageGenForProfile(GameProfile profile, SafTree activeTree) {
+        try {
+            SafTree selectedTree = activeTree != null ? activeTree : new SafTree(Uri.parse(profile.uri));
+            String version = selectedTree.imageStudioBackendVersion();
+            if (version == null) {
+                imageGenSessionMessage = profile.label + " 폴더에 Image Studio 모드가 없습니다.";
+                refreshImageGenStatus();
+                Toast.makeText(this, imageGenSessionMessage, Toast.LENGTH_LONG).show();
+                return;
+            }
+            if (version.isEmpty()) {
+                imageGenSessionMessage = profile.label + " 폴더에서 Image Studio 백엔드를 찾지 못했습니다.";
+                refreshImageGenStatus();
+                Toast.makeText(this, imageGenSessionMessage, Toast.LENGTH_LONG).show();
+                return;
+            }
+            imageGenSessionMessage = profile.label + " 세션의 Image Studio 서버를 수동으로 준비합니다.";
+            refreshImageGenStatus();
+            ensureImageGenServer(selectedTree, this::refreshImageGenStatus);
+        } catch (Exception error) {
+            imageGenSessionMessage = "Image Studio 확인 실패: " + msg(error);
+            refreshImageGenStatus();
+            Toast.makeText(this, imageGenSessionMessage, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void restartImageGenServerManually() {
+        ImageGenStatusStore.State state = ImageGenStatusStore.read(getFilesDir());
+        if (state.isStarting()) {
+            Toast.makeText(this, "서버 시작이 끝난 뒤 재시작할 수 있습니다.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        File backend = imageGenBackendRoot();
+        if (!hasImageGenProject(backend)) {
+            startImageGenServerManually();
+            return;
+        }
+        Intent intent = new Intent(this, ImageGenService.class)
+                .setAction(ImageGenService.ACTION_RESTART)
+                .putExtra(ImageGenService.EXTRA_BACKEND_ROOT, backend.getAbsolutePath())
+                .putExtra(ImageGenService.EXTRA_BACKEND_VERSION, state.backendVersion);
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
+            else startService(intent);
+            imageGenSessionMessage = "이미지 생성 서버 재시작을 요청했습니다.";
+            refreshImageGenStatus();
+        } catch (Throwable error) {
+            imageGenSessionMessage = "서버 재시작 요청 실패: " + msg(error);
+            refreshImageGenStatus();
+        }
+    }
+
     private void stopImageGenServer() {
         DiagnosticsLogger.event(this,"INFO","imagegen","stop_requested",null);
         Intent intent = new Intent(this, ImageGenService.class).setAction(ImageGenService.ACTION_STOP);
@@ -808,19 +771,103 @@ public final class MainActivity extends Activity {
             stopService(new Intent(this, ImageGenService.class));
         }
         imageGenSessionMessage = "이미지 생성 서버 중지 요청을 보냈습니다.";
-        if (imageGenStatus != null) imageGenStatus.setText(imageGenSessionMessage);
+        refreshImageGenStatus();
+    }
+
+    private void startImageGenStatusMonitor() {
+        if (imageGenStatusMonitorRunnable != null) return;
+        imageGenStatusMonitorRunnable = new Runnable() {
+            @Override public void run() {
+                if (home == null || home.getVisibility() != View.VISIBLE || isFinishing()) {
+                    imageGenStatusMonitorRunnable = null;
+                    return;
+                }
+                pollImageGenServerStatus();
+                imageGenHandler.postDelayed(this, 2000L);
+            }
+        };
+        imageGenHandler.post(imageGenStatusMonitorRunnable);
+    }
+
+    private void stopImageGenStatusMonitor() {
+        if (imageGenStatusMonitorRunnable == null) return;
+        imageGenHandler.removeCallbacks(imageGenStatusMonitorRunnable);
+        imageGenStatusMonitorRunnable = null;
+    }
+
+    private void pollImageGenServerStatus() {
+        refreshImageGenStatus();
+        if (!imageGenHealthProbeInFlight.compareAndSet(false, true)) return;
+        new Thread(() -> {
+            boolean responding = probeImageGenHealth();
+            runOnUiThread(() -> {
+                imageGenHealthResponding = responding;
+                imageGenHealthProbeComplete = true;
+                imageGenHealthProbeInFlight.set(false);
+                refreshImageGenStatus();
+            });
+        }, "wayward-imagegen-health-monitor").start();
+    }
+
+    private boolean probeImageGenHealth() {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL("http://127.0.0.1:8189/api/image/health").openConnection();
+            connection.setConnectTimeout(1000);
+            connection.setReadTimeout(1000);
+            connection.setUseCaches(false);
+            connection.setRequestMethod("GET");
+            int code = connection.getResponseCode();
+            return code >= 200 && code < 300;
+        } catch (Exception ignored) {
+            return false;
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
     }
 
     private void refreshImageGenStatus() {
         if (imageGenStatus == null) return;
         ImageGenStatusStore.State state = ImageGenStatusStore.read(getFilesDir());
-        if (state.isReady()) imageGenStatus.setText("연결됨 · 공통 이미지 생성 서버 127.0.0.1:8189 · Image Studio " + safeVersion(state.backendVersion));
-        else if (state.isStarting()) imageGenStatus.setText(state.message.isEmpty() ? "이미지 생성 서버 시작 중…" : state.message);
-        else if (imageGenCopying) imageGenStatus.setText("현재 세션 Image Studio 백엔드 준비 중…");
-        else if (state.ready && !state.isFresh()) imageGenStatus.setText("이미지 생성 서비스 heartbeat가 끊겼습니다. 현재 세션을 다시 열면 서버를 재시작합니다.");
-        else if (imageGenSessionMessage != null && !imageGenSessionMessage.isEmpty()) imageGenStatus.setText(imageGenSessionMessage);
-        else if (!state.message.isEmpty()) imageGenStatus.setText(state.message);
-        else imageGenStatus.setText("서버가 실행되지 않았습니다.");
+        boolean starting = state.isStarting() || imageGenCopying;
+        String label;
+        if (starting) {
+            label = state.message.isEmpty() ? "서버 시작 중…" : state.message;
+        } else if (state.isReady()) {
+            if (!imageGenHealthProbeComplete) label = "서버 실행 중 · Health API 확인 중…";
+            else if (imageGenHealthResponding) {
+                label = "실행 중 · Health 정상 · 127.0.0.1:8189 · Image Studio "
+                        + safeVersion(state.backendVersion) + " · 2초 간격 확인";
+            } else {
+                label = "실행 상태 보고됨 · Health API 응답 없음 · 재시작을 권장합니다.";
+            }
+        } else if (state.ready && !state.isFresh()) {
+            label = "서버 상태 heartbeat가 끊겼습니다. 재시작 또는 중지로 복구하세요.";
+        } else if (imageGenHealthProbeComplete && imageGenHealthResponding) {
+            label = "127.0.0.1:8189 응답 감지 · 런처 서비스 상태는 확인되지 않았습니다.";
+        } else if (state.message != null && !state.message.isEmpty()) {
+            label = state.message;
+        } else if (imageGenSessionMessage != null && !imageGenSessionMessage.isEmpty()) {
+            label = imageGenSessionMessage;
+        } else if (!imageGenHealthProbeComplete) {
+            label = "서버 상태 확인 중…";
+        } else {
+            label = "서버 중지됨 · 2초 간격 실시간 확인";
+        }
+        imageGenStatus.setText(label);
+
+        boolean stale = (state.ready || state.starting) && !state.isFresh();
+        boolean active = state.isReady() || state.isStarting()
+                || imageGenCopying || imageGenHealthResponding;
+        boolean cachedBackend = hasImageGenProject(imageGenBackendRoot());
+        // If the shared heartbeat is stale but we have a cached backend, prefer Restart.
+        // Keep Start available when no cached backend exists so the user can select a session again.
+        if (imageGenStartButton != null) imageGenStartButton.setEnabled(!active && (!stale || !cachedBackend));
+        if (imageGenRestartButton != null) {
+            imageGenRestartButton.setEnabled(!starting && cachedBackend
+                    && (state.ready || state.starting || imageGenHealthResponding || stale));
+        }
+        if (imageGenStopButton != null) imageGenStopButton.setEnabled(active || stale);
     }
 
     private static void deleteFileTree(File file) {
@@ -832,17 +879,23 @@ public final class MainActivity extends Activity {
         file.delete();
     }
 
-    private void showHomePanel(){runOnUiThread(()->{if(web!=null)web.setVisibility(View.GONE);if(home!=null)home.setVisibility(View.VISIBLE);refreshStatus();});}
+    private void showHomePanel(){runOnUiThread(()->{
+        if(web!=null)web.setVisibility(View.GONE);
+        if(home!=null)home.setVisibility(View.VISIBLE);
+        refreshStatus();
+        refreshImageGenStatus();
+        startImageGenStatusMonitor();
+    });}
     private void destroyWeb(){if(webFileChooser!=null){webFileChooser.cancelPending();webFileChooser=null;}if(web==null)return;web.removeJavascriptInterface("WMLHost");root.removeView(web);web.stopLoading();web.loadUrl("about:blank");web.destroy();web=null;}
     @Override public void onBackPressed(){if(web!=null&&web.getVisibility()==View.VISIBLE){if(web.canGoBack())web.goBack();else showHomePanel();return;}super.onBackPressed();}
     @Override protected void onDestroy(){
         String sessionId=sessionProfileId(getIntent());if(sessionId!=null)RUNNING_SESSIONS.remove(sessionId);
         DiagnosticsLogger.event(this,"INFO","launcher","activity_destroy",null);
-        destroyWeb();if(zipMods!=null)zipMods.close();super.onDestroy();
+        destroyWeb();super.onDestroy();
     }
     private String msg(Throwable e){return e==null||e.getMessage()==null?"알 수 없는 오류":e.getMessage();}
     private final class HostBridge{
-        @JavascriptInterface public String version(){return "0.3.2";}
+        @JavascriptInterface public String version(){return "0.3.12";}
         @JavascriptInterface public void imageGenProxyFetch(String requestId,String method,String path,String headersJson,String bodyBase64){
             ImageGenProxy.dispatch(web,requestId,method,path,headersJson,bodyBase64);
         }
@@ -862,8 +915,8 @@ public final class MainActivity extends Activity {
         boolean ok=false;try(OutputStream out=getContentResolver().openOutputStream(item,"w")){if(out==null)throw new IllegalStateException("파일 열기 실패");out.write(bytes);out.flush();ContentValues d=new ContentValues();d.put(MediaStore.Downloads.IS_PENDING,0);getContentResolver().update(item,d,null,null);ok=true;}finally{if(!ok)getContentResolver().delete(item,null,null);}
     }
     private static final class FolderHandler implements WebViewAssetLoader.PathHandler{
-        private static final String CORE="wml/runtime/wml-core.js";private final SafTree tree;private final android.content.res.AssetManager assets;private final ZipModStore zipMods;private final String origin;
-        FolderHandler(SafTree t,android.content.res.AssetManager a,ZipModStore z,String o){tree=t;assets=a;zipMods=z;origin=o;}
+        private static final String CORE="wml/runtime/wml-core.js";private final SafTree tree;private final android.content.res.AssetManager assets;private final String origin;
+        FolderHandler(SafTree t,android.content.res.AssetManager a,String o){tree=t;assets=a;origin=o;}
         @Override public WebResourceResponse handle(String p){return serveGamePath(p);}
         static boolean isGameRequestPath(String path){
             return path!=null&&path.startsWith("/game/");
@@ -895,7 +948,6 @@ public final class MainActivity extends Activity {
             String filePath="images/"+path;
             try{
                 InputStream in=tree==null?null:tree.openImage(filePath);
-                if(in==null&&zipMods!=null)in=zipMods.open(filePath);
                 if(in==null)return null;
                 String m=mime(filePath);
                 return new WebResourceResponse(m,text(m)?"UTF-8":null,200,"OK",headers(filePath),in);
@@ -909,8 +961,6 @@ public final class MainActivity extends Activity {
                 String p=normal(raw);
                 if(p==null)return response(404,"Not Found","text/plain","Not found");
                 InputStream in=isImageAssetPath(p)?tree.openImage(p):tree.open(p);
-                if(in==null&&zipMods!=null)in=zipMods.open(p);
-                if(in==null&&BUILTIN_COMPANIONS_MOD_FILE.equals(p))in=assets.open("launcher-companions-mobile-ui.js");
                 if(in==null)return null;
                 if(p.toLowerCase(Locale.ROOT).endsWith(".html")||p.toLowerCase(Locale.ROOT).endsWith(".htm"))in=mobileViewport(in);
                 if(CORE.equals(p))in=new SequenceInputStream(assets.open("wml-folder-bootstrap.js"),in);
