@@ -49,7 +49,7 @@ final class ComfyEndpoint {
 
     private static boolean isPrivateHost(String host) {
         if (host.indexOf(':') >= 0 || host.indexOf('%') >= 0) return false;
-        String[] octets = host.split("\\\\.", -1);
+        String[] octets = host.split(Pattern.quote("."), -1);
         boolean ipv4Candidate = octets.length == 4;
         if (ipv4Candidate) {
             for (String octet : octets) {
