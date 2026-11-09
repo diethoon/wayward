@@ -832,13 +832,6 @@ public final class MainActivity extends Activity {
                 if(!new File(project,"src/cli.ts").isFile()){
                     throw new IllegalStateException("wayward-imagegen/src/cli.ts가 없습니다.");
                 }
-                if("comfy".equals(mode)){
-                    File comfyConfig=new File(backend,"wayward-imagegen.config.json");
-                    if(!comfyConfig.isFile())comfyConfig=new File(project,"wayward-imagegen.config.json");
-                    if(!comfyConfig.isFile()||comfyConfig.length()==0){
-                        throw new IllegalStateException("ComfyUI 연결에는 wayward-imagegen.config.json이 필요합니다.");
-                    }
-                }
                 if("novelai".equals(mode)){
                     if(!new File(backend,"launch.mjs").isFile()||new File(backend,"launch.mjs").length()==0
                             ||!new File(project,"src/nai/client.ts").isFile()){
