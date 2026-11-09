@@ -210,10 +210,13 @@ final class ImageProviderClient {
             connection = (HttpURLConnection) new URL(rawUrl).openConnection();
             connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
             connection.setReadTimeout(READ_TIMEOUT_MS);
-            connection.setInstanceFollowRedirects(true);
+            connection.setInstanceFollowRedirects(false);
             connection.setRequestMethod("GET");
             connection.setRequestProperty("Accept", "image/*");
             int status = connection.getResponseCode();
+            if (status >= 300 && status < 400) {
+                throw new IllegalStateException("이미지 URL이 리디렉션을 반환했습니다. 리디렉션이 끝난 HTTPS 이미지 주소를 직접 입력해 주세요.");
+            }
             if (status < 200 || status >= 300) throw new IllegalStateException("이미지 URL 다운로드 실패(HTTP " + status + ").");
             String type = connection.getContentType();
             if (type == null || !type.toLowerCase(Locale.ROOT).startsWith("image/")) {
