@@ -51,7 +51,7 @@
         const timer = setTimeout(() => {
           pending.delete(id);
           reject(new Error("이미지 생성 시간이 초과되었습니다."));
-        }, 190000);
+        }, 210000);
         pending.set(id, { resolve, reject, timer });
         try {
           window.WMLHost.generateImageWithProvider(
