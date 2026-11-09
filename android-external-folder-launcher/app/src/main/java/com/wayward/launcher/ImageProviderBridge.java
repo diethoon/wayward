@@ -77,7 +77,7 @@ final class ImageProviderBridge {
                             record(context, "provider_permission_denied", "requestId", requestId);
                             throw new IllegalStateException("기본 이미지 서비스의 게임 사용 권한이 꺼져 있습니다.");
                         }
-                        image = ImageProviderClient.generate(provider, prompt, width, height);
+                        image = ImageProviderClient.generate(provider, prompt, width, height, context, requestId);
                     } catch (Exception primaryError) {
                         String fallbackId = useProfileFallback ? snapshot.fallbacks.get(profileId) : null;
                         ImageProviderStore.Provider fallback = ImageProviderStore.find(snapshot, fallbackId);
@@ -86,7 +86,7 @@ final class ImageProviderBridge {
                             throw primaryError;
                         }
                         try {
-                            image = ImageProviderClient.generate(fallback, prompt, width, height);
+                            image = ImageProviderClient.generate(fallback, prompt, width, height, context, requestId);
                             provider = fallback;
                             fallbackUsed = true;
                         } catch (Exception fallbackError) {
