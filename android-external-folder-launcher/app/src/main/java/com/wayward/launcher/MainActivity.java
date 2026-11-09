@@ -622,12 +622,37 @@ public final class MainActivity extends Activity {
         return new File(getFilesDir(), "imagegen/backend");
     }
 
+    private String imageStudioModId(SafTree sessionTree) throws Exception {
+        if (sessionTree != null) {
+            String folderMod = sessionTree.imageStudioModId();
+            if ("imagestudio".equals(folderMod)) return folderMod;
+        }
+        // ZIP-installed WML mods are served by the same overlay used by the
+        // WebView. Detect the adapter there as well; never extract the ZIP.
+        if (zipMods == null) return null;
+        try (InputStream script = zipMods.open("wml/mods/imagestudio/mod.js")) {
+            if (script == null) return null;
+            byte[] bytes = new byte[65536];
+            int used = 0;
+            while (used < bytes.length) {
+                int count = script.read(bytes, used, bytes.length - used);
+                if (count < 0) break;
+                if (count == 0) continue;
+                used += count;
+            }
+            String source = new String(bytes, 0, used, StandardCharsets.UTF_8);
+            int defineAt = source.indexOf("WML.define");
+            if (defineAt < 0) return null;
+            Matcher matcher = MOD_ID.matcher(source.substring(defineAt));
+            return matcher.find() && "imagestudio".equals(matcher.group(1))
+                    ? "imagestudio" : null;
+        }
+    }
+
     private boolean ensureImageGenBackend(SafTree sessionTree) throws Exception {
-        if (sessionTree == null) return false;
         // The WML mod is only the in-game adapter. The server implementation is
         // shipped in the launcher APK and never copied from the selected game.
-        String modVersion = sessionTree.imageStudioModId();
-        if (modVersion == null) return false;
+        if (!"imagestudio".equals(imageStudioModId(sessionTree))) return false;
         File backend = ImageGenBackendInstaller.install(this, imageGenBackendRoot());
         return hasImageGenProject(backend);
     }
@@ -660,16 +685,16 @@ public final class MainActivity extends Activity {
 
         final String version;
         try {
-            String detected = sessionTree.imageStudioModId();
+            String detected = imageStudioModId(sessionTree);
             if (detected == null) {
                 imageGenSessionMessage = "현재 세션의 WML Image Studio 모드가 없어 이미지 서버를 시작하지 않았습니다.";
                 refreshImageGenStatus();
                 finishImageGenCallbacks();
                 return;
             }
-            // The mod identifies whether the current game uses Image Studio;
-            // its backend files are embedded in the launcher APK.
-            version = "launcher-imagegen:" + ImageGenBackendInstaller.VERSION + ":comfy";
+            // Start the local EasyGen/NovelAI-compatible server independently
+            // of credentials. The provider is configured after the panel opens.
+            version = "launcher-imagegen:" + ImageGenBackendInstaller.VERSION + ":novelai";
         } catch (Exception e) {
             imageGenSessionMessage = "현재 세션의 Image Studio 모드 검사 실패: " + msg(e);
             refreshImageGenStatus();
@@ -721,8 +746,7 @@ public final class MainActivity extends Activity {
                         throw new IllegalStateException("현재 런처 APK에 포함된 ImageGen 서버 자산을 찾지 못했습니다.");
                     }
                 }
-                writeImageGenRuntimeConfig(backend, "comfy",
-                        getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_COMFY_URL, ""));
+                writeImageGenRuntimeConfig(backend, "novelai", "");
             } catch (Throwable error) {
                 problem = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
             }
@@ -735,8 +759,7 @@ public final class MainActivity extends Activity {
                     finishImageGenCallbacks();
                     return;
                 }
-                startImageGenService(backend, version, "comfy",
-                        getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_COMFY_URL, ""));
+                startImageGenService(backend, version, "novelai", "");
                 waitForImageGenReady();
             });
         }, "wayward-imagegen-session-prepare").start();
@@ -886,12 +909,9 @@ public final class MainActivity extends Activity {
             String failure=null;
             try{
                 ImageGenBackendInstaller.install(this,backend);
-                if("novelai".equals(mode)){
-                    String token=ImageProviderStore.readNovelAiToken(this);
-                    if(token==null||token.trim().isEmpty()){
-                        throw new IllegalStateException("NovelAI API 토큰이 등록되지 않았습니다. 이미지 서비스 관리에서 토큰을 먼저 저장해 주세요.");
-                    }
-                }
+                // Server availability is independent of provider credentials.
+                // NovelAI credentials are supplied only to the NovelAI runtime;
+                // Cloudflare FLUX uses its own ImageProviderStore provider record.
                 writeImageGenRuntimeConfig(backend,mode,requestedUrl);
             }catch(Throwable error){
                 failure=error.getMessage()==null?error.getClass().getSimpleName():error.getMessage();

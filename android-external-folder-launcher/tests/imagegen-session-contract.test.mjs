@@ -13,6 +13,10 @@ assert.match(main, /web\.loadUrl\(gameUrl\);[\s\S]*?ensureImageGenServer\(sessio
   "game navigation must start before optional ImageGen preparation");
 assert.match(main, /String imageStudioModId\(\)/,
   "the active session must identify the WML Image Studio adapter");
+assert.match(main, /zipMods\.open\("wml\/mods\/imagestudio\/mod\.js"\)/,
+  "active-session detection must include the app-private ZIP overlay");
+assert.match(automaticStartup, /:novelai/,
+  "automatic startup must use the NovelAI-compatible EasyGen mode");
 assert.doesNotMatch(main, /wml\/mods\/imagestudio\/backend\//,
   "the game folder must not be required to contain the bundled server source");
 assert.match(main, /ImageGenBackendInstaller\.install\(this, imageGenBackendRoot\(\)\)/,

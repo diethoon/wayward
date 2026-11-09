@@ -242,10 +242,16 @@ public final class ImageGenService extends Service {
         builder.environment().put("BUN_INSTALL", new File(getFilesDir(), "bun-install").getAbsolutePath());
         if ("novelai".equals(launchMode)) {
             String token = ImageProviderStore.readNovelAiToken(this);
-            if (token == null || token.trim().isEmpty()) {
-                throw new IllegalStateException("NovelAI API 토큰이 등록되지 않았습니다. 이미지 서비스 관리에서 토큰을 저장해 주세요.");
+            if (token != null && !token.trim().isEmpty()) {
+                builder.environment().put("NAI_TOKEN", token);
+                DiagnosticsLogger.event(this, "INFO", "imagegen_service",
+                        "novelai_credential_available_at_start", null);
+            } else {
+                // Keep the service alive so the user can open the EasyGen panel
+                // and configure a provider before the first generation request.
+                DiagnosticsLogger.event(this, "INFO", "imagegen_service",
+                        "novelai_credential_not_set_at_start", null);
             }
-            builder.environment().put("NAI_TOKEN", token);
         }
         serverProcess = startProcess(builder);
         DiagnosticsLogger.event(this,"INFO","imagegen_service","bun_server_process_started",null);
