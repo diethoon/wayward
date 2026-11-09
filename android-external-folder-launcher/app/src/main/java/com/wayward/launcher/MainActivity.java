@@ -757,12 +757,21 @@ public final class MainActivity extends Activity {
     }
 
     private void startManagedImageGenServer(String mode,String comfyUrl){
-        ImageGenStatusStore.State running=ImageGenStatusStore.read(getFilesDir());
-        if(running.isReady()||running.isStarting()){
-            imageGenSessionMessage="이미 이미지 서버가 실행 중이거나 시작 중입니다. 다른 엔진으로 바꾸려면 먼저 서버를 중지하세요.";
-            refreshImageGenStatus();
-            Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
-            return;
+        synchronized(IMAGEGEN_LOCK){
+            ImageGenStatusStore.State running=ImageGenStatusStore.read(getFilesDir());
+            if(running.isReady()||running.isStarting()){
+                imageGenSessionMessage="이미 이미지 서버가 실행 중이거나 시작 중입니다. 다른 엔진으로 바꾸려면 먼저 서버를 중지하세요.";
+                refreshImageGenStatus();
+                Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
+                return;
+            }
+            if(imageGenCopying){
+                imageGenSessionMessage="다른 이미지 백엔드 준비가 진행 중입니다. 현재 작업이 끝난 뒤 다시 실행해 주세요.";
+                refreshImageGenStatus();
+                Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
+                return;
+            }
+            imageGenCopying=true;
         }
         GameProfile selected=findProfile(activeProfileId);
         if(selected==null&&!profiles.isEmpty())selected=profiles.get(profiles.size()-1);
@@ -829,6 +838,7 @@ public final class MainActivity extends Activity {
             final String resolvedVersion=version;
             final String problem=failure;
             runOnUiThread(()->{
+                imageGenCopying=false;
                 if(problem!=null){
                     imageGenSessionMessage="이미지 서버 준비 실패: "+problem;
                     refreshImageGenStatus();
@@ -912,7 +922,7 @@ public final class MainActivity extends Activity {
         ImageGenStatusStore.State state = ImageGenStatusStore.read(getFilesDir());
         if (state.isReady()) imageGenStatus.setText("연결됨 · 공통 이미지 생성 서버 127.0.0.1:8189 · Image Studio " + safeVersion(state.backendVersion));
         else if (state.isStarting()) imageGenStatus.setText(state.message.isEmpty() ? "이미지 생성 서버 시작 중…" : state.message);
-        else if (imageGenCopying) imageGenStatus.setText("현재 세션 Image Studio 백엔드 준비 중…");
+        else if (imageGenCopying) imageGenStatus.setText("이미지 생성 백엔드 준비 중…");
         else if (state.ready && !state.isFresh()) imageGenStatus.setText("이미지 생성 서비스 heartbeat가 끊겼습니다. 현재 세션을 다시 열면 서버를 재시작합니다.");
         else if (!state.message.isEmpty()) imageGenStatus.setText(state.message);
         else if (imageGenSessionMessage != null && !imageGenSessionMessage.isEmpty()) imageGenStatus.setText(imageGenSessionMessage);
