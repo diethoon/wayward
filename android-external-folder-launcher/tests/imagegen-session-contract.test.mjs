@@ -15,8 +15,8 @@ assert.match(launchMethod, /web\.setVisibility\(View\.VISIBLE\)[\s\S]*?web\.load
   "the game WebView must launch immediately while ImageGen preparation runs independently");
 assert.doesNotMatch(launchMethod, /pendingGameLoad\s*=\s*true|ensureImageGenServer\(sessionTree,\s*\(\)\s*->/,
   "ImageGen startup and health readiness must never gate game navigation");
-assert.match(main, /if\s*\(pendingGameLoad\)\s*return;/,
-  "duplicate session intents must not bypass the ImageGen readiness gate");
+assert.doesNotMatch(main, /pendingGameLoad/,
+  "game navigation must not retain an ImageGen readiness gate state");
 assert.match(main, /private void ensureImageGenServer\(SafTree sessionTree, Runnable afterReady\)/,
   "ImageGen background preparation remains available independently of game navigation");
 assert.match(main, /String imageStudioBackendVersion\(\)/,
