@@ -186,6 +186,66 @@ public final class ImageProviderActivity extends Activity {
         page.addView(intro);
         addGap(page, 12);
 
+        LinearLayout novelAiCard = card();
+        novelAiCard.addView(label("NovelAI · 런처 내장 서버", 15, TEXT, true));
+        addGap(novelAiCard, 5);
+        novelAiCard.addView(label("NovelAI API 토큰은 Android Keystore 기반 AES-256-GCM으로 암호화해 앱 내부에 저장합니다. 게임 폴더와 WebView 저장소에는 넣지 않습니다.", 12, MUTED, false));
+        addGap(novelAiCard, 8);
+        novelAiCard.addView(label(data.novelAiToken == null || data.novelAiToken.isEmpty()
+                ? "상태: 토큰 미등록" : "상태: 토큰 등록됨 · 암호화 저장", 12, data.novelAiToken == null || data.novelAiToken.isEmpty() ? AMBER : GREEN, true));
+        addGap(novelAiCard, 6);
+        EditText novelAiTokenInput = field("새 NovelAI API 토큰 입력", true, false);
+        novelAiTokenInput.setSingleLine(true);
+        novelAiCard.addView(novelAiTokenInput, new LinearLayout.LayoutParams(-1, dp(48)));
+        addGap(novelAiCard, 6);
+        TextView saveNovelAiToken = action("NovelAI 토큰 저장", true, () -> {
+            String token = value(novelAiTokenInput);
+            if (token.isEmpty()) {
+                showError("토큰이 비어 있습니다", "새 토큰을 입력해 주세요. 기존 토큰은 변경되지 않았습니다.");
+                return;
+            }
+            if (token.length() > 4096 || token.indexOf('\\r') >= 0 || token.indexOf('\\n') >= 0) {
+                showError("토큰 형식 확인", "토큰은 줄바꿈 없이 4096자 이내로 입력해 주세요.");
+                return;
+            }
+            try {
+                data.novelAiToken = token;
+                store.save(data);
+                Toast.makeText(this, "NovelAI 토큰을 암호화해 저장했습니다.", Toast.LENGTH_SHORT).show();
+                renderList();
+            } catch (Exception error) {
+                showError("토큰을 저장하지 못했습니다", error.getMessage());
+            }
+        });
+        novelAiCard.addView(saveNovelAiToken);
+        TextView clearNovelAiToken = action("저장된 토큰 삭제", false, () -> {
+            if (data.novelAiToken == null || data.novelAiToken.isEmpty()) return;
+            new AlertDialog.Builder(this)
+                    .setTitle("NovelAI 토큰 삭제")
+                    .setMessage("기기에 암호화 저장된 NovelAI 토큰을 삭제할까요?")
+                    .setNegativeButton("취소", null)
+                    .setPositiveButton("삭제", (dialog, which) -> {
+                        try {
+                            data.novelAiToken = "";
+                            store.save(data);
+                            renderList();
+                        } catch (Exception error) {
+                            showError("토큰을 삭제하지 못했습니다", error.getMessage());
+                        }
+                    }).show();
+        });
+        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(-1, -2);
+        clearParams.topMargin = dp(5);
+        novelAiCard.addView(clearNovelAiToken, clearParams);
+        if (loadFailed) {
+            novelAiTokenInput.setEnabled(false);
+            saveNovelAiToken.setEnabled(false);
+            clearNovelAiToken.setEnabled(false);
+            novelAiCard.setAlpha(0.45f);
+        }
+        page.addView(novelAiCard);
+        addGap(page, 12);
+
         if (loadFailed) {
             LinearLayout warning = card();
             warning.setBackground(shape(Color.rgb(65, 43, 35), Color.rgb(152, 93, 65), 14));
