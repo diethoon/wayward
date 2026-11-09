@@ -67,8 +67,8 @@ final class ImageProviderBridge {
                     JSONObject details = new JSONObject();
                     try {
                         details.put("errorType", error.getClass().getSimpleName());
-                        details.put("message", message.length() > 240 ? message.substring(0, 240) : message);
                     } catch (Exception ignored) {}
+                    // Provider error bodies can echo prompts or credentials; never persist them in diagnostics.
                     DiagnosticsLogger.event(context, "WARN", "image_provider", "generation_failed", details);
                 }
             });
