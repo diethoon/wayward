@@ -33,4 +33,10 @@ assert.match(manifest, /\.ImageGenPanelActivity/);
 assert.match(endpoint, /100 && ip\[1\] >= 64 && ip\[1\] <= 127/,
   "Tailscale IPv4 address range is allowed");
 assert.match(endpoint, /endsWith\("\.ts\.net"\)/);
+assert.match(main, /ComfyEndpoint\.normalizeOptional/,
+  "the ComfyUI bridge must start even before a PC endpoint is configured");
+assert.match(service, /ComfyEndpoint\.normalizeOptional/);
+assert.match(service, /if \(!comfyUrl\.isEmpty\(\)\)/,
+  "an empty endpoint must not be passed as a broken --comfy-url argument");
+assert.match(main, /PC 주소 미설정 · 연결 대기 중/);
 console.log("ImageGen runtime launch contract tests passed.");
