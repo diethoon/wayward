@@ -763,99 +763,60 @@ public final class MainActivity extends Activity {
     }
 
     private void startManagedImageGenServer(String mode,String comfyUrl){
+        if (!"novelai".equals(mode) && !"comfy".equals(mode)) {
+            imageGenSessionMessage = "지원하지 않는 이미지 생성 서버 모드입니다.";
+            refreshImageGenStatus();
+            return;
+        }
         synchronized(IMAGEGEN_LOCK){
             ImageGenStatusStore.State running=ImageGenStatusStore.read(getFilesDir());
             if(running.isReady()||running.isStarting()){
-                imageGenSessionMessage="이미 이미지 서버가 실행 중이거나 시작 중입니다. 다른 엔진으로 바꾸려면 먼저 서버를 중지하세요.";
+                imageGenSessionMessage="이미 런처 내장 이미지 서버가 실행 중입니다. ComfyUI 주소를 바꾸려면 주소를 입력한 뒤 연결 버튼을 누르세요.";
                 refreshImageGenStatus();
                 Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
                 return;
             }
             if(imageGenCopying||manualImageGenPreparing){
-                imageGenSessionMessage="다른 이미지 백엔드 준비가 진행 중입니다. 현재 작업이 끝난 뒤 다시 실행해 주세요.";
+                imageGenSessionMessage="내장 이미지 서버를 준비하고 있습니다. 준비가 끝난 뒤 다시 시도해 주세요.";
                 refreshImageGenStatus();
                 Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
                 return;
             }
             manualImageGenPreparing=true;
         }
-        GameProfile selected=findProfile(activeProfileId);
-        if(selected==null&&!profiles.isEmpty())selected=profiles.get(profiles.size()-1);
-        final GameProfile sourceProfile=selected;
+
         final File backend=imageGenBackendRoot();
-        imageGenSessionMessage=("novelai".equals(mode)?"EasyGen NovelAI":"ComfyUI 연결")+" 서버 백엔드를 확인하고 있습니다…";
+        final String requestedUrl=comfyUrl==null?"":comfyUrl.trim();
+        imageGenSessionMessage=("novelai".equals(mode)?"NovelAI":"ComfyUI 연결")+" 런처 내장 서버를 준비하고 있습니다…";
         refreshImageGenStatus();
         new Thread(()->{
-            String source=null;
-            String version=null;
             String failure=null;
             try{
-                if(sourceProfile!=null){
-                    SafTree sourceTree=new SafTree(Uri.parse(sourceProfile.uri));
-                    String easyVersion=sourceTree.easyGenBackendVersion();
-                    if(easyVersion!=null&&!easyVersion.isEmpty()){
-                        if("novelai".equals(mode)&&!sourceTree.hasEasyGenNovelAiClient()){
-                            throw new IllegalStateException("EasyGen 서버의 src/nai/client.ts를 찾지 못했습니다. NovelAI 엔진이 포함된 EasyGen 모드팩을 설치해 주세요.");
-                        }
-                        if(sourceTree.copyDirectory("wml/mods/easygen/server",backend)){
-                            source="easygen";
-                            version=easyVersion;
-                        }
-                    }
-                    if(source==null&&"comfy".equals(mode)){
-                        String studioVersion=sourceTree.imageStudioBackendVersion();
-                        if(studioVersion!=null&&!studioVersion.isEmpty()
-                                &&sourceTree.copyDirectory("wml/mods/imagestudio/backend",backend)){
-                            source="imagestudio";
-                            version=studioVersion;
-                        }
-                    }
-                }
-                if(source==null&&zipMods!=null){
-                    List<String> installed=zipMods.listModIds();
-                    if(installed.contains("easygen")&&zipMods.extractDirectory("easygen","server",backend)){
-                        source="easygen";
-                        version=readImageGenPackageVersion(backend);
-                    }
-                    if(source==null&&"comfy".equals(mode)&&installed.contains("imagestudio")
-                            &&zipMods.extractDirectory("imagestudio","backend",backend)){
-                        source="imagestudio";
-                        version=readImageGenPackageVersion(backend);
-                    }
-                }
-                if(source==null||version==null||version.isEmpty()){
-                    throw new IllegalStateException("등록된 게임 폴더 또는 앱 전용 ZIP 모드에서 EasyGen 서버를 찾지 못했습니다. NovelAI에는 easygen/server, ComfyUI에는 easygen/server 또는 imagestudio/backend가 필요합니다.");
-                }
-                File project=new File(backend,"wayward-imagegen");
-                if(!new File(project,"package.json").isFile())project=backend;
-                if(!new File(project,"src/cli.ts").isFile()){
-                    throw new IllegalStateException("wayward-imagegen/src/cli.ts가 없습니다.");
-                }
+                ImageGenBackendInstaller.install(this,backend);
                 if("novelai".equals(mode)){
-                    if(!new File(backend,"launch.mjs").isFile()||new File(backend,"launch.mjs").length()==0
-                            ||!new File(project,"src/nai/client.ts").isFile()){
-                        throw new IllegalStateException("NovelAI 실행 파일이 없습니다. EasyGen server/launch.mjs와 wayward-imagegen/src/nai/client.ts를 확인해 주세요.");
+                    String token=ImageProviderStore.readNovelAiToken(this);
+                    if(token==null||token.trim().isEmpty()){
+                        throw new IllegalStateException("NovelAI API 토큰이 등록되지 않았습니다. 이미지 서비스 관리에서 토큰을 먼저 저장해 주세요.");
                     }
                 }
+                writeImageGenRuntimeConfig(backend,mode,requestedUrl);
             }catch(Throwable error){
                 failure=error.getMessage()==null?error.getClass().getSimpleName():error.getMessage();
             }
-            final String resolvedSource=source;
-            final String resolvedVersion=version;
             final String problem=failure;
             runOnUiThread(()->{
                 if(problem!=null){
                     manualImageGenPreparing=false;
-                    imageGenSessionMessage="이미지 서버 준비 실패: "+problem;
+                    imageGenSessionMessage="내장 이미지 서버 준비 실패: "+problem;
                     try { ImageGenStatusStore.write(getFilesDir(),false,false,imageGenSessionMessage,""); }
                     catch (Exception ignored) {}
                     refreshImageGenStatus();
                     Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
                     return;
                 }
-                String launchVersion=resolvedSource+":"+resolvedVersion+":"+mode;
+                String launchVersion="launcher-imagegen:"+ImageGenBackendInstaller.VERSION+":"+mode;
                 try {
-                    ImageGenStatusStore.write(getFilesDir(),false,true,"이미지 생성 서버 시작 중…",launchVersion);
+                    ImageGenStatusStore.write(getFilesDir(),false,true,"런처 내장 ImageGen 서버 시작 중…",launchVersion);
                 } catch (Exception error) {
                     manualImageGenPreparing=false;
                     imageGenSessionMessage="이미지 서버 상태를 저장하지 못했습니다: "+msg(error);
@@ -867,12 +828,46 @@ public final class MainActivity extends Activity {
                     if(!state.isReady())imageGenSessionMessage=state.message;
                     refreshImageGenStatus();
                 });
-                startImageGenService(backend,launchVersion,mode,comfyUrl);
+                startImageGenService(backend,launchVersion,mode,requestedUrl);
                 manualImageGenPreparing=false;
                 refreshImageGenStatus();
                 waitForImageGenReady();
             });
-        },"wayward-imagegen-manual-prepare").start();
+        },"wayward-imagegen-bundled-prepare").start();
+    }
+
+    private void writeImageGenRuntimeConfig(File backend,String mode,String comfyUrl)throws Exception{
+        File project=new File(backend,"wayward-imagegen");
+        if(!new File(project,"src/cli.ts").isFile())throw new IllegalStateException("내장 wayward-imagegen/src/cli.ts가 없습니다.");
+        JSONObject config=new JSONObject();
+        config.put("host","127.0.0.1");
+        config.put("port",8189);
+        config.put("imagesDir",new File(getFilesDir(),"imagegen/images").getAbsolutePath());
+        config.put("stateDir",new File(getFilesDir(),"imagegen/state").getAbsolutePath());
+        config.put("comfyUrl",comfyUrl==null||comfyUrl.isEmpty()?"http://127.0.0.1:8188":comfyUrl);
+        config.put("imageProvider","novelai".equals(mode)?"nai":"sdxl");
+        // Android has no bundled sharp binary; PNG is the supported no-dependency path.
+        config.put("webp",false);
+        config.put("requireWebp",false);
+        File images=new File(getFilesDir(),"imagegen/images");
+        File state=new File(getFilesDir(),"imagegen/state");
+        if(!images.isDirectory()&&!images.mkdirs()&&!images.isDirectory())throw new IllegalStateException("이미지 저장 폴더를 만들지 못했습니다.");
+        if(!state.isDirectory()&&!state.mkdirs()&&!state.isDirectory())throw new IllegalStateException("이미지 상태 폴더를 만들지 못했습니다.");
+        File output=new File(project,"wayward-imagegen.config.json");
+        File temporary=new File(project,"wayward-imagegen.config.json.tmp");
+        try(FileOutputStream stream=new FileOutputStream(temporary)){
+            stream.write(config.toString().getBytes(StandardCharsets.UTF_8));
+            stream.flush();
+            stream.getFD().sync();
+        }
+        try{
+            java.nio.file.Files.move(temporary.toPath(),output.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        }catch(java.nio.file.AtomicMoveNotSupportedException error){
+            java.nio.file.Files.move(temporary.toPath(),output.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     private static String readImageGenPackageVersion(File backend)throws Exception{
