@@ -55,7 +55,7 @@ final class ImagePipelineDiagnostics {
             "deliveryQueued", "webViewUrlPresent", "srcKind", "srcLength",
             "naturalWidth", "naturalHeight", "complete", "reasonCode", "errorType",
             "queueDepth", "hasProvider", "mimeDetected", "stage", "success",
-            "elementTag", "pagePath", "pendingCount"
+            "elementTag", "pendingCount"
     ));
 
     private ImagePipelineDiagnostics() {}
