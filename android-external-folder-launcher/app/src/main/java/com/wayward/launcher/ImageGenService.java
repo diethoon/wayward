@@ -246,11 +246,15 @@ public final class ImageGenService extends Service {
         serverProcess = startProcess(builder);
         DiagnosticsLogger.event(this,"INFO","imagegen_service","bun_server_process_started",null);
 
-        long deadline = System.currentTimeMillis() + 60000L;
-        while (!stopping && System.currentTimeMillis() < deadline) {
-            if (serverProcess == null || !serverProcess.isAlive()) {
+        // Keep waiting for the health endpoint for as long as the child server
+        // process remains alive. Android startup and first initialization can be
+        // slow; a fixed timeout must not turn a live server into a startup failure.
+        long nextHealthNoticeAt = 0L;
+        while (!stopping) {
+            Process running = serverProcess;
+            if (running == null || !running.isAlive()) {
                 int exitCode = -1;
-                try { if (serverProcess != null) exitCode = serverProcess.exitValue(); } catch (Exception ignored) {}
+                try { if (running != null) exitCode = running.exitValue(); } catch (Exception ignored) {}
                 long serverLogBytes = log.isFile() ? log.length() : -1L;
                 org.json.JSONObject exitDetails = new org.json.JSONObject();
                 try {
@@ -262,11 +266,11 @@ public final class ImageGenService extends Service {
                 } catch (Exception ignored) {}
                 DiagnosticsLogger.event(this, "ERROR", "imagegen_service",
                         "bun_server_process_exited_early", exitDetails);
-                appendDiagnostic("Bun 서버 프로세스 조기 종료: exitCode=" + exitCode
+                appendDiagnostic("Bun 서버 프로세스 종료: exitCode=" + exitCode
                         + "; serverLogBytes=" + serverLogBytes
                         + "; nodeModulesPresent=" + nodeModules.isDirectory());
                 runDoctorProbe(bun, project);
-                throw new IllegalStateException("ImageGen 프로세스가 시작 직후 종료됐습니다 (exitCode="
+                throw new IllegalStateException("ImageGen 프로세스가 종료됐습니다 (exitCode="
                         + exitCode + ", server.log=" + serverLogBytes + " bytes). 로그: " + log.getAbsolutePath());
             }
             if (probeHealth()) {
@@ -275,14 +279,27 @@ public final class ImageGenService extends Service {
                 updateNotification("연결됨 · 127.0.0.1:8189");
                 break;
             }
-            Thread.sleep(500);
+            serverReady = false;
+            starting = true;
+            long now = System.currentTimeMillis();
+            if (now >= nextHealthNoticeAt) {
+                updateNotification("서버 실행 중 · 초기화/헬스 응답 대기 · 127.0.0.1:8189");
+                nextHealthNoticeAt = now + 30000L;
+            }
+            Thread.sleep(1000);
         }
-        if (!serverReady) throw new IllegalStateException("60초 안에 /api/image/health 응답이 오지 않았습니다.");
+        if (stopping) return;
 
         Process running = serverProcess;
         while (!stopping && running != null && running.isAlive()) {
             if (!probeHealth()) {
+                serverReady = false;
+                starting = true;
                 updateNotification("서버 응답 대기 중 · 연결 상태 확인 필요");
+            } else if (!serverReady) {
+                serverReady = true;
+                starting = false;
+                updateNotification("연결됨 · 127.0.0.1:8189");
             }
             Thread.sleep(5000);
         }
