@@ -1,6 +1,7 @@
 package com.wayward.launcher;
 
 import android.content.Context;
+import android.net.Uri;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -55,7 +56,8 @@ final class ImagePipelineDiagnostics {
             "deliveryQueued", "webViewUrlPresent", "srcKind", "srcLength",
             "naturalWidth", "naturalHeight", "complete", "reasonCode", "errorType",
             "queueDepth", "hasProvider", "mimeDetected", "stage", "success",
-            "elementTag", "pendingCount"
+            "elementTag", "pendingCount", "srcHost", "srcPath", "elementId",
+            "elementClass", "elementAlt", "repeatCount"
     ));
 
     private ImagePipelineDiagnostics() {}
@@ -129,6 +131,15 @@ final class ImagePipelineDiagnostics {
                         || "https".equals(value) || "http".equals(value) || "file".equals(value)
                         || "relative".equals(value) || "other".equals(value)
                         || "game_asset".equals(value) || "external".equals(value);
+            case "srcHost":
+                return value.matches("[A-Za-z0-9.:-]{1,120}");
+            case "srcPath":
+                return value.startsWith("/") && value.matches("/[\\p{L}\\p{N}._~!            case "stage":
+'()*+,;=:@%/\\-]{0,159}");
+            case "elementId":
+            case "elementClass":
+            case "elementAlt":
+                return value.matches("[\\p{L}\\p{N} ._:-]{1,100}");
             case "stage":
                 return "capture".equals(value);
             case "reasonCode":
@@ -144,6 +155,55 @@ final class ImagePipelineDiagnostics {
             default:
                 return false;
         }
+    }
+
+    static void addSanitizedUrl(JSONObject target, String rawUrl) {
+        if (target == null || rawUrl == null || rawUrl.length() > 4096) return;
+        try {
+            Uri uri = Uri.parse(rawUrl);
+            String scheme = uri.getScheme();
+            if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) return;
+            String host = uri.getHost();
+            if (host != null && !host.isEmpty()) {
+                target.put("srcHost", host.toLowerCase(java.util.Locale.ROOT)
+                        .replaceAll("[^a-z0-9.:-]", ""));
+            }
+            target.put("srcPath", sanitizePath(uri.getEncodedPath()));
+        } catch (Exception ignored) {
+            // Never let diagnostic URL parsing affect WebView resource handling.
+        }
+    }
+
+    static void addSanitizedPath(JSONObject target, String rawPath) {
+        if (target == null) return;
+        try { target.put("srcPath", sanitizePath(rawPath)); }
+        catch (Exception ignored) {}
+    }
+
+    static String sanitizePath(String rawPath) {
+        if (rawPath == null || rawPath.isEmpty()) return "/";
+        String[] segments = rawPath.split("/", -1);
+        StringBuilder safe = new StringBuilder();
+        for (int i = 0; i < segments.length; i++) {
+            if (i > 0) safe.append('/');
+            String segment = Uri.decode(segments[i]);
+            String lower = segment.toLowerCase(java.util.Locale.ROOT);
+            boolean sensitive = segment.length() > 80
+                    || segment.matches("[A-Za-z0-9_-]{40,}")
+                    || segment.matches("[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+")
+                    || lower.contains("token") || lower.contains("secret")
+                    || lower.contains("signature") || lower.contains("authorization")
+                    || lower.contains("bearer") || lower.contains("session")
+                    || lower.contains("api_key") || lower.contains("api-key");
+            if (sensitive) safe.append("~redacted~");
+            else safe.append(segment.replaceAll("[^\\p{L}\\p{N}._~!    private interface LockedAction { void run() throws Exception; }
+'()*+,;=:@%\\-]", "_"));
+        }
+        String result = safe.toString();
+        if (result.isEmpty()) result = "/";
+        if (result.length() > 160) result = result.substring(result.length() - 159);
+        if (!result.startsWith("/")) result = "/" + result;
+        return result;
     }
 
     private interface LockedAction { void run() throws Exception; }
