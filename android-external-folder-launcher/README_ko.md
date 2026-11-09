@@ -1,4 +1,4 @@
-# Wayward Android Launcher 0.3.9 · SAF/ZIP 및 이미지 서비스 관리
+# Wayward Android Launcher 0.3.10 · SAF/ZIP 및 이미지 서비스 관리
 
 Android SAF 폴더 실행기입니다. 게임 원본 폴더는 직접 읽고, 일반 WML ZIP 모드는 앱 내부에 보관해 가상 제공하며, 여러 게임 폴더를 독립 세션으로 실행합니다. Image Studio 백엔드는 별도 ZIP 설치를 요구하지 않고 각 세션의 실제 WML 모드 폴더에서 감지합니다.
 
@@ -58,7 +58,7 @@ ZIP 1개는 WML 모드 1개를 포함해야 합니다. mod.js가 없거나, WML.
 
 ## 5. 설치 패키지
 
-0.3.9 테스트 빌드는 `com.wayward.launcher.imagegen038` 패키지 ID를 유지해 0.3.8 계열 테스트 빌드 위에 업데이트할 수 있도록 합니다. 기존 0.3.6 (`com.wayward.launcher.imagegen036`), 0.3.5 (`com.wayward.launcher.imagegen035`), 0.3.4 (`com.wayward.launcher.imagegen034`) 및 구버전과 별도 앱으로 공존하므로 기존 앱을 삭제하거나 덮어쓰지 않습니다. 앱 데이터는 패키지별로 분리되므로 새 앱에서 게임 폴더를 다시 선택하고, 이전 앱에 보관한 앱 전용 ZIP 모드를 다시 설치해야 합니다. 기존 앱의 WebView localStorage/IndexedDB, 설정, 세이브 데이터는 자동 이전되지 않으며 기존 앱에 그대로 남습니다. 두 버전은 `127.0.0.1:8189` 포트를 공유하므로 다른 런처 앱에서 Image Studio 서버를 중지한 뒤 새 버전을 실행하세요. 기존 앱은 삭제하지 마세요.
+0.3.10 테스트 빌드는 `com.wayward.launcher.imagegen038` 패키지 ID를 유지해 0.3.8/0.3.9 계열 테스트 빌드 위에 업데이트할 수 있도록 합니다. 기존 0.3.6 (`com.wayward.launcher.imagegen036`), 0.3.5 (`com.wayward.launcher.imagegen035`), 0.3.4 (`com.wayward.launcher.imagegen034`) 및 구버전과 별도 앱으로 공존하므로 기존 앱을 삭제하거나 덮어쓰지 않습니다. 앱 데이터는 패키지별로 분리되므로 새 앱에서 게임 폴더를 다시 선택하고, 이전 앱에 보관한 앱 전용 ZIP 모드를 다시 설치해야 합니다. 기존 앱의 WebView localStorage/IndexedDB, 설정, 세이브 데이터는 자동 이전되지 않으며 기존 앱에 그대로 남습니다. 두 버전은 `127.0.0.1:8189` 포트를 공유하므로 다른 런처 앱에서 Image Studio 서버를 중지한 뒤 새 버전을 실행하세요. 기존 앱은 삭제하지 마세요.
 
 ## 6. 세션별 Image Studio 자동 감지와 공통 서버
 
@@ -68,9 +68,9 @@ ZIP 1개는 WML 모드 1개를 포함해야 합니다. mod.js가 없거나, WML.
 
 Bun Android ARM64 v1.4.4 실행 파일은 공식 아카이브를 내려받아 SHA-256 검증 후 앱 내부에 설치합니다. 서버는 `:imagegen` 별도 Android 프로세스의 Foreground Service에서 실행되며, 런처 UI와 상태 파일로 연결 상태를 공유합니다. 첫 실행은 런타임 다운로드와 패키지 설치 때문에 시간이 걸릴 수 있습니다. 서비스가 비정상 종료되어 heartbeat가 끊기면 시작 중 상태를 만료시켜 게임 UI가 계속 대기하지 않게 합니다. 진단 로그는 앱 비공개 저장소의 `imagegen/startup.log` 및 `imagegen/server.log`에 기록합니다.
 
-NovelAI 인증 정보는 Image Studio 모드가 제공하는 기존 설정 UI에서 최초 1회 설정해야 합니다. 런처는 임의의 설정 URL이나 비공개 토큰 저장 형식을 새로 만들지 않습니다. 게임의 `http://127.0.0.1:8189/api/*` Fetch 요청만 네이티브 브리지로 전달하며, 그 외 외부 요청은 변경하지 않습니다.
+NovelAI 인증 정보는 EasyGen의 설정 패널에서 최초 1회 설정합니다. 런처는 EasyGen이 사용하는 인증 저장 형식을 그대로 두며 NovelAI 토큰을 별도의 새 저장소로 복제하지 않습니다. 게임의 `http://127.0.0.1:8189/api/*` Fetch 요청만 네이티브 브리지로 전달하며, 그 외 외부 요청은 변경하지 않습니다.
 
-**미완료/미검증:** Bun Android는 실험적 지원이므로 Galaxy S25 Ultra에서 실제 실행·종속 패키지 설치·NovelAI 생성까지 아직 검증되지 않았습니다. 현재 브리지는 Fetch 기반 `/api/*` 요청만 처리하며 WebSocket/EventSource/XHR 경로는 확인되지 않았습니다. 집 PC ComfyUI 원격 프로필과 주소 자동 검색은 EasyGen 설정 API 계약 확인 전이라 포함하지 않았습니다.
+**미완료/미검증:** Bun Android는 실험적 지원이므로 Galaxy S25 Ultra에서 실제 실행·종속 패키지 설치·NovelAI/ComfyUI 이미지 생성까지 아직 검증되지 않았습니다. 현재 게임 연결 브리지는 Fetch 기반 `/api/*` 요청만 처리하며 WebSocket/EventSource/XHR 경로는 확인되지 않았습니다. ComfyUI는 PC에서 실행 중이어야 하며, 휴대폰 런처가 PC의 ComfyUI 프로세스를 대신 실행하지는 않습니다.
 
 ## 7. 검증 범위
 
@@ -176,3 +176,37 @@ generate()는 이미지 생성이 끝난 뒤 { ok, providerId, fallbackUsed, mim
 ComfyUI의 /prompt + WebSocket/히스토리 조회, Replicate·fal.ai 등의 비동기 작업 제출/폴링, multipart 업로드, OAuth 브라우저 로그인, 이미지 편집용 입력 파일 전송은 아직 구현하지 않았습니다. 이 서비스들은 서비스 등록 화면에 URL만 입력한다고 동작하지 않습니다. 해당 프로토콜의 작업 ID·상태·결과 응답을 처리하는 전용 어댑터를 추가해야 합니다.
 
 또한 이 런처 브리지가 제공된다고 해서 기존 Image Studio 모드가 자동으로 이 브리지를 사용하도록 바뀌는 것은 아닙니다. 현재 저장소에는 Image Studio의 실제 WML 클라이언트 소스가 없어, 그 모드의 기존 NovelAI/ComfyUI 선택 흐름을 이 카탈로그에 자동 연결했다고 주장하지 않습니다. WML 모드는 위 WaywardImageProviders API를 호출하도록 연결해야 합니다. 기존 Image Studio 로컬 서버 경로는 별도로 보존됩니다.
+
+
+## 12. EasyGen NovelAI 및 PC ComfyUI 원터치 연결 (0.3.10)
+
+홈 화면의 이미지 생성 서비스 영역에 두 개의 서버 실행 버튼이 추가됐습니다. 기존 Cloudflare FLUX 등 외부 API 서비스 등록/테스트는 별도로 계속 사용할 수 있습니다.
+
+### NovelAI · EasyGen 서버 실행
+
+1. EasyGen 모드가 들어 있는 게임 폴더를 등록하거나, **모드 ZIP 설치**에서 EasyGen 모드 ZIP을 앱 전용으로 설치합니다.
+2. 홈에서 **NovelAI · EasyGen 서버 실행**을 누릅니다.
+3. 런처가 선택된 게임 폴더의 `wml/mods/easygen/server/`를 찾습니다. 실제 폴더에 없으면 앱 전용 ZIP의 `server/`를 사용합니다.
+4. 서버가 준비되면 **이미지 생성 설정 / 상태 열기**를 눌러 EasyGen 설정 패널을 엽니다. NovelAI 계정 인증과 모델 선택은 EasyGen 패널에서 진행합니다.
+
+Termux를 별도로 설치하거나 명령어를 입력할 필요가 없습니다. 첫 실행 때 런처가 Bun Android ARM64 런타임을 내려받아 SHA-256을 확인하고, EasyGen의 `wayward-imagegen` 의존 패키지를 설치한 뒤 `bun launch.mjs`를 실행합니다. 다운로드/패키지 설치에는 네트워크 연결과 앱 저장 공간이 필요합니다. Android가 서버 프로세스를 계속 유지하도록 Foreground Service와 진행 알림을 사용합니다.
+
+### ComfyUI 연결 서버 실행
+
+ComfyUI의 GPU 생성 엔진은 PC에서 실행되어야 합니다. 휴대폰에서 실행하는 것은 **Wayward ImageGen 연결 서버**이며, 이 서버가 PC ComfyUI에 요청을 전달합니다.
+
+1. PC에서 ComfyUI를 실행하고 휴대폰과 같은 사설 LAN 또는 Tailscale 네트워크에서 접속할 수 있도록 설정합니다.
+2. PC의 ComfyUI 주소를 확인합니다. Portable/수동 설치는 보통 `8188`, ComfyUI Desktop은 보통 `8000` 포트를 사용합니다. 예: `http://192.168.0.20:8188`, `http://192.168.31.41:8000`, 또는 Tailscale MagicDNS 주소 `https://my-pc.tailnet.ts.net:8188`.
+3. 런처 홈의 ComfyUI 주소 입력란에 PC 주소를 넣고 **ComfyUI 연결 서버 실행**을 누릅니다.
+4. 런처가 EasyGen 서버 백엔드를 우선 찾고, 없으면 Image Studio 백엔드를 찾습니다. 게임 폴더에 없으면 설치된 앱 전용 ZIP 모드에서도 확인합니다.
+5. 준비가 끝나면 상태가 연결됨으로 바뀝니다. **이미지 생성 설정 / 상태 열기**는 ComfyUI 모드에서 로컬 ImageGen 상태/검토 페이지를 엽니다.
+
+이 버튼은 PC의 ComfyUI 프로그램을 켜는 버튼이 아닙니다. PC의 ComfyUI가 꺼져 있거나, PC 방화벽이 휴대폰의 연결을 막거나, ComfyUI가 LAN 요청을 받지 않으면 이미지 생성은 실패합니다. PC에서 ComfyUI가 기본적으로 localhost(`127.0.0.1`)에만 묶여 있다면 Portable 실행 인수에 `--listen 0.0.0.0`을 추가하거나 Desktop의 Server Configuration에서 Listen Address를 `0.0.0.0`으로 바꾸고 재시작하세요. PC에서 ComfyUI의 LAN 수신을 허용하되 방화벽은 집의 사설 네트워크로 제한하세요. 인증 없는 ComfyUI 포트를 인터넷 전체에 공개하거나 공유기에서 공인 포트포워딩하는 방식은 사용하지 마세요.
+
+### 주소 제한과 서버 중지
+
+ComfyUI 주소는 휴대폰이 아닌 PC의 주소를 입력해야 하므로 `127.0.0.1`과 `localhost`는 거부합니다. 런처는 사설 IPv4(`10.x`, `172.16~31.x`, `192.168.x`), Tailscale IPv4(`100.64~127.x`), `.ts.net` 및 `.local` 호스트만 허용합니다. 사용자 정보, 쿼리 문자열, 임의의 URL 경로 및 공용 IP 주소는 받지 않습니다.
+
+NovelAI와 ComfyUI 연결 서버는 동일한 로컬 포트 `127.0.0.1:8189`를 공유합니다. 다른 모드로 전환할 때는 **이미지 생성 서버 중지**를 누른 다음 원하는 서버 실행 버튼을 누르세요. 런처의 기존 Image Studio 자동 시작 기능도 유지됩니다.
+
+**주의:** EasyGen의 NovelAI 자격 증명은 EasyGen 자체 설정/인증 흐름으로 처리됩니다. 기존 이미지 서비스 관리 화면의 Android Keystore 암호화 API 키 저장소와 동일한 저장 경로라고 가정하면 안 됩니다. Bun Android 실행과 실제 NovelAI·ComfyUI 생성은 기기에서 추가 검증이 필요합니다.

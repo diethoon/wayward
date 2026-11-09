@@ -14,6 +14,7 @@ import android.os.Looper;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.text.InputType;
 import android.view.View;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
@@ -22,6 +23,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -54,7 +56,7 @@ import java.util.regex.Pattern;
 public final class MainActivity extends Activity {
     private static final int PICK_TREE=4101, PICK_MOD_ZIP=4102;
     private static final String PREFS="wayward_launcher";
-    private static final String KEY_TREE="game_tree_uri", KEY_PROFILES="game_profiles", KEY_ZIP_REV="zip_mod_revision";
+    private static final String KEY_TREE="game_tree_uri", KEY_PROFILES="game_profiles", KEY_ZIP_REV="zip_mod_revision", KEY_COMFY_URL="comfy_server_url";
     private static final String KO="Wayward_WML_ko.html", EN="Wayward_WML.html";
     private static final String BUILTIN_COMPANIONS_MOD_ID = "launcher-mobile-companions";
     private static final String BUILTIN_COMPANIONS_MOD_FILE = "wml/mods/" + BUILTIN_COMPANIONS_MOD_ID + "/mod.js";
@@ -70,8 +72,10 @@ public final class MainActivity extends Activity {
     private FrameLayout root;
     private LinearLayout home, profileList, zipModList;
     private TextView status, folderText, profileSummary, zipSummary, imageGenStatus;
+    private EditText comfyUrlInput;
     private String imageGenSessionMessage = "";
     private static volatile boolean imageGenCopying = false;
+    private static volatile boolean manualImageGenPreparing = false;
     private final Handler imageGenHandler = new Handler(Looper.getMainLooper());
     private final List<Runnable> imageGenReadyCallbacks = new ArrayList<>();
     private Runnable imageGenPollRunnable;
@@ -145,11 +149,16 @@ public final class MainActivity extends Activity {
 
         TextView imageTitle=new TextView(this);imageTitle.setText("이미지 생성 서비스");imageTitle.setTextColor(Color.WHITE);imageTitle.setTextSize(16);imageTitle.setTypeface(null,1);
         LinearLayout.LayoutParams imageTitleParams=new LinearLayout.LayoutParams(-1,-2);imageTitleParams.topMargin=dp(24);imageTitleParams.bottomMargin=dp(7);page.addView(imageTitle,imageTitleParams);
-        TextView imageDesc=new TextView(this);imageDesc.setText("Cloudflare FLUX, OpenAI 호환 API, 사용자 지정 REST 서비스를 등록하고 Wayward/Faith별 기본 생성 엔진을 선택합니다.");imageDesc.setTextColor(Color.rgb(174,194,181));imageDesc.setTextSize(12);imageDesc.setLineSpacing(dp(2),1f);page.addView(imageDesc);
+        TextView imageDesc=new TextView(this);imageDesc.setText("Wayward ImageGen 0.8.4 서버를 런처 APK에 내장했습니다. 게임 폴더나 ZIP에서 서버를 찾지 않으며, NovelAI와 PC ComfyUI를 같은 내장 서버로 실행합니다.");imageDesc.setTextColor(Color.rgb(174,194,181));imageDesc.setTextSize(12);imageDesc.setLineSpacing(dp(2),1f);page.addView(imageDesc);
         page.addView(button("이미지 서비스 관리 · 등록 / 테스트",true,()->startActivity(new Intent(MainActivity.this,ImageProviderActivity.class))),buttonParams());
+        TextView runtimeHint=new TextView(this);runtimeHint.setText("NovelAI 토큰은 이미지 서비스 관리에서 먼저 등록하세요. ComfyUI는 PC가 꺼져 있거나 주소가 비어 있어도 휴대폰 중계 서버를 먼저 켜고 대기합니다. PC 주소를 나중에 입력하면 중계 서버가 새 주소로 재시작됩니다.");runtimeHint.setTextColor(Color.rgb(174,194,181));runtimeHint.setTextSize(12);runtimeHint.setLineSpacing(dp(2),1f);LinearLayout.LayoutParams runtimeHintParams=new LinearLayout.LayoutParams(-1,-2);runtimeHintParams.topMargin=dp(10);page.addView(runtimeHint,runtimeHintParams);
+        comfyUrlInput=new EditText(this);comfyUrlInput.setSingleLine(true);comfyUrlInput.setTextSize(14);comfyUrlInput.setTextColor(Color.WHITE);comfyUrlInput.setHintTextColor(Color.rgb(142,160,148));comfyUrlInput.setHint("http://PC의-LAN-IP:8188 또는 https://PC의-Tailscale-주소:8188");comfyUrlInput.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);comfyUrlInput.setPadding(dp(12),dp(9),dp(12),dp(9));comfyUrlInput.setText(getSharedPreferences(PREFS,MODE_PRIVATE).getString(KEY_COMFY_URL,""));LinearLayout.LayoutParams comfyInputParams=new LinearLayout.LayoutParams(-1,dp(52));comfyInputParams.topMargin=dp(8);comfyInputParams.bottomMargin=dp(7);page.addView(comfyUrlInput,comfyInputParams);
+        page.addView(button("NovelAI · 런처 내장 서버 실행",true,this::startNovelAiServer),buttonParams());
+        page.addView(button("ComfyUI 연결 서버 실행",true,this::startComfyConnectionServer),buttonParams());
+        page.addView(button("이미지 생성 설정 / 상태 열기",false,this::openImageGenPanel),buttonParams());
         imageGenStatus=new TextView(this);imageGenStatus.setTextColor(Color.rgb(245,210,130));imageGenStatus.setTextSize(12);imageGenStatus.setPadding(dp(10),dp(9),dp(10),dp(9));imageGenStatus.setBackgroundColor(Color.rgb(35,48,40));
         LinearLayout.LayoutParams imageStatusParams=new LinearLayout.LayoutParams(-1,-2);imageStatusParams.topMargin=dp(8);imageStatusParams.bottomMargin=dp(7);page.addView(imageGenStatus,imageStatusParams);
-        page.addView(button("Image Studio 로컬 서버 중지",false,this::stopImageGenServer),buttonParams());
+        page.addView(button("이미지 생성 서버 중지",false,this::stopImageGenServer),buttonParams());
 
         TextView help=new TextView(this);help.setText("ZIP 설치 위치: 이 앱의 비공개 files 저장소\n게임 폴더에는 ZIP이나 압축 해제 파일을 쓰지 않습니다. 설치한 모드는 등록된 게임 세션에서 공통으로 사용할 수 있으며, 모드 활성화/순서는 각 게임 세션의 브라우저 저장소에 따로 보관됩니다.");
         help.setTextColor(Color.rgb(151,171,158));help.setTextSize(12);help.setLineSpacing(dp(3),1f);LinearLayout.LayoutParams hl=new LinearLayout.LayoutParams(-1,-2);hl.topMargin=dp(18);page.addView(help,hl);
@@ -568,14 +577,12 @@ public final class MainActivity extends Activity {
 
     private boolean ensureImageGenBackend(SafTree sessionTree) throws Exception {
         if (sessionTree == null) return false;
-        String version = sessionTree.imageStudioBackendVersion();
-        if (version == null || version.isEmpty()) return false;
-        File backend = imageGenBackendRoot();
-        deleteFileTree(backend);
-        if (!sessionTree.copyDirectory("wml/mods/imagestudio/backend", backend)) return false;
-        if (hasImageGenProject(backend)) return true;
-        deleteFileTree(backend);
-        return false;
+        // The WML mod is only the in-game adapter. The server implementation is
+        // shipped in the launcher APK and never copied from the selected game.
+        String modVersion = sessionTree.imageStudioModId();
+        if (modVersion == null) return false;
+        File backend = ImageGenBackendInstaller.install(this, imageGenBackendRoot());
+        return hasImageGenProject(backend);
     }
 
     private boolean hasImageGenProject(File backend) {
@@ -593,6 +600,12 @@ public final class MainActivity extends Activity {
             return;
         }
 
+        if (manualImageGenPreparing) {
+            imageGenSessionMessage = "이미지 생성 서버 준비가 진행 중입니다. 준비가 끝난 뒤 현재 세션을 다시 여세요.";
+            refreshImageGenStatus();
+            finishImageGenCallbacks();
+            return;
+        }
         if (imageGenCopying) {
             waitForImageGenReady();
             return;
@@ -600,20 +613,16 @@ public final class MainActivity extends Activity {
 
         final String version;
         try {
-            String detected = sessionTree.imageStudioBackendVersion();
+            String detected = sessionTree.imageStudioModId();
             if (detected == null) {
                 imageGenSessionMessage = "현재 세션의 WML Image Studio 모드가 없어 이미지 서버를 시작하지 않았습니다.";
                 refreshImageGenStatus();
                 finishImageGenCallbacks();
                 return;
             }
-            if (detected.isEmpty()) {
-                imageGenSessionMessage = "Image Studio 모드는 감지했지만 backend/wayward-imagegen 또는 src/cli.ts를 찾지 못했습니다.";
-                refreshImageGenStatus();
-                finishImageGenCallbacks();
-                return;
-            }
-            version = detected;
+            // The mod identifies whether the current game uses Image Studio;
+            // its backend files are embedded in the launcher APK.
+            version = "launcher-imagegen:" + ImageGenBackendInstaller.VERSION + ":comfy";
         } catch (Exception e) {
             imageGenSessionMessage = "현재 세션의 Image Studio 모드 검사 실패: " + msg(e);
             refreshImageGenStatus();
@@ -662,9 +671,11 @@ public final class MainActivity extends Activity {
             try {
                 synchronized (IMAGEGEN_LOCK) {
                     if (!ensureImageGenBackend(sessionTree)) {
-                        throw new IllegalStateException("현재 세션의 wml/mods/imagestudio/backend에서 wayward-imagegen을 찾지 못했습니다.");
+                        throw new IllegalStateException("현재 런처 APK에 포함된 ImageGen 서버 자산을 찾지 못했습니다.");
                     }
                 }
+                writeImageGenRuntimeConfig(backend, "comfy",
+                        getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_COMFY_URL, ""));
             } catch (Throwable error) {
                 problem = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
             }
@@ -677,15 +688,18 @@ public final class MainActivity extends Activity {
                     finishImageGenCallbacks();
                     return;
                 }
-                startImageGenService(backend, version);
+                startImageGenService(backend, version, "comfy",
+                        getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_COMFY_URL, ""));
                 waitForImageGenReady();
             });
         }, "wayward-imagegen-session-prepare").start();
     }
 
     private static boolean sameImageGenVersion(String running, String requested) {
-        return running != null && requested != null && !running.isEmpty()
-                && running.equals(requested);
+        if(running==null||requested==null||running.isEmpty()||requested.isEmpty())return false;
+        // The engine mode is part of the version identity: NovelAI and ComfyUI
+        // share code but have different active provider configuration.
+        return running.equals(requested);
     }
 
     private static String safeVersion(String version) {
@@ -725,15 +739,198 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void startNovelAiServer(){
+        startOrSwitchManagedImageGenServer("novelai","");
+    }
+
+    private void startComfyConnectionServer(){
+        try{
+            String url=ComfyEndpoint.normalizeOptional(comfyUrlInput==null?"":comfyUrlInput.getText().toString());
+            startOrSwitchManagedImageGenServer("comfy",url);
+        }catch(IllegalArgumentException error){
+            imageGenSessionMessage="ComfyUI 주소 확인: "+msg(error);
+            refreshImageGenStatus();
+            Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void startOrSwitchManagedImageGenServer(String mode,String endpoint){
+        ImageGenStatusStore.State running=ImageGenStatusStore.read(getFilesDir());
+        String storedEndpoint=getSharedPreferences(PREFS,MODE_PRIVATE).getString(KEY_COMFY_URL,"");
+        boolean endpointChanged="comfy".equals(mode)&&!endpoint.equals(storedEndpoint==null?"":storedEndpoint);
+        boolean sameMode=running.backendVersion!=null&&running.backendVersion.endsWith(":"+mode);
+        if(running.isStarting()){
+            imageGenSessionMessage="이미 이미지 서버를 시작하고 있습니다. 준비가 끝난 뒤 다시 시도해 주세요.";
+            refreshImageGenStatus();
+            return;
+        }
+        if(running.isReady()&&sameMode&&!endpointChanged){
+            imageGenSessionMessage="런처 내장 "+("comfy".equals(mode)?"ComfyUI 중계":"NovelAI")+" 서버가 이미 실행 중입니다.";
+            refreshImageGenStatus();
+            Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if("comfy".equals(mode)){
+            getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString(KEY_COMFY_URL,endpoint).apply();
+        }
+        if(running.isReady()){
+            imageGenSessionMessage="서버 설정 변경을 적용하기 위해 내장 이미지 서버를 재시작합니다…";
+            refreshImageGenStatus();
+            stopImageGenServer();
+            waitForImageGenStopThenStart(mode,endpoint,0);
+            return;
+        }
+        startManagedImageGenServer(mode,endpoint);
+    }
+
+    private void waitForImageGenStopThenStart(String mode,String endpoint,int attempt){
+        ImageGenStatusStore.State state=ImageGenStatusStore.read(getFilesDir());
+        if(!state.isReady()&&!state.isStarting()){
+            startManagedImageGenServer(mode,endpoint);
+            return;
+        }
+        if(attempt>=20){
+            imageGenSessionMessage="기존 이미지 서버가 아직 종료되지 않았습니다. 중지 버튼으로 종료한 뒤 다시 실행해 주세요.";
+            refreshImageGenStatus();
+            return;
+        }
+        imageGenHandler.postDelayed(()->waitForImageGenStopThenStart(mode,endpoint,attempt+1),250);
+    }
+
+    private void openImageGenPanel(){
+        ImageGenStatusStore.State state=ImageGenStatusStore.read(getFilesDir());
+        if(!state.isReady()){
+            Toast.makeText(this,"먼저 NovelAI 또는 ComfyUI 연결 서버를 실행해 주세요.",Toast.LENGTH_LONG).show();
+            return;
+        }
+        Intent intent=new Intent(this,ImageGenPanelActivity.class);
+        intent.putExtra(ImageGenPanelActivity.EXTRA_MODE,state.backendVersion.endsWith(":comfy")?"comfy":"novelai");
+        startActivity(intent);
+    }
+
+    private void startManagedImageGenServer(String mode,String comfyUrl){
+        if (!"novelai".equals(mode) && !"comfy".equals(mode)) {
+            imageGenSessionMessage = "지원하지 않는 이미지 생성 서버 모드입니다.";
+            refreshImageGenStatus();
+            return;
+        }
+        synchronized(IMAGEGEN_LOCK){
+            ImageGenStatusStore.State running=ImageGenStatusStore.read(getFilesDir());
+            if(running.isReady()||running.isStarting()){
+                imageGenSessionMessage="이미 런처 내장 이미지 서버가 실행 중입니다. ComfyUI 주소를 바꾸려면 주소를 입력한 뒤 연결 버튼을 누르세요.";
+                refreshImageGenStatus();
+                Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
+                return;
+            }
+            if(imageGenCopying||manualImageGenPreparing){
+                imageGenSessionMessage="내장 이미지 서버를 준비하고 있습니다. 준비가 끝난 뒤 다시 시도해 주세요.";
+                refreshImageGenStatus();
+                Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
+                return;
+            }
+            manualImageGenPreparing=true;
+        }
+
+        final File backend=imageGenBackendRoot();
+        final String requestedUrl=comfyUrl==null?"":comfyUrl.trim();
+        imageGenSessionMessage=("novelai".equals(mode)?"NovelAI":"ComfyUI 연결")+" 런처 내장 서버를 준비하고 있습니다…";
+        refreshImageGenStatus();
+        new Thread(()->{
+            String failure=null;
+            try{
+                ImageGenBackendInstaller.install(this,backend);
+                if("novelai".equals(mode)){
+                    String token=ImageProviderStore.readNovelAiToken(this);
+                    if(token==null||token.trim().isEmpty()){
+                        throw new IllegalStateException("NovelAI API 토큰이 등록되지 않았습니다. 이미지 서비스 관리에서 토큰을 먼저 저장해 주세요.");
+                    }
+                }
+                writeImageGenRuntimeConfig(backend,mode,requestedUrl);
+            }catch(Throwable error){
+                failure=error.getMessage()==null?error.getClass().getSimpleName():error.getMessage();
+            }
+            final String problem=failure;
+            runOnUiThread(()->{
+                if(problem!=null){
+                    manualImageGenPreparing=false;
+                    imageGenSessionMessage="내장 이미지 서버 준비 실패: "+problem;
+                    try { ImageGenStatusStore.write(getFilesDir(),false,false,imageGenSessionMessage,""); }
+                    catch (Exception ignored) {}
+                    refreshImageGenStatus();
+                    Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
+                    return;
+                }
+                String launchVersion="launcher-imagegen:"+ImageGenBackendInstaller.VERSION+":"+mode;
+                try {
+                    ImageGenStatusStore.write(getFilesDir(),false,true,"런처 내장 ImageGen 서버 시작 중…",launchVersion);
+                } catch (Exception error) {
+                    manualImageGenPreparing=false;
+                    imageGenSessionMessage="이미지 서버 상태를 저장하지 못했습니다: "+msg(error);
+                    refreshImageGenStatus();
+                    return;
+                }
+                imageGenReadyCallbacks.add(()->{
+                    ImageGenStatusStore.State state=ImageGenStatusStore.read(getFilesDir());
+                    if(!state.isReady())imageGenSessionMessage=state.message;
+                    refreshImageGenStatus();
+                });
+                startImageGenService(backend,launchVersion,mode,requestedUrl);
+                manualImageGenPreparing=false;
+                refreshImageGenStatus();
+                waitForImageGenReady();
+            });
+        },"wayward-imagegen-bundled-prepare").start();
+    }
+
+    private void writeImageGenRuntimeConfig(File backend,String mode,String comfyUrl)throws Exception{
+        File project=new File(backend,"wayward-imagegen");
+        if(!new File(project,"src/cli.ts").isFile())throw new IllegalStateException("내장 wayward-imagegen/src/cli.ts가 없습니다.");
+        JSONObject config=new JSONObject();
+        config.put("host","127.0.0.1");
+        config.put("port",8189);
+        config.put("imagesDir",new File(getFilesDir(),"imagegen/images").getAbsolutePath());
+        config.put("stateDir",new File(getFilesDir(),"imagegen/state").getAbsolutePath());
+        config.put("comfyUrl",comfyUrl==null||comfyUrl.isEmpty()?"http://127.0.0.1:8188":comfyUrl);
+        config.put("imageProvider","novelai".equals(mode)?"nai":"sdxl");
+        // Android has no bundled sharp binary; PNG is the supported no-dependency path.
+        config.put("webp",false);
+        config.put("requireWebp",false);
+        File images=new File(getFilesDir(),"imagegen/images");
+        File state=new File(getFilesDir(),"imagegen/state");
+        if(!images.isDirectory()&&!images.mkdirs()&&!images.isDirectory())throw new IllegalStateException("이미지 저장 폴더를 만들지 못했습니다.");
+        if(!state.isDirectory()&&!state.mkdirs()&&!state.isDirectory())throw new IllegalStateException("이미지 상태 폴더를 만들지 못했습니다.");
+        File output=new File(project,"wayward-imagegen.config.json");
+        File temporary=new File(project,"wayward-imagegen.config.json.tmp");
+        try(FileOutputStream stream=new FileOutputStream(temporary)){
+            stream.write(config.toString().getBytes(StandardCharsets.UTF_8));
+            stream.flush();
+            stream.getFD().sync();
+        }
+        try{
+            java.nio.file.Files.move(temporary.toPath(),output.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        }catch(java.nio.file.AtomicMoveNotSupportedException error){
+            java.nio.file.Files.move(temporary.toPath(),output.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
     private void startImageGenService(File backend, String version) {
+        startImageGenService(backend,version,"default","");
+    }
+
+    private void startImageGenService(File backend,String version,String launchMode,String comfyUrl){
         Intent intent = new Intent(this, ImageGenService.class);
         intent.setAction(ImageGenService.ACTION_START);
         intent.putExtra(ImageGenService.EXTRA_BACKEND_ROOT, backend.getAbsolutePath());
         intent.putExtra(ImageGenService.EXTRA_BACKEND_VERSION, version);
+        intent.putExtra(ImageGenService.EXTRA_LAUNCH_MODE, launchMode);
+        intent.putExtra(ImageGenService.EXTRA_COMFY_URL, comfyUrl==null?"":comfyUrl);
         try {
             if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
             else startService(intent);
-            imageGenSessionMessage = "Image Studio " + version + " 서버 시작 요청을 전달했습니다.";
+            imageGenSessionMessage = "Wayward ImageGen " + version + " 서버 시작 요청을 전달했습니다.";
             refreshImageGenStatus();
         } catch (Throwable error) {
             DiagnosticsLogger.error(this,"imagegen","service_start_request_failed",error);
@@ -762,12 +959,20 @@ public final class MainActivity extends Activity {
     private void refreshImageGenStatus() {
         if (imageGenStatus == null) return;
         ImageGenStatusStore.State state = ImageGenStatusStore.read(getFilesDir());
-        if (state.isReady()) imageGenStatus.setText("연결됨 · 공통 이미지 생성 서버 127.0.0.1:8189 · Image Studio " + safeVersion(state.backendVersion));
+        if (state.isReady()) {
+            boolean comfy = state.backendVersion != null && state.backendVersion.endsWith(":comfy");
+            String endpoint = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_COMFY_URL, "");
+            if (comfy && (endpoint == null || endpoint.trim().isEmpty())) {
+                imageGenStatus.setText("로컬 ComfyUI 중계 서버 실행됨 · PC 주소 미설정 · 연결 대기 중 · 127.0.0.1:8189");
+            } else {
+                imageGenStatus.setText("런처 내장 ImageGen " + ImageGenBackendInstaller.VERSION + " 실행 중 · 127.0.0.1:8189");
+            }
+        }
         else if (state.isStarting()) imageGenStatus.setText(state.message.isEmpty() ? "이미지 생성 서버 시작 중…" : state.message);
-        else if (imageGenCopying) imageGenStatus.setText("현재 세션 Image Studio 백엔드 준비 중…");
+        else if (imageGenCopying || manualImageGenPreparing) imageGenStatus.setText("이미지 생성 백엔드 준비 중…");
         else if (state.ready && !state.isFresh()) imageGenStatus.setText("이미지 생성 서비스 heartbeat가 끊겼습니다. 현재 세션을 다시 열면 서버를 재시작합니다.");
-        else if (imageGenSessionMessage != null && !imageGenSessionMessage.isEmpty()) imageGenStatus.setText(imageGenSessionMessage);
         else if (!state.message.isEmpty()) imageGenStatus.setText(state.message);
+        else if (imageGenSessionMessage != null && !imageGenSessionMessage.isEmpty()) imageGenStatus.setText(imageGenSessionMessage);
         else imageGenStatus.setText("서버가 실행되지 않았습니다.");
     }
 
@@ -981,77 +1186,14 @@ public final class MainActivity extends Activity {
             return n;
         }
 
-        boolean copyDirectory(String relativePath,File destination)throws Exception{
-            Node source=resolve(relativePath);if(source==null||!source.dir)return false;
-            deleteFileTree(destination);
-            if(!destination.mkdirs()&&!destination.isDirectory())throw new IllegalStateException("앱 내부 ImageGen 폴더를 만들지 못했습니다.");
-            long[] total={0};int[] count={0};
-            try{copyChildren(source.id,destination,destination.getCanonicalFile(),total,count);}
-            catch(Exception e){deleteFileTree(destination);throw e;}
-            if(count[0]==0){deleteFileTree(destination);return false;}
-            return true;
-        }
-        private void copyChildren(String parentId,File outputRoot,File canonicalRoot,long[] total,int[] count)throws Exception{
-            String rootPath=canonicalRoot.getPath()+File.separator;
-            for(Node child:children(parentId)){
-                String name=child.name;
-                if(name==null||name.isEmpty()||name.equals(".")||name.equals("..")||name.indexOf('/')>=0||name.indexOf(92)>=0||name.indexOf(0)>=0)continue;
-                if(++count[0]>20000)throw new IllegalStateException("ImageGen 파일 수가 20,000개 제한을 초과했습니다.");
-                File out=new File(outputRoot,name).getCanonicalFile();
-                if(!out.getPath().startsWith(rootPath))throw new SecurityException("ImageGen 경로가 앱 내부 저장소를 벗어납니다.");
-                if(child.dir){
-                    if(!out.mkdirs()&&!out.isDirectory())throw new IllegalStateException("ImageGen 폴더 생성 실패");
-                    copyChildren(child.id,out,canonicalRoot,total,count);
-                    continue;
-                }
-                File parent=out.getParentFile();if(parent!=null&&!parent.mkdirs()&&!parent.isDirectory())throw new IllegalStateException("ImageGen 상위 폴더 생성 실패");
-                try(InputStream in=getContentResolver().openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree,child.id));
-                    FileOutputStream output=new FileOutputStream(out)){
-                    if(in==null)throw new IllegalStateException("ImageGen 파일을 읽지 못했습니다: "+name);
-                    byte[] buffer=new byte[32768];long fileBytes=0;int n;
-                    while((n=in.read(buffer))>=0){
-                        if(n==0)continue;fileBytes+=n;total[0]+=n;
-                        if(fileBytes>256L*1024L*1024L||total[0]>512L*1024L*1024L)throw new IllegalStateException("ImageGen 백엔드가 512MB 제한을 초과했습니다.");
-                        output.write(buffer,0,n);
-                    }
-                    output.flush();
-                }
-            }
-        }
-        String imageStudioBackendVersion() throws Exception {
+        String imageStudioModId() throws Exception {
+            // The game folder supplies only the WML adapter marker.
+            // The actual server is always installed from the launcher APK.
             Node modDirectory = resolve("wml/mods/imagestudio");
             if (modDirectory == null || !modDirectory.dir) return null;
             Node modScript = find(modDirectory.id, "mod.js");
             if (modScript == null || modScript.dir || !"imagestudio".equals(declared(modScript))) return null;
-
-            String nestedVersion = backendPackageVersion(
-                    "wml/mods/imagestudio/backend/wayward-imagegen/package.json",
-                    "wml/mods/imagestudio/backend/wayward-imagegen/src/cli.ts");
-            if (nestedVersion != null) return nestedVersion;
-
-            String rootVersion = backendPackageVersion(
-                    "wml/mods/imagestudio/backend/package.json",
-                    "wml/mods/imagestudio/backend/src/cli.ts");
-            return rootVersion == null ? "" : rootVersion;
-        }
-
-        private String backendPackageVersion(String packagePath, String cliPath) throws Exception {
-            if (!exists(packagePath) || !exists(cliPath)) return null;
-            try (InputStream in = open(packagePath)) {
-                if (in == null) return null;
-                byte[] bytes = new byte[65537];
-                int used = 0;
-                while (used < bytes.length) {
-                    int n = in.read(bytes, used, bytes.length - used);
-                    if (n < 0) break;
-                    if (n == 0) continue;
-                    used += n;
-                }
-                if (used > 65536) throw new IllegalStateException("Image Studio package.json가 64KB를 초과합니다.");
-                JSONObject pkg = new JSONObject(new String(bytes, 0, used, StandardCharsets.UTF_8));
-                String version = pkg.optString("version", "unknown").trim();
-                return version.isEmpty() ? "unknown" : version;
-            }
+            return "imagestudio";
         }
 
         List<String> listModIds()throws Exception{
