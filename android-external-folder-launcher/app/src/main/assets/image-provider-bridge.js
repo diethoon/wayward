@@ -32,9 +32,9 @@
 
   function safeDomField(value, maxLength) {
     return String(value || "")
-      .replace(/[\\u0000-\\u001f\\u007f]/g, " ")
-      .replace(/[^A-Za-z0-9\\u00c0-\\u024f\\u3040-\\u30ff\\u3400-\\u9fff\\uac00-\\ud7a3 ._:-]/g, "")
-      .replace(/\\s+/g, " ").trim().slice(0, maxLength);
+      .replace(/[\x00-\x1f\x7f]/g, " ")
+      .replace(/[^A-Za-z0-9À-ɏ぀-ヿ㐀-鿿가-힣 ._:-]/g, "")
+      .replace(/\s+/g, " ").trim().slice(0, maxLength);
   }
 
   function safeImageLocation(raw) {
@@ -51,21 +51,10 @@
         const lower = decoded.toLowerCase();
         const sensitive = decoded.length > 80 ||
           /^[A-Za-z0-9_-]{40,}$/.test(decoded) ||
-          /^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$/.test(decoded) ||
+          /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(decoded) ||
           /token|secret|signature|authorization|bearer|session|api[_-]?key/i.test(lower);
         if (sensitive) return "~redacted~";
-        return decoded.replace(/[^A-Za-z0-9\\u00c0-\\u024f\\u3040-\\u30ff\\u3400-\\u9fff\\uac00-\\ud7a3._~!  function imageDetails(img) {
-    const raw = String(img.currentSrc || img.src || "");
-    return {
-      elementTag: "img",
-      srcKind: srcKind(raw),
-      srcLength: raw.length,
-      naturalWidth: Number(img.naturalWidth) || 0,
-      naturalHeight: Number(img.naturalHeight) || 0,
-      complete: Boolean(img.complete)
-    };
-  }
-'()*+,;=:@%\\-]/g, "_");
+        return decoded.replace(/[^A-Za-z0-9À-ɏ぀-ヿ㐀-鿿가-힣._~!()+,;=:@%-]/g, "_");
       });
       let path = safeSegments.join("/");
       if (!path.startsWith("/")) path = "/" + path;
