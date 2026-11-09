@@ -94,6 +94,9 @@ imageListeners.error({
     tagName: "IMG",
     src: "https://example.invalid/private/secret.png?token=hidden",
     currentSrc: "https://example.invalid/private/secret.png?token=hidden",
+    id: "portrait-main",
+    className: "character portrait",
+    alt: "Mika portrait",
     naturalWidth: 0,
     naturalHeight: 0,
     complete: true
@@ -102,8 +105,31 @@ imageListeners.error({
 const imageError = diagnostics.find(item => item.event === "img_element_error");
 assert.ok(imageError);
 assert.equal(imageError.details.srcKind, "https");
-assert.equal(JSON.stringify(imageError.details).includes("example.invalid"), false);
+assert.equal(imageError.details.srcHost, "example.invalid");
+assert.equal(imageError.details.srcPath, "/private/secret.png");
+assert.equal(imageError.details.elementId, "portrait-main");
+assert.equal(imageError.details.elementClass, "character portrait");
+assert.equal(imageError.details.elementAlt, "Mika portrait");
+assert.equal(imageError.details.repeatCount, 1);
+assert.equal(JSON.stringify(imageError.details).includes("token=hidden"), false);
 assert.equal(JSON.stringify(imageError.details).includes("hidden"), false);
+
+imageListeners.error({
+  type: "error",
+  target: {
+    tagName: "IMG",
+    src: "https://example.invalid/private/secret.png?different=ignored",
+    currentSrc: "https://example.invalid/private/secret.png?different=ignored",
+    id: "portrait-main",
+    className: "character portrait",
+    alt: "Mika portrait",
+    naturalWidth: 0,
+    naturalHeight: 0,
+    complete: true
+  }
+});
+const repeatedImageError = diagnostics.filter(item => item.event === "img_element_error").at(-1);
+assert.equal(repeatedImageError.details.repeatCount, 2);
 
 await assert.rejects(
   window.WaywardImageProviders.generate({ prompt: " " }),
