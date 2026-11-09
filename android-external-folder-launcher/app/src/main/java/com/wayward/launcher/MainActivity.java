@@ -79,6 +79,8 @@ public final class MainActivity extends Activity {
     private volatile boolean imageGenHealthResponding = false;
     private volatile boolean imageGenHealthProbeComplete = false;
     private boolean pendingGameLoad = false;
+    private String lastImageGenDiagnosticFailure = "";
+    private long lastImageGenDiagnosticUploadAt = 0L;
     private WebView web;
     private WebFileChooser webFileChooser;
 
@@ -168,6 +170,10 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams imageControlsParams=new LinearLayout.LayoutParams(-1,-2);
         imageControlsParams.topMargin=dp(3);
         page.addView(imageGenControls,imageControlsParams);
+        Button diagnosticsButton=compactButton("진단 로그 공유",false,this::shareDiagnostics);
+        LinearLayout.LayoutParams diagnosticsParams=new LinearLayout.LayoutParams(-1,dp(44));
+        diagnosticsParams.topMargin=dp(6);
+        page.addView(diagnosticsButton,diagnosticsParams);
 
         TextView help=new TextView(this);help.setText("모드 ZIP 파일은 게임 안 WML 모드 관리자의 '모드 파일 고르기'로 선택합니다. 모드 설치와 활성화 상태는 각 게임 세션에서 관리됩니다. 런처 공용 ZIP 모드 저장소와 내장 동료 모바일 실시간 창은 제공하지 않습니다.");
         help.setTextColor(Color.rgb(151,171,158));help.setTextSize(12);help.setLineSpacing(dp(3),1f);LinearLayout.LayoutParams hl=new LinearLayout.LayoutParams(-1,-2);hl.topMargin=dp(18);page.addView(help,hl);
@@ -179,6 +185,20 @@ public final class MainActivity extends Activity {
         Button b=new Button(this);b.setText(label);b.setAllCaps(false);b.setTextSize(12);b.setMinHeight(dp(42));
         b.setTextColor(Color.WHITE);b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primary?Color.rgb(54,105,76):Color.rgb(70,78,70)));
         b.setOnClickListener(v->action.run());return b;
+    }
+
+    private void shareDiagnostics() {
+        DiagnosticsLogger.event(this, "INFO", "diagnostics", "manual_export_requested", null);
+        String report = DiagnosticsLogger.exportText(this);
+        Intent send = new Intent(Intent.ACTION_SEND);
+        send.setType("text/plain");
+        send.putExtra(Intent.EXTRA_SUBJECT, "Wayward Launcher 진단 로그");
+        send.putExtra(Intent.EXTRA_TEXT, report);
+        try {
+            startActivity(Intent.createChooser(send, "진단 로그 공유"));
+        } catch (Exception error) {
+            Toast.makeText(this, "진단 로그 공유를 열지 못했습니다: " + msg(error), Toast.LENGTH_LONG).show();
+        }
     }
 
     private void chooseFolder(){
@@ -802,6 +822,22 @@ public final class MainActivity extends Activity {
     }
 
     private void pollImageGenServerStatus() {
+        ImageGenStatusStore.State state = ImageGenStatusStore.read(getFilesDir());
+        String failure = state.message == null ? "" : state.message;
+        if (!state.isStarting() && failure.startsWith("서버 시작 실패")) {
+            long now = System.currentTimeMillis();
+            if (!failure.equals(lastImageGenDiagnosticFailure)) {
+                lastImageGenDiagnosticFailure = failure;
+                lastImageGenDiagnosticUploadAt = 0L;
+            }
+            if (now - lastImageGenDiagnosticUploadAt >= 30_000L) {
+                lastImageGenDiagnosticUploadAt = now;
+                DiagnosticsUploader.uploadPending(this);
+            }
+        } else {
+            lastImageGenDiagnosticFailure = "";
+            lastImageGenDiagnosticUploadAt = 0L;
+        }
         refreshImageGenStatus();
         if (!imageGenHealthProbeInFlight.compareAndSet(false, true)) return;
         new Thread(() -> {
