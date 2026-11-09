@@ -60,7 +60,7 @@ public final class ImageDiagnosticsActivity extends Activity {
         page.addView(actionButton("로그 초기화", false, this::clearLog));
 
         TextView legend = new TextView(this);
-        legend.setText("주요 단계: game_generate_requested → native_request_received → native_image_received → js_resolver_invoked → data_url_probe_loaded / img_element_error");
+        legend.setText("주요 단계: game_generate_requested → native_image_received → data_url_probe_loaded / img_element_error. 404 항목에는 srcHost/srcPath, DOM id/class/alt, 반복 횟수가 표시됩니다.");
         legend.setTextColor(MUTED);
         legend.setTextSize(11);
         legend.setLineSpacing(dp(2), 1f);
