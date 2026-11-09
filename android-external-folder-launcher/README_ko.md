@@ -135,7 +135,7 @@ CI에서 Android APK 컴파일·서명 검증을 수행합니다. 실제 Android
 2. 필요한 경우 모델 ID와 API 키/토큰을 입력합니다.
 3. 사용자 지정 REST라면 요청 JSON, 응답 이미지 경로, 반환 형식을 설정합니다.
 4. **실제 생성 테스트**를 실행해 요청·인증·이미지 응답과 미리보기를 확인합니다. 이 테스트는 실제 생성 요청이므로 제공자의 요금/크레딧을 사용할 수 있습니다.
-5. 저장한 다음 게임별 기본 서비스를 지정합니다. Wayward와 Faith는 각각 독립된 기본 서비스 값을 가집니다.
+5. 저장한 다음 게임별 기본 생성 서비스와 실패 시 대체 서비스를 지정합니다. Wayward와 Faith는 각각 독립된 기본/대체 서비스 값을 가집니다. 대체 서비스는 기본 서비스 요청이 실패했을 때 한 번만 호출되며, 이 경우에도 별도 생성 비용이 발생할 수 있습니다.
 
 기존 서비스 편집 시 API 키 입력란을 비워두면 저장된 키를 유지합니다. 키를 변경하려면 새 키를 입력하세요. 서비스 삭제 시 해당 서비스가 기본값으로 지정된 게임 프로필의 기본값도 함께 해제합니다.
 
@@ -153,7 +153,7 @@ CI에서 Android APK 컴파일·서명 검증을 수행합니다. 실제 Android
 런처 WebView는 문서 시작 시 window.WaywardImageProviders를 제공합니다.
 
 ~~~js
-const { providers, defaultProviderId } = window.WaywardImageProviders.list();
+const { providers, defaultProviderId, fallbackProviderId } = window.WaywardImageProviders.list();
 
 const result = await window.WaywardImageProviders.generate({
   // 생략하거나 빈 문자열이면 현재 게임 프로필의 기본 서비스 사용
@@ -164,10 +164,10 @@ const result = await window.WaywardImageProviders.generate({
 });
 
 // result.dataUrl을 img.src 등에 연결
-console.log(result.mimeType, result.dataUrl);
+console.log(result.mimeType, result.fallbackUsed, result.dataUrl);
 ~~~
 
-generate()는 이미지 생성이 끝난 뒤 { ok, providerId, mimeType, dataUrl }을 돌려줍니다. 서비스가 등록되지 않았거나 게임 사용 권한이 꺼져 있으면 오류로 끝납니다. 네이티브 브리지는 동시 실행을 제한하고 API 키를 반환하지 않습니다.
+generate()는 이미지 생성이 끝난 뒤 { ok, providerId, fallbackUsed, mimeType, dataUrl }을 돌려줍니다. providerId를 지정하지 않으면 현재 게임 프로필의 기본 서비스를 사용하고, 그 요청이 실패하면 프로필의 대체 서비스를 한 번 시도합니다. providerId를 직접 지정하면 해당 서비스만 호출합니다. 서비스가 등록되지 않았거나 게임 사용 권한이 꺼져 있으면 오류로 끝납니다. 네이티브 브리지는 동시 실행을 제한하고 API 키를 반환하지 않습니다.
 
 ### 현재 지원 범위와 미지원 프로토콜
 
