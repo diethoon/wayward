@@ -18,6 +18,7 @@ node tests/wml-folder-bootstrap.test.mjs
 node tests/companions-mobile-ui.test.mjs
 node tests/web-file-chooser-contract.test.mjs
 node tests/imagegen-session-contract.test.mjs
+node tests/imagegen-runtime-launch.test.mjs
 node tests/image-resource-performance.test.mjs
 node tests/diagnostics-contract.test.mjs
 node diagnostics-server/server.test.mjs
@@ -35,6 +36,8 @@ javac -d "$ZIP_TEST_BUILD" app/src/main/java/com/wayward/launcher/ZipModStore.ja
 java -cp "$ZIP_TEST_BUILD" com.wayward.launcher.ZipModStoreTest
 javac -d "$ZIP_TEST_BUILD" app/src/main/java/com/wayward/launcher/ImageGenStatusStore.java tests/ImageGenStatusStoreTest.java
 java -cp "$ZIP_TEST_BUILD" com.wayward.launcher.ImageGenStatusStoreTest
+javac -d "$ZIP_TEST_BUILD" app/src/main/java/com/wayward/launcher/ComfyEndpoint.java tests/ComfyEndpointTest.java
+java -cp "$ZIP_TEST_BUILD" com.wayward.launcher.ComfyEndpointTest
 test -s ../Wayward_WML_ko.html
 gradle --no-daemon assembleDebug
 test -s app/build/outputs/apk/debug/app-debug.apk
