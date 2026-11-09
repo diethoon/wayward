@@ -49,14 +49,31 @@ final class ComfyEndpoint {
 
     private static boolean isPrivateHost(String host) {
         if (host.indexOf(':') >= 0 || host.indexOf('%') >= 0) return false;
-        String[] octets = host.split("\\.", -1);
-        if (octets.length == 4) {
+        String[] octets = host.split("\\\\.", -1);
+        boolean ipv4Candidate = octets.length == 4;
+        if (ipv4Candidate) {
+            for (String octet : octets) {
+                if (octet.isEmpty()) {
+                    ipv4Candidate = false;
+                    break;
+                }
+                for (int i = 0; i < octet.length(); i++) {
+                    char digit = octet.charAt(i);
+                    if (digit < '0' || digit > '9') {
+                        ipv4Candidate = false;
+                        break;
+                    }
+                }
+                if (!ipv4Candidate) break;
+            }
+        }
+        // A four-label DNS name such as my-pc.tailnet.ts.net is not an IPv4 candidate.
+        // Numeric dotted hosts still require strict IPv4 validation and cannot fall
+        // through to the DNS suffix allow-list when their octets are invalid.
+        if (ipv4Candidate) {
             int[] ip = new int[4];
             for (int i = 0; i < 4; i++) {
-                if (octets[i].isEmpty() || octets[i].length() > 3) return false;
-                for (int j = 0; j < octets[i].length(); j++) {
-                    if (!Character.isDigit(octets[i].charAt(j))) return false;
-                }
+                if (octets[i].length() > 3) return false;
                 try { ip[i] = Integer.parseInt(octets[i]); }
                 catch (NumberFormatException ignored) { return false; }
                 if (ip[i] < 0 || ip[i] > 255) return false;
@@ -67,6 +84,7 @@ final class ComfyEndpoint {
                     || (ip[0] == 192 && ip[1] == 168)
                     || (ip[0] == 100 && ip[1] >= 64 && ip[1] <= 127);
         }
+        if (octets.length == 4 && host.matches("[0-9.]+")) return false;
         if (host.endsWith(".ts.net") || host.endsWith(".local")) {
             String[] labels = host.split("\\.", -1);
             if (labels.length < 2) return false;
