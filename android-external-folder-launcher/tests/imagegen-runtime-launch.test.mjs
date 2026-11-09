@@ -22,6 +22,8 @@ assert.match(service, /EXTRA_COMFY_URL/);
 assert.match(service, /command\.add\(launch\.getAbsolutePath\(\)\)/,
   "NovelAI must launch the EasyGen wrapper, not the generic CLI entrypoint");
 assert.match(service, /--config/);
+assert.match(main, /wayward-imagegen\.config\.json이 필요합니다/,
+  "ComfyUI startup validates its workflow configuration before launching");
 assert.match(service, /--comfy-url/);
 assert.match(service, /installCommand\.command\(\)\.add\("--production"\)/,
   "NovelAI uses the full dependency install while Image Studio keeps production-only install");
