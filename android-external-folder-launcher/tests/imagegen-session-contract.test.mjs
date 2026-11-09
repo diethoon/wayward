@@ -43,7 +43,7 @@ assert.match(service, /catch \(Throwable error\)/,
   "runtime startup failures must be captured by the isolated service");
 const runtimeStartup = service.match(/private void startRuntime\(File backendRoot\) throws Exception \{[\s\S]*?\n    private File ensureBun\(\)/)?.[0] || "";
 assert.ok(runtimeStartup, "runtime startup method must be present");
-assert.doesNotMatch(runtimeStartup, /if\s*\(probeHealth\(\)\)\s*\{[\s\S]*?return;/,
+assert.doesNotMatch(runtimeStartup, /if\s*\(probeHealth\(\)\)\s*\{\s*return;/,
   "an unrelated process must not satisfy readiness before this app starts its backend");
 assert.ok(runtimeStartup.indexOf("if (serverProcess == null || !serverProcess.isAlive())")
     < runtimeStartup.indexOf("if (probeHealth())"),
@@ -60,7 +60,38 @@ assert.match(service, /bunProcess\(bun, "install", "--production"\)/,
   "dependency installation must use the system-linker launch path");
 assert.match(service, /bunProcess\(bun, "src\/cli\.ts", "--no-webp"\)/,
   "Android must disable WebP because the packaged sharp native binary is not Android ARM64");
-assert.match(service, /while \(!stopping\)[\s\S]*?probeHealth\(\)/,\n  "health readiness must keep waiting while the launched server process remains alive");\nassert.doesNotMatch(service, /60초 안에 \/api\/image\/health/,\n  "health readiness must not fail solely because a fixed startup timeout elapsed");\nassert.match(service, /outFile\.setReadOnly\(\)/,
+assert.match(service, /while \(!stopping[\s\S]*?probeHealth\(\)/,
+  "health readiness must keep waiting while the launched server process remains alive");
+assert.doesNotMatch(service, /60초 안에 \/api\/image\/health/,
+  "health readiness must not fail solely because a fixed startup timeout elapsed");
+assert.match(service, /private void cancelStartupWork\(\)/,
+  "restart and stop must cancel an active startup task");
+assert.match(service, /task\.cancel\(true\)/,
+  "startup cancellation must interrupt the worker task");
+assert.match(service, /commandProcess = process/,
+  "Bun install/version commands must be cancellable during startup");
+assert.match(service, /downloadConnection = connection/,
+  "Bun runtime download must be cancellable during startup");
+assert.match(service, /private void checkStartupActive\(\)/,
+  "each startup phase must check whether Stop or Restart cancelled it");
+assert.match(service, /if \(stopping \|\| Thread\.currentThread\(\)\.isInterrupted\(\)\) throw error;/,
+  "Bun validation must not swallow a user cancellation as a binary validation failure");
+assert.match(service, /if \(stopping \|\| Thread\.currentThread\(\)\.isInterrupted\(\)\) \{\s*stopRuntime\(\);/,
+  "a server process created during a stop race must be terminated immediately");
+const restartControl = main.match(/private void restartImageGenServerManually\(\)\s*\{[\s\S]*?\n    \}\n\n    private void stopImageGenServer/)?.[0] || "";
+assert.ok(restartControl, "manual restart handler must be present");
+assert.doesNotMatch(restartControl, /if\s*\(state\.isStarting\(\)\)[\s\S]*?return;/,
+  "restart must remain available while startup is waiting for health");
+assert.match(restartControl, /ACTION_RESTART/,
+  "restart control must dispatch a service restart command");
+const stopControl = main.match(/private void stopImageGenServer\(\)\s*\{[\s\S]*?\n    \}\n\n    private void startImageGenStatusMonitor/)?.[0] || "";
+assert.match(stopControl, /ACTION_STOP/,
+  "stop control must dispatch a service stop command");
+for (const button of ["imageGenStartButton", "imageGenRestartButton", "imageGenStopButton"]) {
+  assert.match(main, new RegExp(button + " != null\\) " + button + "\\.setEnabled\\(true\\)"),
+    button + " must remain enabled while startup waits");
+}
+assert.match(service, /outFile\.setReadOnly\(\)/,
   "the extracted runtime must be marked read-only before writing");
 assert.match(service, /executable\.setReadOnly\(\)/,
   "existing and fresh Bun executables must remain read-only");

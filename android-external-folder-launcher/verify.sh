@@ -9,8 +9,13 @@ else
 fi
 git -C "$REPO_ROOT" diff --check "$DIFF_BASE" HEAD
 grep -Fq 'bunProcess(bun, "src/cli.ts", "--no-webp")' app/src/main/java/com/wayward/launcher/ImageGenService.java
-grep -Fq 'while (!stopping)' app/src/main/java/com/wayward/launcher/ImageGenService.java
+grep -Fq 'while (!stopping && !Thread.currentThread().isInterrupted())' app/src/main/java/com/wayward/launcher/ImageGenService.java
 ! grep -Fq '60초 안에 /api/image/health' app/src/main/java/com/wayward/launcher/ImageGenService.java
+grep -Fq 'task.cancel(true)' app/src/main/java/com/wayward/launcher/ImageGenService.java
+grep -Fq 'private void checkStartupActive()' app/src/main/java/com/wayward/launcher/ImageGenService.java
+grep -Fq 'imageGenStartButton.setEnabled(true)' app/src/main/java/com/wayward/launcher/MainActivity.java
+grep -Fq 'imageGenRestartButton.setEnabled(true)' app/src/main/java/com/wayward/launcher/MainActivity.java
+grep -Fq 'imageGenStopButton.setEnabled(true)' app/src/main/java/com/wayward/launcher/MainActivity.java
 node --check app/src/main/assets/wml-folder-bootstrap.js
 node --check app/src/main/assets/imagegen-proxy.js
 node tests/imagegen-proxy.test.mjs
