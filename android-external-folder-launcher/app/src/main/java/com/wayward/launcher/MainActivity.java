@@ -306,7 +306,6 @@ public final class MainActivity extends Activity {
 
             // The game itself must never wait for ImageGen health readiness.
             // Open the WebView first, then prepare Image Studio independently.
-            pendingGameLoad = false;
             if(home!=null)home.setVisibility(View.GONE);
             web.setVisibility(View.VISIBLE);
             imageGenSessionMessage = "게임 실행 중 · Image Studio 서버는 백그라운드에서 준비합니다.";
@@ -328,7 +327,6 @@ public final class MainActivity extends Activity {
                 }
             });
         }catch(Exception e){
-            pendingGameLoad = false;
             DiagnosticsLogger.error(this,"launcher","game_session_open_failed",e);
             status("게임 실행 실패: "+msg(e));
         }
