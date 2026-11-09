@@ -181,7 +181,8 @@ jobs:
             images: health.images, imageFormat: health.imageFormat
           }));
           NODE
-          cp "$RUNNER_TEMP/doctor.log" "$RUNNER_TEMP/server.log" audit-runtime.log
+          cp "$RUNNER_TEMP/doctor.log" audit-doctor.log
+          cp "$RUNNER_TEMP/server.log" audit-server.log
           cp "$RUNNER_TEMP/health.json" audit-health.json
           cp "$RUNNER_TEMP/pack.json" audit-pack.json
       - name: Upload forensic and runtime report
@@ -190,7 +191,8 @@ jobs:
           name: mods-zip-runtime-audit
           path: |
             audit-output/
-            audit-output/imagestudio/backend/wayward-imagegen/audit-runtime.log
+            audit-output/imagestudio/backend/wayward-imagegen/audit-doctor.log
+            audit-output/imagestudio/backend/wayward-imagegen/audit-server.log
             audit-output/imagestudio/backend/wayward-imagegen/audit-health.json
             audit-output/imagestudio/backend/wayward-imagegen/audit-pack.json
           if-no-files-found: error
