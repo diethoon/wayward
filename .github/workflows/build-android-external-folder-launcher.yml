@@ -22,6 +22,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Embed pinned Wayward Image Studio backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_COMMIT="26d6c32e0b0abbb886e3029efd548b7ca6774401"
+          git fetch --no-tags origin main
+          git cat-file -e "${SOURCE_COMMIT}:mods.zip"
+          git show "${SOURCE_COMMIT}:mods.zip" > "$RUNNER_TEMP/wayward-mods.zip"
+          python3 android-external-folder-launcher/scripts/embed_imagegen_backend.py "$RUNNER_TEMP/wayward-mods.zip"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
