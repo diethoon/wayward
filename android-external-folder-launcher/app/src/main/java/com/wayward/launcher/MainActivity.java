@@ -514,6 +514,12 @@ public final class MainActivity extends Activity {
         return false;
     }
 
+    private boolean hasImageGenProject(File backend) {
+        File nested = new File(backend, "wayward-imagegen");
+        File project = new File(nested, "src/cli.ts").isFile() ? nested : backend;
+        return new File(project, "package.json").isFile() && new File(project, "src/cli.ts").isFile();
+    }
+
     private void ensureImageGenServer(SafTree sessionTree, Runnable afterReady) {
         if (afterReady != null) imageGenReadyCallbacks.add(afterReady);
         if (sessionTree == null) {
@@ -889,6 +895,7 @@ public final class MainActivity extends Activity {
     private void destroyWeb(){if(webFileChooser!=null){webFileChooser.cancelPending();webFileChooser=null;}if(web==null)return;web.removeJavascriptInterface("WMLHost");root.removeView(web);web.stopLoading();web.loadUrl("about:blank");web.destroy();web=null;}
     @Override public void onBackPressed(){if(web!=null&&web.getVisibility()==View.VISIBLE){if(web.canGoBack())web.goBack();else showHomePanel();return;}super.onBackPressed();}
     @Override protected void onDestroy(){
+        stopImageGenStatusMonitor();
         String sessionId=sessionProfileId(getIntent());if(sessionId!=null)RUNNING_SESSIONS.remove(sessionId);
         DiagnosticsLogger.event(this,"INFO","launcher","activity_destroy",null);
         destroyWeb();super.onDestroy();

@@ -25,6 +25,8 @@ assert.doesNotMatch(main, /ZipModStore|zipMods|imageStudioZipBackendVersion|PICK
   "launcher must not retain a global app-private ZIP overlay");
 assert.match(main, /private boolean ensureImageGenBackend\(SafTree sessionTree\)/,
   "Image Studio backend is copied only from the selected game folder");
+assert.match(main, /private boolean hasImageGenProject\(File backend\)/,
+  "the app-private cached backend layout must be validated before service start/restart");
 assert.match(main, /sessionTree\.copyDirectory\("wml\/mods\/imagestudio\/backend", backend\)/,
   "Image Studio backend must come from that session's WML folder");
 assert.match(main, /wml\/mods\/imagestudio\/backend\/wayward-imagegen\/package\.json/,
