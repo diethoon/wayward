@@ -60,6 +60,7 @@ final class ImageProviderClient {
         if ("cloudflare-worker".equals(provider.type)) {
             endpoint = provider.endpoint.trim();
             body.put("prompt", prompt);
+            if (provider.model != null && !provider.model.trim().isEmpty()) body.put("model", provider.model.trim());
         } else if ("openai-compatible".equals(provider.type)) {
             endpoint = openAiEndpoint(provider.endpoint);
             if (provider.model == null || provider.model.trim().isEmpty()) {
