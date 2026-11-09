@@ -1215,6 +1215,8 @@ public final class MainActivity extends Activity {
         private static final int MAX_CACHED_DIRECTORIES=2048;
         private static final int MAX_CACHED_CHILDREN=100000;
         private final Uri tree;private final String rootId;
+        private final SafImageCache imageCache = new SafImageCache(MainActivity.this);
+        private final java.util.concurrent.atomic.AtomicInteger imageTimingSamples = new java.util.concurrent.atomic.AtomicInteger();
         private static final int MAX_CONCURRENT_DIRECTORY_QUERIES = 4;
         private final Object directoryIndexLock=new Object();
         private final java.util.LinkedHashMap<String,java.util.Map<String,Node>> directoryIndexCache =
@@ -1242,7 +1244,21 @@ public final class MainActivity extends Activity {
         }
         boolean exists(String p){try{Node n=resolve(p);return n!=null&&!n.dir;}catch(Exception e){return false;}}
         InputStream open(String p)throws Exception{Node n=resolve(p);if(n==null||n.dir)return null;return getContentResolver().openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree,n.id));}
-        InputStream openImage(String p)throws Exception{Node n=resolveImage(p);if(n==null||n.dir)return null;return getContentResolver().openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree,n.id));}
+        InputStream openImage(String p)throws Exception{
+            long resolveStarted=System.nanoTime();
+            Node n=resolveImage(p);
+            long resolveMs=(System.nanoTime()-resolveStarted)/1_000_000L;
+            if(n==null||n.dir){
+                recordImageOpenTiming(p,resolveMs,0L,null,-1L);
+                return null;
+            }
+            long accessStarted=System.nanoTime();
+            Uri documentUri=DocumentsContract.buildDocumentUriUsingTree(tree,n.id);
+            SafImageCache.OpenResult opened=imageCache.open(getContentResolver(),documentUri,n.id,n.size,n.lastModified);
+            long accessMs=(System.nanoTime()-accessStarted)/1_000_000L;
+            recordImageOpenTiming(p,resolveMs,accessMs,opened,n.size);
+            return opened==null?null:opened.stream;
+        }
         private Node resolveImage(String path)throws Exception{
             String p=FolderHandler.normal(path);if(p==null)return null;
             String parent=rootId;Node n=null;String[] parts=p.split("/");
@@ -1251,6 +1267,39 @@ public final class MainActivity extends Activity {
                 if(i<parts.length-1){if(!n.dir)return null;parent=n.id;}
             }
             return n;
+        }
+        private void recordImageOpenTiming(String path,long resolveMs,long accessMs,SafImageCache.OpenResult opened,long imageSize){
+            int sample=imageTimingSamples.getAndIncrement();
+            if(sample>=96&&resolveMs<350L&&accessMs<350L)return;
+            JSONObject details=new JSONObject();
+            try{
+                details.put("elapsedMs",resolveMs+accessMs);
+                details.put("resolveImageMs",resolveMs);
+                details.put("imageAccessMs",accessMs);
+                if(opened!=null){
+                    details.put("cacheState",opened.cacheState);
+                    details.put("openInputStreamMs",opened.openInputStreamMs);
+                    details.put("cacheReadMs",opened.cacheReadMs);
+                    details.put("cacheWaitMs",opened.cacheWaitMs);
+                    details.put("cacheOpenMs",opened.cacheOpenMs);
+                }else{
+                    details.put("cacheState","missing");
+                }
+                if(imageSize>=0L)details.put("imageSizeBytes",imageSize);
+                ImagePipelineDiagnostics.addSanitizedPath(details,"/"+path);
+            }catch(Exception ignored){}
+            ImagePipelineDiagnostics.record(MainActivity.this,"saf_image_open_timing",details);
+        }
+        private void recordDirectoryQueryTiming(long waitMs,long queryMs,int childCount){
+            if(waitMs<250L&&queryMs<250L)return;
+            JSONObject details=new JSONObject();
+            try{
+                details.put("elapsedMs",waitMs+queryMs);
+                details.put("directoryWaitMs",waitMs);
+                details.put("directoryQueryMs",queryMs);
+                details.put("directoryChildCount",childCount);
+            }catch(Exception ignored){}
+            ImagePipelineDiagnostics.record(MainActivity.this,"saf_directory_query_timing",details);
         }
 
         String imageStudioModId() throws Exception {
@@ -1352,18 +1401,48 @@ public final class MainActivity extends Activity {
         }
         private java.util.Map<String,Node> loadDirectoryIndex(String parent,long generation)throws Exception{
             java.util.Map<String,Node> loaded=new java.util.LinkedHashMap<>();
-            directoryQuerySlots.acquire();
+            long waitStarted=System.nanoTime();
+            long waitMs=0L;
+            long queryMs=0L;
+            boolean acquired=false;
             try{
-                Uri u=DocumentsContract.buildChildDocumentsUriUsingTree(tree,parent);
-                try(Cursor c=getContentResolver().query(u,new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE},null,null,null)){
-                    if(c!=null)while(c.moveToNext()){
-                        String name=c.getString(1);if(name==null||name.isEmpty())continue;
-                        loaded.put(name,new Node(c.getString(0),name,DocumentsContract.Document.MIME_TYPE_DIR.equals(c.getString(2))));
+                directoryQuerySlots.acquire();
+                acquired=true;
+                waitMs=(System.nanoTime()-waitStarted)/1_000_000L;
+                long queryStarted=System.nanoTime();
+                try{
+                    Uri u=DocumentsContract.buildChildDocumentsUriUsingTree(tree,parent);
+                    try(Cursor c=getContentResolver().query(u,new String[]{
+                            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                            DocumentsContract.Document.COLUMN_MIME_TYPE,
+                            DocumentsContract.Document.COLUMN_SIZE,
+                            DocumentsContract.Document.COLUMN_LAST_MODIFIED
+                    },null,null,null)){
+                        if(c!=null){
+                            int idIndex=c.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID);
+                            int nameIndex=c.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME);
+                            int mimeIndex=c.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE);
+                            int sizeIndex=c.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE);
+                            int modifiedIndex=c.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED);
+                            while(c.moveToNext()){
+                                String name=nameIndex>=0?c.getString(nameIndex):null;
+                                if(name==null||name.isEmpty())continue;
+                                String id=idIndex>=0?c.getString(idIndex):null;
+                                String mime=mimeIndex>=0?c.getString(mimeIndex):null;
+                                long size=sizeIndex>=0&&!c.isNull(sizeIndex)?c.getLong(sizeIndex):-1L;
+                                long modified=modifiedIndex>=0&&!c.isNull(modifiedIndex)?c.getLong(modifiedIndex):-1L;
+                                loaded.put(name,new Node(id,name,DocumentsContract.Document.MIME_TYPE_DIR.equals(mime),size,modified));
+                            }
+                        }
                     }
+                }finally{
+                    queryMs=(System.nanoTime()-queryStarted)/1_000_000L;
                 }
             }finally{
-                directoryQuerySlots.release();
+                if(acquired)directoryQuerySlots.release();
             }
+            recordDirectoryQueryTiming(waitMs,queryMs,loaded.size());
             synchronized(directoryIndexLock){
                 if(directoryIndexGeneration.get()!=generation)return loaded;
                 java.util.Map<String,Node> existing=directoryIndexCache.get(parent);
@@ -1395,7 +1474,35 @@ public final class MainActivity extends Activity {
             cachedModIds=null;
             cachedModIdsGeneration=-1L;
         }
-        Node node(String id)throws Exception{Uri u=DocumentsContract.buildDocumentUriUsingTree(tree,id);try(Cursor c=getContentResolver().query(u,new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE},null,null,null)){if(c==null||!c.moveToFirst())return new Node(id,"Wayward",true);return new Node(c.getString(0),c.getString(1),DocumentsContract.Document.MIME_TYPE_DIR.equals(c.getString(2)));}}
+        Node node(String id)throws Exception{
+            Uri u=DocumentsContract.buildDocumentUriUsingTree(tree,id);
+            try(Cursor c=getContentResolver().query(u,new String[]{
+                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    DocumentsContract.Document.COLUMN_MIME_TYPE,
+                    DocumentsContract.Document.COLUMN_SIZE,
+                    DocumentsContract.Document.COLUMN_LAST_MODIFIED
+            },null,null,null)){
+                if(c==null||!c.moveToFirst())return new Node(id,"Wayward",true,-1L,-1L);
+                int idIndex=c.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID);
+                int nameIndex=c.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME);
+                int mimeIndex=c.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE);
+                int sizeIndex=c.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE);
+                int modifiedIndex=c.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED);
+                String nodeId=idIndex>=0?c.getString(idIndex):id;
+                String name=nameIndex>=0?c.getString(nameIndex):"Wayward";
+                String mime=mimeIndex>=0?c.getString(mimeIndex):null;
+                long size=sizeIndex>=0&&!c.isNull(sizeIndex)?c.getLong(sizeIndex):-1L;
+                long modified=modifiedIndex>=0&&!c.isNull(modifiedIndex)?c.getLong(modifiedIndex):-1L;
+                return new Node(nodeId,name,DocumentsContract.Document.MIME_TYPE_DIR.equals(mime),size,modified);
+            }
+        }
     }
-    private static final class Node{final String id,name;final boolean dir;Node(String i,String n,boolean d){id=i;name=n;dir=d;}}
+    private static final class Node{
+        final String id,name;
+        final boolean dir;
+        final long size,lastModified;
+        Node(String i,String n,boolean d){this(i,n,d,-1L,-1L);}
+        Node(String i,String n,boolean d,long s,long m){id=i;name=n;dir=d;size=s;lastModified=m;}
+    }
 }
