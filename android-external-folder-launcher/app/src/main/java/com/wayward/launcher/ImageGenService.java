@@ -217,8 +217,11 @@ public final class ImageGenService extends Service {
         File nodeModules = new File(project, "node_modules");
         if (!nodeModules.isDirectory()) {
             updateNotification("ImageGen 종속 패키지 설치 중");
-            int install = runCommand(new ProcessBuilder(bun.getAbsolutePath(), "install", "--production")
-                    .directory(project), log, 15, TimeUnit.MINUTES);
+            ProcessBuilder installCommand = new ProcessBuilder(bun.getAbsolutePath(), "install").directory(project);
+            // The EasyGen launch wrapper follows the documented full bun install path.
+            // Existing Image Studio runs keep the production-only install behavior.
+            if (!"novelai".equals(launchMode)) installCommand.command().add("--production");
+            int install = runCommand(installCommand, log, 15, TimeUnit.MINUTES);
             if (install != 0) throw new IllegalStateException("Bun 종속 패키지 설치 실패(exit " + install + "). 로그: " + log.getAbsolutePath());
         }
 
