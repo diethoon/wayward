@@ -238,7 +238,7 @@ public final class ImageGenService extends Service {
         }
 
         updateNotification("이미지 생성 서버 시작 중 · 127.0.0.1:8189");
-        ProcessBuilder builder = bunProcess(bun, "src/cli.ts").directory(project).redirectErrorStream(true)
+        ProcessBuilder builder = bunProcess(bun, "src/cli.ts", "--no-webp").directory(project).redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.appendTo(log));
         builder.environment().put("HOME", getFilesDir().getAbsolutePath());
         builder.environment().put("TMPDIR", getCacheDir().getAbsolutePath());
