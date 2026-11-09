@@ -40,18 +40,41 @@ final class ImageProviderBridge {
                 try {
                     ImageProviderStore.Snapshot snapshot = new ImageProviderStore(context).load();
                     String selectedId = providerId == null ? "" : providerId.trim();
-                    if (selectedId.isEmpty()) selectedId = snapshot.defaults.get(profileId);
+                    boolean useProfileFallback = selectedId.isEmpty();
+                    if (useProfileFallback) selectedId = snapshot.defaults.get(profileId);
                     ImageProviderStore.Provider provider = ImageProviderStore.find(snapshot, selectedId);
                     if (provider == null || !provider.enabled) {
-                        throw new IllegalStateException("이 게임 프로필에 사용할 기본 이미지 서비스가 없습니다. 런처에서 서비스를 등록하고 지정해 주세요.");
+                        throw new IllegalStateException("이 게임 프로필에 사용할 기본 이미지 서비스를 찾지 못했습니다. 런처에서 서비스를 등록하고 지정해 주세요.");
                     }
-                    if (!provider.allowInGame) {
-                        throw new IllegalStateException("이 서비스는 게임 내 WML 사용이 꺼져 있습니다. 런처의 이미지 서비스 설정에서 게임 WML 모드 사용을 켜 주세요.");
+
+                    ImageProviderClient.Result image;
+                    boolean fallbackUsed = false;
+                    try {
+                        if (!provider.allowInGame) {
+                            throw new IllegalStateException("기본 이미지 서비스의 게임 사용 권한이 꺼져 있습니다.");
+                        }
+                        image = ImageProviderClient.generate(provider, prompt, width, height);
+                    } catch (Exception primaryError) {
+                        String fallbackId = useProfileFallback ? snapshot.fallbacks.get(profileId) : null;
+                        ImageProviderStore.Provider fallback = ImageProviderStore.find(snapshot, fallbackId);
+                        if (fallback == null || fallback.id.equals(provider.id)
+                                || !fallback.enabled || !fallback.allowInGame) {
+                            throw primaryError;
+                        }
+                        try {
+                            image = ImageProviderClient.generate(fallback, prompt, width, height);
+                            provider = fallback;
+                            fallbackUsed = true;
+                        } catch (Exception fallbackError) {
+                            throw new IllegalStateException("기본 서비스 요청에 실패했고 대체 서비스 요청도 실패했습니다: "
+                                    + fallbackError.getMessage(), fallbackError);
+                        }
                     }
-                    ImageProviderClient.Result image = ImageProviderClient.generate(provider, prompt, width, height);
+
                     JSONObject result = new JSONObject();
                     result.put("ok", true);
                     result.put("providerId", provider.id);
+                    result.put("fallbackUsed", fallbackUsed);
                     result.put("mimeType", image.mimeType);
                     result.put("dataUrl", "data:" + image.mimeType + ";base64,"
                             + Base64.encodeToString(image.image, Base64.NO_WRAP));
@@ -59,6 +82,7 @@ final class ImageProviderBridge {
                     JSONObject details = new JSONObject();
                     details.put("providerId", provider.id);
                     details.put("providerType", provider.type);
+                    details.put("fallbackUsed", fallbackUsed);
                     details.put("imageBytes", image.image.length);
                     DiagnosticsLogger.event(context, "INFO", "image_provider", "generation_succeeded", details);
                 } catch (Throwable error) {
