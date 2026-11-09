@@ -10,6 +10,11 @@ final class ComfyEndpoint {
     private static final Pattern DNS_LABEL = Pattern.compile("[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?");
     private ComfyEndpoint() {}
 
+    static String normalizeOptional(String input) {
+        if (input == null || input.trim().isEmpty()) return "";
+        return normalize(input);
+    }
+
     static String normalize(String input) {
         if (input == null || input.trim().isEmpty()) {
             throw new IllegalArgumentException("PC의 ComfyUI 주소를 입력해 주세요.");
