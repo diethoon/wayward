@@ -61,7 +61,7 @@ jobs:
                           continue
                       if any(term.lower() in data.lower() for term in content_terms):
                           content_matches.append(p)
-              roots = set()
+              roots = {"imagestudio/backend/wayward-imagegen"}
               for p in matches | set(content_matches):
                   parts = p.split("/")
                   roots.add("/".join(parts[:-1]) if len(parts) > 1 else parts[0])
@@ -88,12 +88,39 @@ jobs:
               )
               print("COPIED_FILES", len(copied))
           PY
+      - name: Verify canonical backend path and compare duplicate copy
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANON="audit-output/imagestudio/backend/wayward-imagegen"
+          NESTED="audit-output/image-search-customize/imagestudio/backend/wayward-imagegen"
+          test -s "$CANON/package.json"
+          test -s "$CANON/src/cli.ts"
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          a=Path("audit-output/imagestudio/backend/wayward-imagegen")
+          b=Path("audit-output/image-search-customize/imagestudio/backend/wayward-imagegen")
+          rows=[]
+          for rel in ["package.json","src/cli.ts","src/server.ts","src/config.ts"]:
+              left=a/rel; right=b/rel
+              rows.append({
+                  "file":rel,
+                  "canonical_exists":left.is_file(),
+                  "nested_exists":right.is_file(),
+                  "canonical_sha256":hashlib.sha256(left.read_bytes()).hexdigest() if left.is_file() else None,
+                  "nested_sha256":hashlib.sha256(right.read_bytes()).hexdigest() if right.is_file() else None,
+                  "same":left.is_file() and right.is_file() and left.read_bytes()==right.read_bytes()
+              })
+          print("BACKEND_COPY_COMPARISON",json.dumps(rows))
+          (Path("audit-output")/"backend-copy-comparison.json").write_text(json.dumps(rows,indent=2),encoding="utf-8")
+          PY
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
       - name: Verify Image Studio backend and start real local HTTP runtime
         shell: bash
-        working-directory: audit-output/image-search-customize/imagestudio/backend/wayward-imagegen
+        working-directory: audit-output/imagestudio/backend/wayward-imagegen
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/imagegen-images" "$RUNNER_TEMP/imagegen-state"
@@ -163,8 +190,8 @@ jobs:
           name: mods-zip-runtime-audit
           path: |
             audit-output/
-            audit-output/image-search-customize/imagestudio/backend/wayward-imagegen/audit-runtime.log
-            audit-output/image-search-customize/imagestudio/backend/wayward-imagegen/audit-health.json
-            audit-output/image-search-customize/imagestudio/backend/wayward-imagegen/audit-pack.json
+            audit-output/imagestudio/backend/wayward-imagegen/audit-runtime.log
+            audit-output/imagestudio/backend/wayward-imagegen/audit-health.json
+            audit-output/imagestudio/backend/wayward-imagegen/audit-pack.json
           if-no-files-found: error
           retention-days: 7
