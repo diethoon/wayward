@@ -985,7 +985,7 @@ public final class MainActivity extends Activity {
             if (comfy && (endpoint == null || endpoint.trim().isEmpty())) {
                 imageGenStatus.setText("로컬 ComfyUI 중계 서버 실행됨 · PC 주소 미설정 · 연결 대기 중 · 127.0.0.1:8189");
             } else {
-                imageGenStatus.setText("연결됨 · 공통 이미지 생성 서버 127.0.0.1:8189 · Image Studio " + safeVersion(state.backendVersion));
+                imageGenStatus.setText("런처 내장 ImageGen " + ImageGenBackendInstaller.VERSION + " 실행 중 · 127.0.0.1:8189");
             }
         }
         else if (state.isStarting()) imageGenStatus.setText(state.message.isEmpty() ? "이미지 생성 서버 시작 중…" : state.message);
