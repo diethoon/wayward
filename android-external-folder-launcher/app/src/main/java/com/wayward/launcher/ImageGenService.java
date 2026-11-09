@@ -38,6 +38,8 @@ public final class ImageGenService extends Service {
     public static final String ACTION_STOP = "com.wayward.launcher.imagegen.STOP";
     public static final String EXTRA_BACKEND_ROOT = "backendRoot";
     public static final String EXTRA_BACKEND_VERSION = "backendVersion";
+    public static final String EXTRA_LAUNCH_MODE = "launchMode";
+    public static final String EXTRA_COMFY_URL = "comfyUrl";
     private static final String CHANNEL_ID = "wayward-imagegen";
     private static final int NOTIFICATION_ID = 8189;
     private static final String BUN_URL =
@@ -93,6 +95,8 @@ public final class ImageGenService extends Service {
         }
 
         if (serverReady || starting) return START_STICKY;
+        final String launchMode = intent == null ? "default" : intent.getStringExtra(EXTRA_LAUNCH_MODE);
+        final String comfyUrl = intent == null ? "" : intent.getStringExtra(EXTRA_COMFY_URL);
         DiagnosticsLogger.event(this,"INFO","imagegen_service","start_command_received",null);
         stopping = false;
         starting = true;
@@ -104,7 +108,7 @@ public final class ImageGenService extends Service {
             startAsForeground("이미지 생성 서버 준비 중");
             worker.execute(() -> {
                 try {
-                    startRuntime(new File(backendPath));
+                    startRuntime(new File(backendPath), launchMode == null ? "default" : launchMode, comfyUrl == null ? "" : comfyUrl);
                 } catch (Throwable error) {
                     recordFailure(error);
                 }
@@ -186,8 +190,12 @@ public final class ImageGenService extends Service {
         return value.length() > 24000 ? value.substring(0, 24000) : value;
     }
 
-    private void startRuntime(File backendRoot) throws Exception {
-        if (!backendRoot.isDirectory()) throw new IllegalStateException("Image Studio 백엔드 폴더를 찾지 못했습니다.");
+    private void startRuntime(File backendRoot,String launchMode,String requestedComfyUrl) throws Exception {
+        if (!backendRoot.isDirectory()) throw new IllegalStateException("Wayward ImageGen 백엔드 폴더를 찾지 못했습니다.");
+        if (!"default".equals(launchMode) && !"novelai".equals(launchMode) && !"comfy".equals(launchMode)) {
+            throw new IllegalArgumentException("지원하지 않는 이미지 서버 실행 모드입니다.");
+        }
+        String comfyUrl = "comfy".equals(launchMode) ? ComfyEndpoint.normalize(requestedComfyUrl) : "";
         File project = new File(backendRoot, "wayward-imagegen");
         if (!new File(project, "package.json").isFile()) project = backendRoot;
         if (!new File(project, "package.json").isFile() || !new File(project, "src/cli.ts").isFile()) {
@@ -216,10 +224,30 @@ public final class ImageGenService extends Service {
 
         java.util.List<String> command = new java.util.ArrayList<>();
         command.add(bun.getAbsolutePath());
-        command.add("src/cli.ts");
+        File workingDirectory = project;
+        if ("novelai".equals(launchMode)) {
+            File launch = new File(backendRoot, "launch.mjs");
+            if (!launch.isFile() || launch.length() == 0) {
+                throw new IllegalStateException("EasyGen server/launch.mjs가 없거나 비어 있습니다.");
+            }
+            command.add(launch.getAbsolutePath());
+            workingDirectory = backendRoot;
+        } else {
+            command.add("src/cli.ts");
+            if ("comfy".equals(launchMode)) {
+                File config = new File(backendRoot, "wayward-imagegen.config.json");
+                if (!config.isFile()) config = new File(project, "wayward-imagegen.config.json");
+                if (config.isFile() && config.length() > 0) {
+                    command.add("--config");
+                    command.add(config.getAbsolutePath());
+                }
+                command.add("--comfy-url");
+                command.add(comfyUrl);
+            }
+        }
 
         updateNotification("이미지 생성 서버 시작 중 · 127.0.0.1:8189");
-        ProcessBuilder builder = new ProcessBuilder(command).directory(project).redirectErrorStream(true)
+        ProcessBuilder builder = new ProcessBuilder(command).directory(workingDirectory).redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.appendTo(log));
         builder.environment().put("HOME", getFilesDir().getAbsolutePath());
         builder.environment().put("TMPDIR", getCacheDir().getAbsolutePath());
