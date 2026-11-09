@@ -574,16 +574,46 @@ public final class MainActivity extends Activity {
         return new File(getFilesDir(), "imagegen/backend");
     }
 
-    private boolean ensureImageGenBackend(SafTree sessionTree) throws Exception {
-        if (sessionTree == null) return false;
-        String version = sessionTree.imageStudioBackendVersion();
-        if (version == null || version.isEmpty()) return false;
+    private boolean ensureImageGenBackend(SafTree sessionTree, boolean fromZip) throws Exception {
         File backend = imageGenBackendRoot();
         deleteFileTree(backend);
-        if (!sessionTree.copyDirectory("wml/mods/imagestudio/backend", backend)) return false;
+        boolean copied = fromZip
+                ? zipMods != null && zipMods.extractDirectory("imagestudio", "backend", backend)
+                : sessionTree != null && sessionTree.copyDirectory("wml/mods/imagestudio/backend", backend);
+        if (!copied) return false;
         if (hasImageGenProject(backend)) return true;
         deleteFileTree(backend);
         return false;
+    }
+
+    private String imageStudioZipBackendVersion() throws Exception {
+        if (zipMods == null || !zipMods.listModIds().contains("imagestudio")) return null;
+        String[][] layouts = {
+                {"wml/mods/imagestudio/backend/wayward-imagegen/package.json",
+                        "wml/mods/imagestudio/backend/wayward-imagegen/src/cli.ts"},
+                {"wml/mods/imagestudio/backend/package.json",
+                        "wml/mods/imagestudio/backend/src/cli.ts"}
+        };
+        for (String[] layout : layouts) {
+            try (InputStream packageInput = zipMods.open(layout[0]);
+                 InputStream cliInput = zipMods.open(layout[1])) {
+                if (packageInput == null || cliInput == null) continue;
+                ByteArrayOutputStream output = new ByteArrayOutputStream();
+                byte[] buffer = new byte[4096];
+                int count;
+                while ((count = packageInput.read(buffer)) >= 0) {
+                    if (count == 0) continue;
+                    if (output.size() + count > 65536) {
+                        throw new IllegalStateException("Image Studio ZIP package.json가 64KB를 초과합니다.");
+                    }
+                    output.write(buffer, 0, count);
+                }
+                JSONObject metadata = new JSONObject(output.toString(StandardCharsets.UTF_8.name()));
+                String version = metadata.optString("version", "unknown").trim();
+                return version.isEmpty() ? "unknown" : version;
+            }
+        }
+        return "";
     }
 
     private boolean hasImageGenProject(File backend) {
@@ -607,8 +637,21 @@ public final class MainActivity extends Activity {
         }
 
         final String version;
+        final boolean fromZipBackend;
         try {
             String detected = sessionTree.imageStudioBackendVersion();
+            boolean zipBackend = false;
+            if (detected == null || detected.isEmpty()) {
+                String zipVersion = imageStudioZipBackendVersion();
+                if (zipVersion != null) {
+                    if (!zipVersion.isEmpty()) {
+                        detected = zipVersion;
+                        zipBackend = true;
+                    } else if (detected == null) {
+                        detected = "";
+                    }
+                }
+            }
             if (detected == null) {
                 imageGenSessionMessage = "현재 세션의 WML Image Studio 모드가 없어 이미지 서버를 시작하지 않았습니다.";
                 refreshImageGenStatus();
@@ -616,12 +659,13 @@ public final class MainActivity extends Activity {
                 return;
             }
             if (detected.isEmpty()) {
-                imageGenSessionMessage = "Image Studio 모드는 감지했지만 backend/wayward-imagegen 또는 src/cli.ts를 찾지 못했습니다.";
+                imageGenSessionMessage = "Image Studio 모드는 감지했지만 폴더/ZIP에서 backend/wayward-imagegen 또는 src/cli.ts를 찾지 못했습니다.";
                 refreshImageGenStatus();
                 finishImageGenCallbacks();
                 return;
             }
             version = detected;
+            fromZipBackend = zipBackend;
         } catch (Exception e) {
             imageGenSessionMessage = "현재 세션의 Image Studio 모드 검사 실패: " + msg(e);
             refreshImageGenStatus();
@@ -669,8 +713,8 @@ public final class MainActivity extends Activity {
             File backend = imageGenBackendRoot();
             try {
                 synchronized (IMAGEGEN_LOCK) {
-                    if (!ensureImageGenBackend(sessionTree)) {
-                        throw new IllegalStateException("현재 세션의 wml/mods/imagestudio/backend에서 wayward-imagegen을 찾지 못했습니다.");
+                    if (!ensureImageGenBackend(sessionTree, fromZipBackend)) {
+                        throw new IllegalStateException("현재 세션의 Image Studio 폴더/ZIP backend에서 wayward-imagegen을 찾지 못했습니다.");
                     }
                 }
             } catch (Throwable error) {
