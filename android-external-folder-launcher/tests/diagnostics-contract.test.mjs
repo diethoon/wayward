@@ -24,6 +24,12 @@ assert.match(logger, /MAX_FILE_BYTES/);
 assert.match(logger, /REDACTED/);
 assert.match(uploader, /https:\/\/wayward-launcher-diagnostics-hoon-ead4\.vercel\.app/);
 assert.match(uploader, /56 \* 1024/);
+assert.doesNotMatch(uploader, /Application\.getProcessName\(\)/,
+  "the :imagegen service process must be allowed to upload its own startup failures");
+assert.match(uploader, /uploader\.lock/);
+assert.match(uploader, /channel\.tryLock\(\)/,
+  "cross-process upload must be serialized to prevent duplicate journal batches");
+assert.match(uploader, /try \(UploadLock lock = tryAcquireUploadLock\(app\)\)/);
 assert.doesNotMatch(uploader, /Authorization|DiagnosticsTokenStore|verifyAndSave/);
 assert.doesNotMatch(main, /진단 로그 자동 전송 설정|진단 서버 연결 코드|showDiagnosticsSettings|DiagnosticsTokenStore/);
 assert.match(main, /DiagnosticsUploader\.uploadPending\(this\)/);
