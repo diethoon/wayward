@@ -1,5 +1,6 @@
 package com.wayward.launcher;
 
+import android.content.Context;
 import android.util.Base64;
 
 import org.json.JSONArray;
@@ -48,6 +49,12 @@ final class ImageProviderClient {
 
     static Result generate(ImageProviderStore.Provider provider, String prompt,
                            int width, int height) throws Exception {
+        return generate(provider, prompt, width, height, null, "");
+    }
+
+    static Result generate(ImageProviderStore.Provider provider, String prompt,
+                           int width, int height, Context diagnosticContext,
+                           String diagnosticRequestId) throws Exception {
         ImageProviderStore.validateProvider(provider);
         if (prompt == null || prompt.trim().isEmpty()) throw new IllegalArgumentException("이미지 프롬프트를 입력해 주세요.");
         if (prompt.length() > 4096) throw new IllegalArgumentException("프롬프트는 4,096자 이내로 입력해 주세요.");
@@ -85,7 +92,33 @@ final class ImageProviderClient {
             throw new IllegalArgumentException("지원하지 않는 이미지 서비스 유형입니다.");
         }
 
-        HttpResult response = post(endpoint, body.toString().getBytes(StandardCharsets.UTF_8), provider);
+        long requestStarted = System.nanoTime();
+        HttpResult response;
+        try {
+            response = post(endpoint, body.toString().getBytes(StandardCharsets.UTF_8), provider);
+        } catch (Exception error) {
+            JSONObject diagnostic = new JSONObject();
+            try {
+                diagnostic.put("requestId", diagnosticRequestId == null ? "" : diagnosticRequestId);
+                diagnostic.put("providerType", provider.type);
+                diagnostic.put("errorType", error.getClass().getSimpleName());
+                diagnostic.put("elapsedMs", (System.nanoTime() - requestStarted) / 1_000_000L);
+            } catch (Exception ignored) {}
+            ImagePipelineDiagnostics.record(diagnosticContext, "provider_http_request_failed", diagnostic);
+            throw error;
+        }
+        JSONObject httpDiagnostic = new JSONObject();
+        try {
+            httpDiagnostic.put("requestId", diagnosticRequestId == null ? "" : diagnosticRequestId);
+            httpDiagnostic.put("providerType", provider.type);
+            httpDiagnostic.put("responseStatus", response.status);
+            httpDiagnostic.put("responseContentType", response.contentType.split(";")[0].trim().toLowerCase(Locale.ROOT));
+            httpDiagnostic.put("responseBytes", response.body.length);
+            httpDiagnostic.put("elapsedMs", (System.nanoTime() - requestStarted) / 1_000_000L);
+        } catch (Exception ignored) {}
+        ImagePipelineDiagnostics.record(diagnosticContext,
+                response.status >= 200 && response.status < 300 ? "provider_http_response" : "provider_http_error",
+                httpDiagnostic);
         if (response.status < 200 || response.status >= 300) {
             throw new IllegalStateException(httpError(response));
         }
