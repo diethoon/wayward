@@ -446,6 +446,18 @@ public final class MainActivity extends Activity {
                 super.onPageFinished(view,url);
             }
             @Override public void onReceivedError(WebView view,WebResourceRequest request,android.webkit.WebResourceError error){
+                if(request!=null&&!request.isForMainFrame()){
+                    Uri failedUri=request.getUrl();
+                    String failedPath=failedUri==null?null:failedUri.getPath();
+                    if(isImageResourcePath(failedPath)){
+                        JSONObject pipeline=new JSONObject();
+                        try{
+                            pipeline.put("networkErrorCode",error==null?0:error.getErrorCode());
+                            pipeline.put("srcKind",failedUri!=null&&domain.equalsIgnoreCase(failedUri.getHost())?"game_asset":"external");
+                        }catch(Exception ignored){}
+                        ImagePipelineDiagnostics.record(MainActivity.this,"webview_image_network_error",pipeline);
+                    }
+                }
                 if(request!=null&&request.isForMainFrame()){
                     JSONObject details=new JSONObject();
                     try{details.put("code",error==null?0:error.getErrorCode());}catch(Exception ignored){}
@@ -462,6 +474,14 @@ public final class MainActivity extends Activity {
                             (domain.equalsIgnoreCase(failedUri.getHost())&&FolderHandler.isImageRequestPath(failedPath))
                             ||("art.sintention.com".equalsIgnoreCase(failedUri.getHost())
                                 &&FolderHandler.isLocalOnlyCharacterImagePath(failedPath)));
+                    if(imageResource){
+                        JSONObject pipeline=new JSONObject();
+                        try{
+                            pipeline.put("responseStatus",response.getStatusCode());
+                            pipeline.put("srcKind",domain.equalsIgnoreCase(failedUri.getHost())?"game_asset":"external");
+                        }catch(Exception ignored){}
+                        ImagePipelineDiagnostics.record(MainActivity.this,"webview_image_http_error",pipeline);
+                    }
                     if(imageResource&&!handledByLocalImageLogger&&imageDiagnostics.getAndIncrement()<16){
                         JSONObject details=new JSONObject();
                         try{
@@ -470,12 +490,6 @@ public final class MainActivity extends Activity {
                             details.put("status",response.getStatusCode());
                             details.put("mainFrame",request.isForMainFrame());
                         }catch(Exception ignored){}
-                        JSONObject pipeline=new JSONObject();
-                        try{
-                            pipeline.put("responseStatus",response.getStatusCode());
-                            pipeline.put("srcKind",domain.equalsIgnoreCase(failedUri.getHost())?"game_asset":"external");
-                        }catch(Exception ignored){}
-                        ImagePipelineDiagnostics.record(MainActivity.this,"webview_image_http_error",pipeline);
                         DiagnosticsLogger.event(MainActivity.this,"WARN","webview","image_http_error",details);
                     }else if(request.isForMainFrame()){
                         JSONObject details=new JSONObject();
