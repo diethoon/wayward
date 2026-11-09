@@ -673,7 +673,6 @@ public final class ImageProviderActivity extends Activity {
         item.responseEncoding = original.responseEncoding;
         item.enabled = original.enabled;
         item.allowInGame = original.allowInGame;
-        item.allowInGame = original.allowInGame;
         return item;
     }
 
