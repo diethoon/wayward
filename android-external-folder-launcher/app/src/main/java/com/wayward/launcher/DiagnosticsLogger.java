@@ -140,7 +140,9 @@ final class DiagnosticsLogger {
                 "ImageGen dependency install.log", true);
         appendSanitizedServerLogTail(report, new File(imageGen, "server.log"), 8 * 1024,
                 "ImageGen server.log (sanitized)");
-        report.append("\n[Privacy] server log lines are retained after masking prompt/body fields, credentials, bearer tokens and inline image data.\n");
+        appendSanitizedServerLogTail(report, new File(imageGen, "doctor.log"), 8 * 1024,
+                "ImageGen doctor.log (sanitized)");
+        report.append("\n[Privacy] server/doctor log lines are retained after masking prompt/body fields, credentials, bearer tokens and inline image data.\n");
         return report.toString();
     }
 
