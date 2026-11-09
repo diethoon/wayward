@@ -23,6 +23,8 @@ assert.match(service, /command\.add\(launch\.getAbsolutePath\(\)\)/,
   "NovelAI must launch the EasyGen wrapper, not the generic CLI entrypoint");
 assert.match(service, /--config/);
 assert.match(service, /--comfy-url/);
+assert.match(service, /installCommand\.command\(\)\.add\("--production"\)/,
+  "NovelAI uses the full dependency install while Image Studio keeps production-only install");
 assert.match(panel, /127\.0\.0\.1:8189\/\?panel=anima/);
 assert.match(panel, /setAllowFileAccess\(false\)/);
 assert.match(manifest, /\.ImageGenPanelActivity/);
