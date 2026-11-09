@@ -307,17 +307,28 @@ public final class MainActivity extends Activity {
             String gameUrl=sessionOrigin(activeProfileId)+"/game/"+Uri.encode(file)+"?launcher="+System.currentTimeMillis();
             SafTree sessionTree=tree;
 
-            // Prepare the Image Studio runtime before allowing its first request.
-            // Missing/invalid Image Studio still completes the callback and opens the game.
-            pendingGameLoad = true;
-            ensureImageGenServer(sessionTree,()->{
+            // The game itself must never wait for ImageGen health readiness.
+            // Open the WebView first, then prepare Image Studio independently.
+            pendingGameLoad = false;
+            if(home!=null)home.setVisibility(View.GONE);
+            web.setVisibility(View.VISIBLE);
+            imageGenSessionMessage = "게임 실행 중 · Image Studio 서버는 백그라운드에서 준비합니다.";
+            DiagnosticsLogger.event(this,"INFO","launcher","game_webview_load_requested",null);
+            web.loadUrl(gameUrl);
+            refreshImageGenStatus();
+
+            // SAF inspection and backend copying may take time; defer them until
+            // after the game navigation has been issued. No game-load callback
+            // is attached to server startup or its health endpoint.
+            imageGenHandler.post(() -> {
                 if(isFinishing()||web==null||!activeProfileId.equals(id))return;
-                pendingGameLoad = false;
-                if(home!=null)home.setVisibility(View.GONE);
-                web.setVisibility(View.VISIBLE);
-                DiagnosticsLogger.event(this,"INFO","launcher","game_webview_load_requested",null);
-                web.loadUrl(gameUrl);
-                refreshImageGenStatus();
+                try {
+                    ensureImageGenServer(sessionTree, null);
+                } catch (Throwable error) {
+                    DiagnosticsLogger.error(this,"imagegen","background_prepare_failed",error);
+                    imageGenSessionMessage = "게임은 실행됨 · Image Studio 백그라운드 준비 실패: " + msg(error);
+                    refreshImageGenStatus();
+                }
             });
         }catch(Exception e){
             pendingGameLoad = false;
