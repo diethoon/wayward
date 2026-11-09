@@ -110,19 +110,33 @@ final class ImagePipelineDiagnostics {
         if (value == null || value.length() > 120) return false;
         switch (key) {
             case "requestId":
+                return value.matches("[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
+                        || value.matches("wprovider-[a-z0-9]+-[a-z0-9]+");
             case "providerId":
-                return value.matches("[A-Za-z0-9._-]{1,80}");
+                return value.matches("[a-f0-9]{32}");
             case "providerType":
-                return value.matches("[a-z0-9_-]{1,32}");
+                return "cloudflare-worker".equals(value) || "openai-compatible".equals(value)
+                        || "custom-json".equals(value);
             case "mimeType":
             case "responseContentType":
             case "mimeDetected":
                 return value.matches("(image|application|text)/[a-z0-9.+-]{1,40}");
             case "imageFormat":
+                return "jpeg".equals(value) || "png".equals(value) || "gif".equals(value)
+                        || "webp".equals(value) || "unknown".equals(value);
             case "srcKind":
+                return "empty".equals(value) || "data".equals(value) || "blob".equals(value)
+                        || "https".equals(value) || "http".equals(value) || "file".equals(value)
+                        || "relative".equals(value) || "other".equals(value)
+                        || "game_asset".equals(value) || "external".equals(value);
             case "stage":
+                return "capture".equals(value);
             case "reasonCode":
-                return value.matches("[a-z0-9_-]{1,48}");
+                return "resolver_called".equals(value) || "resolver_missing".equals(value)
+                        || "image_constructor_unavailable".equals(value) || "data_url_missing".equals(value)
+                        || "webview_missing".equals(value) || "webview_url_missing".equals(value)
+                        || "webview_post_rejected".equals(value) || "invalid_request_id".equals(value)
+                        || "invalid_prompt_length".equals(value);
             case "errorType":
                 return value.matches("[A-Za-z0-9_.$-]{1,80}");
             case "elementTag":
