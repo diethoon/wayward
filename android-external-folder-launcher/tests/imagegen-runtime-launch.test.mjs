@@ -128,8 +128,8 @@ assert.match(endpoint, /100 && ip\[1\] >= 64 && ip\[1\] <= 127/,
 assert.match(endpoint, /endsWith\("\.ts\.net"\)/);
 assert.match(endpoint, /normalizeOptional/);
 
-assert.match(instrumentation, /context\.startForegroundService\(start\)/,
-  "instrumentation must start the real foreground ImageGenService");
+assert.ok(instrumentation.includes('MainActivity.class.getDeclaredMethod("startNovelAiServer")'),
+  "instrumentation must invoke the same launcher action used by the NovelAI server Start button");
 assert.ok(instrumentation.includes("imagegen/bun-version.log"),
   "instrumentation must verify the downloaded Android Bun version");
 assert.ok(instrumentation.includes('bunVersion.contains("1.4.4")'),
