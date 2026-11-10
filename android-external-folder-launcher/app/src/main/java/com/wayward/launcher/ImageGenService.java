@@ -42,6 +42,8 @@ public final class ImageGenService extends Service {
     public static final String EXTRA_BACKEND_VERSION = "backendVersion";
     public static final String EXTRA_LAUNCH_MODE = "launchMode";
     public static final String EXTRA_COMFY_URL = "comfyUrl";
+    public static final String EXTRA_LAUNCHER_PROFILE_ID = "launcherProfileId";
+    public static final String EXTRA_LAUNCHER_PROVIDER_ID = "launcherProviderId";
     private static final String CHANNEL_ID = "wayward-imagegen";
     private static final int NOTIFICATION_ID = 8189;
     private static final String BUN_URL =
@@ -66,6 +68,7 @@ public final class ImageGenService extends Service {
     private volatile Process serverProcess;
     private volatile boolean stopping = false;
     private volatile String backendVersion = "";
+    private volatile ImageGenLocalProviderServer localProviderServer;
 
     @Override public void onCreate() {
         super.onCreate();
@@ -108,6 +111,8 @@ public final class ImageGenService extends Service {
         if (serverReady || starting || (serverProcess != null && serverProcess.isAlive())) return START_STICKY;
         final String launchMode = intent == null ? "default" : intent.getStringExtra(EXTRA_LAUNCH_MODE);
         final String comfyUrl = intent == null ? "" : intent.getStringExtra(EXTRA_COMFY_URL);
+        final String launcherProfileId = intent == null ? "" : intent.getStringExtra(EXTRA_LAUNCHER_PROFILE_ID);
+        final String launcherProviderId = intent == null ? "" : intent.getStringExtra(EXTRA_LAUNCHER_PROVIDER_ID);
         DiagnosticsLogger.event(this,"INFO","imagegen_service","start_command_received",null);
         stopping = false;
         starting = true;
@@ -120,7 +125,10 @@ public final class ImageGenService extends Service {
             startAsForeground("이미지 생성 서버 준비 중");
             worker.execute(() -> {
                 try {
-                    startRuntime(new File(backendPath), launchMode == null ? "default" : launchMode, comfyUrl == null ? "" : comfyUrl);
+                    startRuntime(new File(backendPath), launchMode == null ? "default" : launchMode,
+                            comfyUrl == null ? "" : comfyUrl,
+                            launcherProfileId == null ? "" : launcherProfileId,
+                            launcherProviderId == null ? "" : launcherProviderId);
                 } catch (Throwable error) {
                     if (!stopping) recordFailure(error);
                 }
@@ -172,6 +180,7 @@ public final class ImageGenService extends Service {
     }
 
     private void recordFailure(Throwable error) {
+        closeLocalProviderServer();
         DiagnosticsLogger.error(this,"imagegen_service","runtime_start_failed",error);
         serverReady = false;
         serverAvailable = false;
@@ -245,13 +254,26 @@ public final class ImageGenService extends Service {
         return value.length() > 24000 ? value.substring(0, 24000) : value;
     }
 
-    private void startRuntime(File backendRoot,String launchMode,String requestedComfyUrl) throws Exception {
+    private void startRuntime(File backendRoot,String launchMode,String requestedComfyUrl,
+                              String launcherProfileId,String launcherProviderId) throws Exception {
         if (stopping) return;
         if (!backendRoot.isDirectory()) throw new IllegalStateException("런처 내장 ImageGen 백엔드 폴더가 없습니다.");
-        if (!"default".equals(launchMode) && !"novelai".equals(launchMode) && !"comfy".equals(launchMode)) {
+        if (!"default".equals(launchMode) && !"novelai".equals(launchMode)
+                && !"comfy".equals(launchMode) && !"launcher".equals(launchMode)) {
             throw new IllegalArgumentException("지원하지 않는 이미지 서버 실행 모드입니다.");
         }
         String comfyUrl = "comfy".equals(launchMode) ? ComfyEndpoint.normalizeOptional(requestedComfyUrl) : "";
+        if ("launcher".equals(launchMode)) {
+            closeLocalProviderServer();
+            ImageGenLocalProviderServer adapter = new ImageGenLocalProviderServer(
+                    this, launcherProfileId, launcherProviderId);
+            adapter.start();
+            localProviderServer = adapter;
+            DiagnosticsLogger.event(this, "INFO", "imagegen_service",
+                    "launcher_native_provider_adapter_started", null);
+        } else {
+            closeLocalProviderServer();
+        }
         File project = new File(backendRoot, "wayward-imagegen");
         if (!new File(project, "package.json").isFile() || !new File(project, "src/cli.ts").isFile()) {
             throw new IllegalStateException("런처 내장 wayward-imagegen/package.json 또는 src/cli.ts가 없습니다.");
@@ -650,7 +672,16 @@ public final class ImageGenService extends Service {
         return "서버 HTTP 응답 확인 · " + probe.detail + " (API 점검 필요) · 127.0.0.1:8189";
     }
 
+    private void closeLocalProviderServer() {
+        ImageGenLocalProviderServer adapter = localProviderServer;
+        localProviderServer = null;
+        if (adapter != null) {
+            try { adapter.close(); } catch (Exception ignored) {}
+        }
+    }
+
     private void stopRuntime() {
+        closeLocalProviderServer();
         synchronized (processLock) {
             serverReady = false;
             serverAvailable = false;
