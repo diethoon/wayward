@@ -39,7 +39,7 @@ jobs:
               total = 0
               count = 0
               for entry in bundle.infolist():
-                  name = entry.filename.replace("\\\\", "/")
+                  name = entry.filename.replace(chr(92), "/")
                   if not name.startswith("imagestudio/") or entry.is_dir():
                       continue
                   digest = hashlib.sha256()
