@@ -117,10 +117,13 @@
   }
 
   function wrapLegacyApi(value) {
-    if (!value || typeof value.get !== "function") return value;
-    const originalGet = value.get.bind(value);
+    if (!value) return value;
+    let originalGet;
+    try { originalGet = value.get; } catch (_) { return value; }
+    if (typeof originalGet !== "function") return value;
+
     const wrappedGet = (name, ...args) => {
-      const resolved = originalGet(name, ...args);
+      const resolved = originalGet.apply(value, [name, ...args]);
       if (name !== "ph" || typeof resolved !== "function") return resolved;
       return (...callArgs) => {
         const current = resolved(...callArgs) || {};
@@ -129,15 +132,23 @@
         return { ...current, baseUrl: LOCAL_ORIGIN, comfyui: state.ready };
       };
     };
+
+    // Do not Proxy the WML API. Its get member can be a frozen, non-configurable
+    // native function; returning wrappedGet from a Proxy get trap violates the
+    // ECMAScript Proxy invariant and aborts Image Studio setup. A facade lets us
+    // override get without mutating or proxying the original object.
     try {
-      return new Proxy(value, {
-        get(target, property, receiver) {
-          if (property === "get") return wrappedGet;
-          return Reflect.get(target, property, receiver);
-        }
+      const facade = Object.create(value);
+      const descriptor = Object.getOwnPropertyDescriptor(value, "get");
+      Object.defineProperty(facade, "get", {
+        configurable: true,
+        enumerable: descriptor ? descriptor.enumerable : true,
+        writable: true,
+        value: wrappedGet
       });
+      return facade;
     } catch (_) {
-      try { value.get = wrappedGet; } catch (ignored) {}
+      // Preserve the original WML API if it cannot be safely facaded.
       return value;
     }
   }

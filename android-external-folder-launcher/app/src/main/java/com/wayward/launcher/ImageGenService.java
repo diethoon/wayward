@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Base64;
 
 import org.json.JSONObject;
 
@@ -22,6 +23,7 @@ import java.io.StringWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -42,6 +44,8 @@ public final class ImageGenService extends Service {
     public static final String EXTRA_BACKEND_VERSION = "backendVersion";
     public static final String EXTRA_LAUNCH_MODE = "launchMode";
     public static final String EXTRA_COMFY_URL = "comfyUrl";
+    public static final String EXTRA_LAUNCHER_PROFILE_ID = "launcherProfileId";
+    public static final String EXTRA_LAUNCHER_PROVIDER_ID = "launcherProviderId";
     private static final String CHANNEL_ID = "wayward-imagegen";
     private static final int NOTIFICATION_ID = 8189;
     private static final String BUN_URL =
@@ -66,6 +70,7 @@ public final class ImageGenService extends Service {
     private volatile Process serverProcess;
     private volatile boolean stopping = false;
     private volatile String backendVersion = "";
+    private volatile ImageGenLocalProviderServer localProviderServer;
 
     @Override public void onCreate() {
         super.onCreate();
@@ -108,6 +113,8 @@ public final class ImageGenService extends Service {
         if (serverReady || starting || (serverProcess != null && serverProcess.isAlive())) return START_STICKY;
         final String launchMode = intent == null ? "default" : intent.getStringExtra(EXTRA_LAUNCH_MODE);
         final String comfyUrl = intent == null ? "" : intent.getStringExtra(EXTRA_COMFY_URL);
+        final String launcherProfileId = intent == null ? "" : intent.getStringExtra(EXTRA_LAUNCHER_PROFILE_ID);
+        final String launcherProviderId = intent == null ? "" : intent.getStringExtra(EXTRA_LAUNCHER_PROVIDER_ID);
         DiagnosticsLogger.event(this,"INFO","imagegen_service","start_command_received",null);
         stopping = false;
         starting = true;
@@ -120,7 +127,10 @@ public final class ImageGenService extends Service {
             startAsForeground("이미지 생성 서버 준비 중");
             worker.execute(() -> {
                 try {
-                    startRuntime(new File(backendPath), launchMode == null ? "default" : launchMode, comfyUrl == null ? "" : comfyUrl);
+                    startRuntime(new File(backendPath), launchMode == null ? "default" : launchMode,
+                            comfyUrl == null ? "" : comfyUrl,
+                            launcherProfileId == null ? "" : launcherProfileId,
+                            launcherProviderId == null ? "" : launcherProviderId);
                 } catch (Throwable error) {
                     if (!stopping) recordFailure(error);
                 }
@@ -172,6 +182,7 @@ public final class ImageGenService extends Service {
     }
 
     private void recordFailure(Throwable error) {
+        closeLocalProviderServer();
         DiagnosticsLogger.error(this,"imagegen_service","runtime_start_failed",error);
         serverReady = false;
         serverAvailable = false;
@@ -245,13 +256,17 @@ public final class ImageGenService extends Service {
         return value.length() > 24000 ? value.substring(0, 24000) : value;
     }
 
-    private void startRuntime(File backendRoot,String launchMode,String requestedComfyUrl) throws Exception {
+    private void startRuntime(File backendRoot,String launchMode,String requestedComfyUrl,
+                              String launcherProfileId,String launcherProviderId) throws Exception {
         if (stopping) return;
         if (!backendRoot.isDirectory()) throw new IllegalStateException("런처 내장 ImageGen 백엔드 폴더가 없습니다.");
-        if (!"default".equals(launchMode) && !"novelai".equals(launchMode) && !"comfy".equals(launchMode)) {
+        if (!"default".equals(launchMode) && !"novelai".equals(launchMode)
+                && !"comfy".equals(launchMode) && !"launcher".equals(launchMode)) {
             throw new IllegalArgumentException("지원하지 않는 이미지 서버 실행 모드입니다.");
         }
         String comfyUrl = "comfy".equals(launchMode) ? ComfyEndpoint.normalizeOptional(requestedComfyUrl) : "";
+        // The authenticated loopback provider adapter is started after the
+        // private config file exists, so its ephemeral key can be shared with Bun.
         File project = new File(backendRoot, "wayward-imagegen");
         if (!new File(project, "package.json").isFile() || !new File(project, "src/cli.ts").isFile()) {
             throw new IllegalStateException("런처 내장 wayward-imagegen/package.json 또는 src/cli.ts가 없습니다.");
@@ -269,6 +284,18 @@ public final class ImageGenService extends Service {
         File config = new File(project, "wayward-imagegen.config.json");
         if (!config.isFile() || config.length() == 0) {
             throw new IllegalStateException("런처 ImageGen 실행 설정 파일을 만들지 못했습니다.");
+        }
+        if ("launcher".equals(launchMode)) {
+            String localToken = prepareLauncherProviderToken(config);
+            closeLocalProviderServer();
+            ImageGenLocalProviderServer adapter = new ImageGenLocalProviderServer(
+                    this, launcherProfileId, launcherProviderId, localToken);
+            adapter.start();
+            localProviderServer = adapter;
+            DiagnosticsLogger.event(this, "INFO", "imagegen_service",
+                    "launcher_native_provider_adapter_started", null);
+        } else {
+            closeLocalProviderServer();
         }
 
         ProcessBuilder builder = bunProcess(bun,
@@ -650,7 +677,63 @@ public final class ImageGenService extends Service {
         return "서버 HTTP 응답 확인 · " + probe.detail + " (API 점검 필요) · 127.0.0.1:8189";
     }
 
+    private String prepareLauncherProviderToken(File configFile) throws Exception {
+        byte[] random = new byte[32];
+        new SecureRandom().nextBytes(random);
+        String token = Base64.encodeToString(random,
+                Base64.URL_SAFE | Base64.NO_PADDING | Base64.NO_WRAP);
+        JSONObject config = new JSONObject(readSmallText(configFile, 128 * 1024));
+        config.put("launcherProviderToken", token);
+        File temporary = new File(configFile.getParentFile(), configFile.getName() + ".tmp");
+        try (FileOutputStream output = new FileOutputStream(temporary, false)) {
+            output.write((config.toString() + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            output.flush();
+            output.getFD().sync();
+        }
+        try {
+            java.nio.file.Files.move(temporary.toPath(), configFile.toPath(),
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.io.IOException atomicFailure) {
+            try {
+                java.nio.file.Files.move(temporary.toPath(), configFile.toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.io.IOException moveFailure) {
+                moveFailure.addSuppressed(atomicFailure);
+                throw moveFailure;
+            }
+        } finally {
+            if (temporary.exists()) temporary.delete();
+        }
+        return token;
+    }
+
+    private static String readSmallText(File file, int limit) throws Exception {
+        if (!file.isFile() || file.length() <= 0 || file.length() > limit) {
+            throw new IllegalStateException("런처 이미지 서비스 설정 파일이 올바르지 않습니다.");
+        }
+        byte[] bytes = new byte[(int) file.length()];
+        try (FileInputStream input = new FileInputStream(file)) {
+            int offset = 0;
+            while (offset < bytes.length) {
+                int count = input.read(bytes, offset, bytes.length - offset);
+                if (count < 0) throw new java.io.IOException("런처 이미지 서비스 설정 파일을 끝까지 읽지 못했습니다.");
+                offset += count;
+            }
+        }
+        return new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private void closeLocalProviderServer() {
+        ImageGenLocalProviderServer adapter = localProviderServer;
+        localProviderServer = null;
+        if (adapter != null) {
+            try { adapter.close(); } catch (Exception ignored) {}
+        }
+    }
+
     private void stopRuntime() {
+        closeLocalProviderServer();
         synchronized (processLock) {
             serverReady = false;
             serverAvailable = false;

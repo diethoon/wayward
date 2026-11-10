@@ -84,10 +84,15 @@ const factory = {
 window.__waywardPauseSettingsUiFactory = factory;
 const api = factory.connect({}, { id: "imagestudio" });
 let legacyConnection = { baseUrl: null, comfyui: false };
-window.__WML_LEGACY__ = {
+// Match WML's immutable legacy API shape: a frozen get() must remain callable
+// through the launcher facade without a Proxy invariant violation.
+const frozenLegacyApi = Object.freeze({
   name(name) { return name; },
   get(name) { return name === "ph" ? () => legacyConnection : () => undefined; }
-};
+});
+assert.equal(Object.getOwnPropertyDescriptor(frozenLegacyApi, "get").configurable, false);
+assert.equal(Object.getOwnPropertyDescriptor(frozenLegacyApi, "get").writable, false);
+window.__WML_LEGACY__ = frozenLegacyApi;
 const legacyImageBackend = window.__WML_LEGACY__.get("ph");
 
 const refreshed = await window.WaywardLauncherImageStudio.refreshBackendProbe("test_startup");
