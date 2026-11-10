@@ -528,6 +528,27 @@ public final class ImageGenServiceRuntimeTest {
                     "String(window.__waywardCiSettingsClicks||0)", 5_000L);
             assertEquals("The real Image Studio settings button did not receive a click.", "1", clicked);
 
+            // The real settings editor opens an overlay above the game. Wait for
+            // its loaded navigation control, then close it through its real close
+            // button so the subsequent portrait screenshot shows the game UI.
+            long settingsReadyDeadline = System.currentTimeMillis() + 15_000L;
+            String settingsReady = "false";
+            while (System.currentTimeMillis() < settingsReadyDeadline) {
+                settingsReady = awaitJsString(instrumentation, gameWeb,
+                        "String(!!document.querySelector('#wwis-overlay #wwis-settings-back'))", 5_000L);
+                if ("true".equals(settingsReady)) break;
+                Thread.sleep(150L);
+            }
+            assertEquals("The real Image Studio generation settings did not finish loading.",
+                    "true", settingsReady);
+            String settingsClosed = awaitJsString(instrumentation, gameWeb,
+                    "(function(){var close=document.querySelector('#wwis-overlay #wwis-close');"
+                            + "if(!close)return 'close_button_missing';close.click();"
+                            + "return String(!!document.querySelector('#wwis-overlay[hidden]'));})()",
+                    5_000L);
+            assertEquals("The real Image Studio settings overlay remained above the game.",
+                    "true", settingsClosed);
+
             // The bridge automatically discovers the live WML roster and writes
             // it through the same discover-batch API as Image Studio's own button.
             JSONObject discoveryState = new JSONObject();
