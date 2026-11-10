@@ -68,37 +68,40 @@ public final class ImageGenServiceRuntimeTest {
                     Build.SUPPORTED_64_BIT_ABIS != null && Build.SUPPORTED_64_BIT_ABIS.length > 0);
 
             grantNotificationPermission(instrumentation, context);
+            configureCloudflareProvider(context, GAME_PROFILE_ID);
             launcherActivity = instrumentation.startActivitySync(
                     new Intent(context, MainActivity.class)
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
             assertNotNull("Launcher activity did not start", launcherActivity);
+            setField(launcherActivity, "activeProfileId", GAME_PROFILE_ID);
 
-            // Invoke the exact launcher action behind the NovelAI server Start button.
-            // This exercises backend installation, config creation and service launch together.
+            // Exercise the actual launcher-selected provider mode, including the
+            // loopback-only authenticated adapter consumed by Image Studio jobs.
             Activity activityToStart = launcherActivity;
-            Method startAction = MainActivity.class.getDeclaredMethod("startNovelAiServer");
+            Method startAction = MainActivity.class.getDeclaredMethod("startLauncherProviderServer");
             startAction.setAccessible(true);
             instrumentation.runOnMainSync(() -> {
                 try {
                     startAction.invoke(activityToStart);
                 } catch (Exception error) {
-                    throw new RuntimeException("Could not invoke the launcher ImageGen Start action", error);
+                    throw new RuntimeException("Could not invoke the launcher native-provider action", error);
                 }
             });
 
             int initialHealth = awaitReachable(SERVER_START_TIMEOUT_MS);
-            assertEquals("Bundled ARM64 Bun did not start the actual ImageGen HTTP server. "
-                    + startupLogs(context), 503, initialHealth);
+            assertEquals("Bundled ARM64 Bun or the native provider adapter did not start. "
+                    + startupLogs(context), 200, initialHealth);
+            ImageGenStatusStore.State configured = ImageGenStatusStore.read(context.getFilesDir());
             long availabilityDeadline = System.currentTimeMillis() + 10_000L;
-            ImageGenStatusStore.State unconfigured = ImageGenStatusStore.read(context.getFilesDir());
-            while (!unconfigured.isAvailable() && System.currentTimeMillis() < availabilityDeadline) {
+            while ((!configured.isAvailable() || !configured.isReady())
+                    && System.currentTimeMillis() < availabilityDeadline) {
                 Thread.sleep(100L);
-                unconfigured = ImageGenStatusStore.read(context.getFilesDir());
+                configured = ImageGenStatusStore.read(context.getFilesDir());
             }
-            assertTrue("HTTP 503 means the API is reachable but provider setup is pending. "
-                    + startupLogs(context), unconfigured.isAvailable());
-            assertTrue("Provider setup must not be treated as generation-ready. "
-                    + startupLogs(context), !unconfigured.isReady());
+            assertTrue("Native provider server did not report ready. " + startupLogs(context),
+                    configured.isAvailable() && configured.isReady());
+            assertEquals("The authenticated loopback provider adapter did not respond.",
+                    200, requestStatus("http://127.0.0.1:8190/health", "GET", null));
 
             // The one-tap settings action now opens the active game WebView's
             // native Image Studio UI, not a separate review-page Activity. The
@@ -114,9 +117,9 @@ public final class ImageGenServiceRuntimeTest {
                     serverLog.contains("wayward-imagegen 0.8.4") && serverLog.toLowerCase().contains("listening"));
 
             // End-to-end: load the pinned Wayward WML page in the real launcher
-            // WebView, invoke its installed native image-provider bridge, call the
-            // real Cloudflare Worker from Android, and wait for a data: image to
-            // decode in the game page before capturing the screen and diagnostics.
+            // WebView, submit through Image Studio's /api/batch/enqueue endpoint,
+            // call Cloudflare through the authenticated native provider adapter,
+            // save through JobRunner/cache, and read the result back through /api/pack.
             runCloudflareGamePageSmoke(instrumentation, context, launcherActivity);
             restartImageGenServerWithKeystoreToken(instrumentation, context, launcherActivity);
 
@@ -408,33 +411,49 @@ public final class ImageGenServiceRuntimeTest {
                     + characterCounts, characterCounts.has("launcher-ci-probe"));
 
             String trigger = "(function(){"
-                    + "window.__waywardCiImage={state:'generating'};"
-                    + "var p=window.WaywardImageProviders.generate({"
-                    + "prompt:'A peaceful watercolor landscape of a small wooden cottage beside a river, green hills and wildflowers, warm morning light, detailed digital painting, no people, no text',"
-                    + "width:1024,height:1024});"
-                    + "p.then(function(result){"
-                    + "if(!result||!result.dataUrl||!result.dataUrl.startsWith('data:image/'))"
-                    + "throw new Error('Native bridge returned no image data URL');"
+                    + "window.__waywardCiImage={state:'enqueue'};"
+                    + "(async function(){"
+                    + "var prompt='A peaceful watercolor landscape of a small wooden cottage beside a river, green hills and wildflowers, warm morning light, detailed digital painting, no people, no text';"
+                    + "var enqueueResponse=await window.fetch('http://127.0.0.1:8189/api/batch/enqueue',{"
+                    + "method:'POST',headers:{'Content-Type':'application/json'},"
+                    + "body:JSON.stringify({jobId:'launcher-native-provider-ci-smoke',start:true,items:[{"
+                    + "talentId:'launcher-ci-probe',imageType:'portrait',prompt:prompt,negativePrompt:'blurry, low quality',weight:100"
+                    + "}]})});"
+                    + "var enqueueBody=await enqueueResponse.json().catch(function(){return {};});"
+                    + "if(!enqueueResponse.ok)throw new Error('batch enqueue HTTP '+enqueueResponse.status+': '+JSON.stringify(enqueueBody).slice(0,240));"
+                    + "window.__waywardCiImage={state:'queued',accepted:enqueueBody.accepted||0,alreadyCached:enqueueBody.alreadyCached||0};"
+                    + "var deadline=Date.now()+240000;var batchStatus=null;"
+                    + "while(Date.now()<deadline){"
+                    + "var statusResponse=await window.fetch('http://127.0.0.1:8189/api/batch/status');"
+                    + "batchStatus=await statusResponse.json();"
+                    + "window.__waywardCiImage={state:'processing',done:batchStatus.done||0,total:batchStatus.total||0,completed:batchStatus.completed||0,cached:batchStatus.cached||0,errored:batchStatus.errored||0,lastError:batchStatus.lastError||''};"
+                    + "if((batchStatus.done||0)>=(batchStatus.total||0)&&!batchStatus.running)break;"
+                    + "await new Promise(function(resolve){setTimeout(resolve,500);});"
+                    + "}"
+                    + "if(!batchStatus||(batchStatus.total||0)<1||(batchStatus.done||0)<(batchStatus.total||0))throw new Error('batch job timed out: '+JSON.stringify(batchStatus));"
+                    + "if((batchStatus.completed||0)!==1||(batchStatus.errored||0)!==0)throw new Error('Image Studio batch failed: '+JSON.stringify(batchStatus));"
+                    + "var packResponse=await window.fetch('http://127.0.0.1:8189/api/pack?characters=launcher-ci-probe');"
+                    + "if(!packResponse.ok)throw new Error('pack HTTP '+packResponse.status);"
+                    + "var pack=await packResponse.json();var entry=pack.entries&&pack.entries['launcher-ci-probe'];"
+                    + "if(!entry||!entry.imagePath)throw new Error('generated image missing from /api/pack: '+JSON.stringify(pack).slice(0,300));"
+                    + "var imageUrl='http://127.0.0.1:8189/images/'+entry.imagePath.split('/').map(encodeURIComponent).join('/');"
+                    + "var imageResponse=await window.fetch(imageUrl);"
+                    + "if(!imageResponse.ok)throw new Error('cached image HTTP '+imageResponse.status);"
+                    + "var blob=await imageResponse.blob();var dataUrl=await new Promise(function(resolve,reject){"
+                    + "var reader=new FileReader();reader.onload=function(){resolve(reader.result);};reader.onerror=reject;reader.readAsDataURL(blob);});"
                     + "var img=document.createElement('img');img.id='wayward-ci-cloudflare-image';"
-                    + "img.alt='Cloudflare FLUX Android integration result';"
-                    + "img.style.cssText='position:fixed;z-index:2147483647;right:20px;top:20px;"
-                    + "width:340px;height:340px;object-fit:contain;background:#fff;"
-                    + "border:6px solid #2d6b49;border-radius:12px;box-shadow:0 4px 24px #0008';"
-                    + "img.onload=function(){window.__waywardCiImage={state:'loaded',"
-                    + "naturalWidth:img.naturalWidth,naturalHeight:img.naturalHeight,"
-                    + "mimeType:result.mimeType||'',dataUrlLength:result.dataUrl.length,"
-                    + "providerId:result.providerId||'',fallbackUsed:!!result.fallbackUsed};};"
-                    + "img.onerror=function(){window.__waywardCiImage={state:'img_error',"
-                    + "naturalWidth:img.naturalWidth,naturalHeight:img.naturalHeight};};"
-                    + "document.body.appendChild(img);img.src=result.dataUrl;"
-                    + "}).catch(function(error){window.__waywardCiImage={state:'error',"
-                    + "errorType:error&&error.name?String(error.name):'Error',"
-                    + "message:error&&error.message?String(error.message).slice(0,240):'unknown'};});"
+                    + "img.alt='Image Studio cached Cloudflare image';"
+                    + "img.style.cssText='position:fixed;z-index:2147483647;right:20px;top:20px;width:340px;height:340px;object-fit:contain;background:#fff;border:6px solid #2d6b49;border-radius:12px;box-shadow:0 4px 24px #0008';"
+                    + "img.onload=function(){window.__waywardCiImage={state:'loaded',naturalWidth:img.naturalWidth,naturalHeight:img.naturalHeight,"
+                    + "mimeType:blob.type||'',imagePath:entry.imagePath,entryCount:pack.entryCount,cacheCompleted:batchStatus.completed,cacheCount:batchStatus.cached};};"
+                    + "img.onerror=function(){window.__waywardCiImage={state:'img_error',naturalWidth:img.naturalWidth,naturalHeight:img.naturalHeight,imagePath:entry.imagePath};};"
+                    + "document.body.appendChild(img);img.src=dataUrl;"
+                    + "})().catch(function(error){window.__waywardCiImage={state:'error',errorType:error&&error.name?String(error.name):'Error',message:error&&error.message?String(error.message).slice(0,240):'unknown'};});"
                     + "return 'dispatched';})()";
             String dispatch = awaitJsString(instrumentation, gameWeb, trigger, 10_000L);
-            assertEquals("The game page did not dispatch its native image request.", "dispatched", dispatch);
+            assertEquals("The game page did not dispatch its Image Studio batch request.", "dispatched", dispatch);
 
-            long deadline = System.currentTimeMillis() + 240_000L;
+            long deadline = System.currentTimeMillis() + 260_000L;
             JSONObject imageState = new JSONObject();
             while (System.currentTimeMillis() < deadline) {
                 String stateJson = awaitJsString(instrumentation, gameWeb,
@@ -444,19 +463,19 @@ public final class ImageGenServiceRuntimeTest {
                 if ("loaded".equals(state) || "error".equals(state) || "img_error".equals(state)) break;
                 Thread.sleep(500L);
             }
-            assertEquals("Cloudflare image did not render in the actual Wayward game WebView. "
-                    + imageState + "; pipeline=" + ImagePipelineDiagnostics.readRecent(context, 100),
+            assertEquals("Cloudflare image did not complete the real Image Studio batch/cache pipeline. "
+                    + imageState + "; pipeline=" + ImagePipelineDiagnostics.readRecent(context, 120),
                     "loaded", imageState.optString("state", ""));
-            assertTrue("The generated image decoded to zero dimensions in Android WebView: " + imageState,
+            assertTrue("The cached image did not decode in Android WebView: " + imageState,
                     imageState.optInt("naturalWidth", 0) > 0 && imageState.optInt("naturalHeight", 0) > 0);
-
             resultSummary = "state=loaded\n"
                     + "gameHtmlBytes=" + gameHtml.length + "\n"
                     + "gameHtmlSourceCommit=5e5c78c4e32198e460ba040256e920d37ed1711c\n"
                     + "gameHtmlBlob=8d998b50e82febe18b5c1d1159b16663b9169775\n"
                     + "cloudflareEndpoint=" + FLUX_ENDPOINT + "\n"
                     + "providerType=cloudflare-worker\n"
-                    + "dataUrlLength=" + imageState.optInt("dataUrlLength") + "\n"
+                    + "imagePath=" + imageState.optString("imagePath") + "\n"
+                    + "packEntryCount=" + imageState.optInt("entryCount") + "\n"
                     + "mimeType=" + imageState.optString("mimeType") + "\n"
                     + "decodedWidth=" + imageState.optInt("naturalWidth") + "\n"
                     + "decodedHeight=" + imageState.optInt("naturalHeight") + "\n"
