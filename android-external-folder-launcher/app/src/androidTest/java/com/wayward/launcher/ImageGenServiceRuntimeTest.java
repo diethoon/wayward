@@ -74,7 +74,12 @@ public final class ImageGenServiceRuntimeTest {
             int initialHealth = awaitReachable(SERVER_START_TIMEOUT_MS);
             assertEquals("Bundled ARM64 Bun did not start the actual ImageGen HTTP server. "
                     + startupLogs(context), 503, initialHealth);
+            long availabilityDeadline = System.currentTimeMillis() + 10_000L;
             ImageGenStatusStore.State unconfigured = ImageGenStatusStore.read(context.getFilesDir());
+            while (!unconfigured.isAvailable() && System.currentTimeMillis() < availabilityDeadline) {
+                Thread.sleep(100L);
+                unconfigured = ImageGenStatusStore.read(context.getFilesDir());
+            }
             assertTrue("HTTP 503 means the API is reachable but provider setup is pending. "
                     + startupLogs(context), unconfigured.isAvailable());
             assertTrue("Provider setup must not be treated as generation-ready. "
