@@ -44,6 +44,7 @@ import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -214,6 +215,7 @@ public final class ImageGenServiceRuntimeTest {
         AtomicReference<String> pageError = new AtomicReference<>("");
         AtomicBoolean imageStudioScriptServed = new AtomicBoolean(false);
         AtomicBoolean imageSearchScriptServed = new AtomicBoolean(false);
+        ConcurrentLinkedQueue<String> moduleRequests = new ConcurrentLinkedQueue<>();
         File artifactDirectory = new File(context.getFilesDir(), "ci-artifacts");
         if (!artifactDirectory.isDirectory() && !artifactDirectory.mkdirs()) {
             throw new IllegalStateException("Could not create private CI artifact directory.");
@@ -337,6 +339,10 @@ public final class ImageGenServiceRuntimeTest {
                             Uri requestUri = request == null ? null : request.getUrl();
                             String requestPath = requestUri == null ? null : requestUri.getPath();
                             String zipPath = null;
+                            if (requestPath != null
+                                    && (requestPath.contains("/mods/") || requestPath.endsWith(".js"))) {
+                                moduleRequests.add(requestUri.toString());
+                            }
                             if (requestPath != null && requestPath.startsWith("/game/wml/mods/")) {
                                 zipPath = requestPath.substring("/game/".length());
                             } else if (requestPath != null && requestPath.startsWith("/wml/mods/")) {
@@ -418,16 +424,38 @@ public final class ImageGenServiceRuntimeTest {
             WebView gameWeb = webHolder[0];
             assertNotNull("The launcher WebView was not created: " + pageError.get(), gameWeb);
             dismissWaywardAgeConfirmation(instrumentation, gameWeb);
-            long moduleLoadDeadline = System.currentTimeMillis() + 30_000L;
+
+            // A newly opened HTML document starts at Wayward's title menu.
+            // WML's game-scoped mods are not requested until the user actually
+            // starts a game. Tap the real title-menu button before asserting
+            // Image Studio module registration.
+            String newGameAction = awaitJsString(instrumentation, gameWeb,
+                    "(function(){var button=Array.from(document.querySelectorAll('button,[role=button]'))"
+                            + ".find(function(node){return String(node.innerText||node.textContent||'').replace(/\\\\s+/g,' ').trim()==='새 게임';});"
+                            + "if(!button)return 'new_game_button_missing';button.click();return 'new_game_clicked';})()",
+                    10_000L);
+            assertEquals("Wayward did not expose its real 새 게임 action on the title page.",
+                    "new_game_clicked", newGameAction);
+            Thread.sleep(500L);
+            String skipIntro = awaitJsString(instrumentation, gameWeb,
+                    "(function(){var button=Array.from(document.querySelectorAll('button,[role=button]'))"
+                            + ".find(function(node){return String(node.innerText||node.textContent||'').replace(/\\\\s+/g,' ').trim()==='건너뛰기';});"
+                            + "if(!button)return 'no_skip';button.click();return 'intro_skipped';})()",
+                    5_000L);
+            System.out.println("WAYWARD_TITLE_START " + newGameAction + " " + skipIntro);
+
+            long moduleLoadDeadline = System.currentTimeMillis() + 45_000L;
             while (System.currentTimeMillis() < moduleLoadDeadline
                     && (!imageStudioScriptServed.get() || !imageSearchScriptServed.get())) {
                 Thread.sleep(150L);
             }
             assertTrue("The game WML loader did not request the real Image Studio module. "
-                    + "served=" + imageStudioScriptServed.get() + " page=" + pageError.get(),
+                    + "served=" + imageStudioScriptServed.get() + " page=" + pageError.get()
+                    + " requests=" + moduleRequests,
                     imageStudioScriptServed.get());
             assertTrue("The game WML loader did not request the real image-search-customize portrait module. "
-                    + "served=" + imageSearchScriptServed.get() + " page=" + pageError.get(),
+                    + "served=" + imageSearchScriptServed.get() + " page=" + pageError.get()
+                    + " requests=" + moduleRequests,
                     imageSearchScriptServed.get());
 
             String bridgeType = awaitJsString(instrumentation, gameWeb,
