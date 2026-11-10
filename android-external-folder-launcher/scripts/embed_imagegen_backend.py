@@ -179,17 +179,6 @@ def extract(archive: Path, output: Path) -> None:
 
 
         patch_backend_text(
-            "wayward-imagegen/ui/index.html",
-            [
-                (
-                    """        \`<b>\${(body.images ?? 0).toLocaleString()}</b> images · \${body.imageProvider === 'nai' ? 'NovelAI' : 'ComfyUI'} \` +""",
-                    """        \`<b>\${(body.images ?? 0).toLocaleString()}</b> images · \${body.imageProvider === 'launcher' ? 'Launcher provider' : body.imageProvider === 'nai' ? 'NovelAI' : 'ComfyUI'} \` +""",
-                    "show-launcher-provider-in-status-label",
-                ),
-            ],
-        )
-
-        patch_backend_text(
             "wayward-imagegen/src/config.ts",
             [
                 (
