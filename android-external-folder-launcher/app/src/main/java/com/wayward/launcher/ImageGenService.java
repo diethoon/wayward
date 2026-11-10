@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Base64;
 
 import org.json.JSONObject;
 
@@ -22,6 +23,7 @@ import java.io.StringWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -263,17 +265,8 @@ public final class ImageGenService extends Service {
             throw new IllegalArgumentException("지원하지 않는 이미지 서버 실행 모드입니다.");
         }
         String comfyUrl = "comfy".equals(launchMode) ? ComfyEndpoint.normalizeOptional(requestedComfyUrl) : "";
-        if ("launcher".equals(launchMode)) {
-            closeLocalProviderServer();
-            ImageGenLocalProviderServer adapter = new ImageGenLocalProviderServer(
-                    this, launcherProfileId, launcherProviderId);
-            adapter.start();
-            localProviderServer = adapter;
-            DiagnosticsLogger.event(this, "INFO", "imagegen_service",
-                    "launcher_native_provider_adapter_started", null);
-        } else {
-            closeLocalProviderServer();
-        }
+        // The authenticated loopback provider adapter is started after the
+        // private config file exists, so its ephemeral key can be shared with Bun.
         File project = new File(backendRoot, "wayward-imagegen");
         if (!new File(project, "package.json").isFile() || !new File(project, "src/cli.ts").isFile()) {
             throw new IllegalStateException("런처 내장 wayward-imagegen/package.json 또는 src/cli.ts가 없습니다.");
@@ -291,6 +284,18 @@ public final class ImageGenService extends Service {
         File config = new File(project, "wayward-imagegen.config.json");
         if (!config.isFile() || config.length() == 0) {
             throw new IllegalStateException("런처 ImageGen 실행 설정 파일을 만들지 못했습니다.");
+        }
+        if ("launcher".equals(launchMode)) {
+            String localToken = prepareLauncherProviderToken(config);
+            closeLocalProviderServer();
+            ImageGenLocalProviderServer adapter = new ImageGenLocalProviderServer(
+                    this, launcherProfileId, launcherProviderId, localToken);
+            adapter.start();
+            localProviderServer = adapter;
+            DiagnosticsLogger.event(this, "INFO", "imagegen_service",
+                    "launcher_native_provider_adapter_started", null);
+        } else {
+            closeLocalProviderServer();
         }
 
         ProcessBuilder builder = bunProcess(bun,
@@ -670,6 +675,53 @@ public final class ImageGenService extends Service {
             return "서버 응답 확인 · HTTP 503(공급자 설정/인증 대기) · 127.0.0.1:8189";
         }
         return "서버 HTTP 응답 확인 · " + probe.detail + " (API 점검 필요) · 127.0.0.1:8189";
+    }
+
+    private String prepareLauncherProviderToken(File configFile) throws Exception {
+        byte[] random = new byte[32];
+        new SecureRandom().nextBytes(random);
+        String token = Base64.encodeToString(random,
+                Base64.URL_SAFE | Base64.NO_PADDING | Base64.NO_WRAP);
+        JSONObject config = new JSONObject(readSmallText(configFile, 128 * 1024));
+        config.put("launcherProviderToken", token);
+        File temporary = new File(configFile.getParentFile(), configFile.getName() + ".tmp");
+        try (FileOutputStream output = new FileOutputStream(temporary, false)) {
+            output.write((config.toString() + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            output.flush();
+            output.getFD().sync();
+        }
+        try {
+            java.nio.file.Files.move(temporary.toPath(), configFile.toPath(),
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.io.IOException atomicFailure) {
+            try {
+                java.nio.file.Files.move(temporary.toPath(), configFile.toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.io.IOException moveFailure) {
+                moveFailure.addSuppressed(atomicFailure);
+                throw moveFailure;
+            }
+        } finally {
+            if (temporary.exists()) temporary.delete();
+        }
+        return token;
+    }
+
+    private static String readSmallText(File file, int limit) throws Exception {
+        if (!file.isFile() || file.length() <= 0 || file.length() > limit) {
+            throw new IllegalStateException("런처 이미지 서비스 설정 파일이 올바르지 않습니다.");
+        }
+        byte[] bytes = new byte[(int) file.length()];
+        try (FileInputStream input = new FileInputStream(file)) {
+            int offset = 0;
+            while (offset < bytes.length) {
+                int count = input.read(bytes, offset, bytes.length - offset);
+                if (count < 0) throw new java.io.IOException("런처 이미지 서비스 설정 파일을 끝까지 읽지 못했습니다.");
+                offset += count;
+            }
+        }
+        return new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
     }
 
     private void closeLocalProviderServer() {
