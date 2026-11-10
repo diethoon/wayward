@@ -83,7 +83,9 @@ jobs:
                                   key = (blob_sha, file_path, size)
                                   core_blobs.setdefault(key, set()).add(ref)
                           if lower_path.endswith(".zip") and size <= 80_000_000 and (
-                              "wml" in lower_path or "wayward_mod" in lower_path or lower_path.endswith("/mods.zip")
+                              "wml" in lower_path or "wayward_mod" in lower_path
+                              or lower_path.endswith("/mods.zip")
+                              or ("wayward" in Path(lower_path).name and "faith" not in Path(lower_path).name)
                           ):
                               key = (blob_sha, file_path, size)
                               archive_blobs.setdefault(key, set()).add(ref)
@@ -149,6 +151,18 @@ jobs:
                                   }, ensure_ascii=False))
                                   continue
                               lower_data = entry_data.lower()
+                              if suffix in (".html", ".htm") and 3_500_000 <= entry.file_size <= 9_000_000:
+                                  entry_md5 = hashlib.md5(entry_data).hexdigest()
+                                  if entry_md5 == target_md5 or "wayward_wml_ko.html" in lowered:
+                                      report.append("WML_ARCHIVE_HTML " + json.dumps({
+                                          "archive": file_path,
+                                          "entry": entry_name,
+                                          "bytes": entry.file_size,
+                                          "md5": entry_md5,
+                                          "target_md5_match": entry_md5 == target_md5,
+                                          "sha256": hashlib.sha256(entry_data).hexdigest(),
+                                          "branches": sorted(refs_for_blob)
+                                      }, ensure_ascii=False))
                               is_runtime = (
                                   lowered.endswith("wml-core.js")
                                   or "/wml/runtime/" in lowered
@@ -427,6 +441,7 @@ jobs:
               raise SystemExit(f"Wayward WML HTML size mismatch: {size} != {expected_bytes}")
 
           sha256 = hashlib.sha256()
+          md5 = hashlib.md5()
           git_blob = hashlib.sha1()
           git_blob.update(f"blob {size}\0".encode("ascii"))
           chunk_manifest = os.path.join(out_dir, "game-html-chunks.sha256.jsonl")
@@ -437,6 +452,12 @@ jobs:
               b"generateimagewithprovider",
               b"imagegen",
               b"novelai",
+              b"0.9.5",
+              b"0.7.0",
+              b"wml-core.js",
+              b"wml/runtime",
+              b"pausesettings",
+              b"wml_version",
           ]
           hits = {needle.decode("ascii"): [] for needle in needles}
           overlap = b""
@@ -455,6 +476,7 @@ jobs:
                       "sha256": chunk_hash
                   }, separators=(",", ":")) + "\n")
                   sha256.update(chunk)
+                  md5.update(chunk)
                   git_blob.update(chunk)
                   scan = overlap + chunk
                   scan_offset = offset - len(overlap)
@@ -484,6 +506,8 @@ jobs:
               f"bytes={size}",
               f"git_blob_sha1={actual_blob}",
               f"sha256={sha256.hexdigest()}",
+              f"md5={md5.hexdigest()}",
+              f"matches_user_md5={md5.hexdigest() == 'd75797d4101f4a1312b3ae0571d77f68'}",
               f"chunk_size=4096",
               f"chunk_count={chunk_count}",
           ]
