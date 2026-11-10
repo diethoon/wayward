@@ -12,7 +12,9 @@ adb shell getprop ro.build.version.release > "$OUT/android-release.txt"
 adb shell getprop ro.build.version.sdk > "$OUT/android-sdk.txt"
 adb shell getprop ro.product.cpu.abilist > "$OUT/android-abilist.txt"
 adb shell getprop ro.dalvik.vm.native.bridge > "$OUT/native-bridge.txt"
-adb shell ls -l /system/lib64/arm64/linker64 > "$OUT/arm64-linker.txt" 2>&1 || true
+adb shell ls -l /system/bin/arm64/linker64 > "$OUT/arm64-linker.txt" 2>&1 || true
+adb shell ls -l /system/bin/ndk_translation_program_runner_binfmt_misc_arm64 > "$OUT/arm64-runner.txt" 2>&1 || true
+adb shell cat /proc/sys/fs/binfmt_misc/arm64_exe > "$OUT/arm64-binfmt.txt" 2>&1 || true
 adb install -r "$APK" | tee "$OUT/install.txt"
 adb shell pm grant "$PACKAGE" android.permission.POST_NOTIFICATIONS
 
@@ -32,6 +34,8 @@ adb logcat -d -t 6000 > "$OUT/logcat.txt"
   echo "abi=$(tr -d '[:space:]' < "$OUT/android-abilist.txt")"
   echo "native_bridge=$(tr -d '[:space:]' < "$OUT/native-bridge.txt")"
   echo "arm64_linker=$(head -n 1 "$OUT/arm64-linker.txt")"
+  echo "arm64_runner=$(head -n 1 "$OUT/arm64-runner.txt")"
+  echo "arm64_binfmt=$(head -n 4 "$OUT/arm64-binfmt.txt" | tr '\\n' ' ')"
   echo "instrumentation_exit=$TEST_EXIT"
 } | tee "$OUT/result.txt"
 
