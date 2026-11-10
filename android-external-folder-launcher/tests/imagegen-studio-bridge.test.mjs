@@ -83,6 +83,12 @@ const factory = {
 };
 window.__waywardPauseSettingsUiFactory = factory;
 const api = factory.connect({}, { id: "imagestudio" });
+let legacyConnection = { baseUrl: null, comfyui: false };
+window.__WML_LEGACY__ = {
+  name(name) { return name; },
+  get(name) { return name === "ph" ? () => legacyConnection : () => undefined; }
+};
+const legacyImageBackend = window.__WML_LEGACY__.get("ph");
 
 const refreshed = await window.WaywardLauncherImageStudio.refreshBackendProbe("test_startup");
 assert.equal(refreshed.ok, true);
@@ -90,6 +96,8 @@ assert.equal(probes.at(-1).force, true);
 assert.equal(probes.at(-1).options.mode, "auto");
 assert.equal(api.fn("imageServerUrl")("/api/batch/enqueue"), "http://127.0.0.1:8189/api/batch/enqueue");
 assert.equal(api.fn("imageBackend")().comfyui, false);
+assert.equal(legacyImageBackend().baseUrl, "http://127.0.0.1:8189");
+assert.equal(legacyImageBackend().comfyui, false);
 
 window.WW_ImageStudioBridge = {
   connection() { return backendState; },
@@ -129,6 +137,9 @@ runtime = { available: true, starting: false, ready: true, backendVersion: "0.8.
 const readyRefresh = await window.WaywardLauncherImageStudio.refreshBackendProbe("test_token_saved");
 assert.equal(readyRefresh.ok, true);
 assert.equal(api.fn("imageBackend")().comfyui, true);
+legacyConnection = { baseUrl: null, comfyui: false };
+assert.equal(legacyImageBackend().baseUrl, "http://127.0.0.1:8189");
+assert.equal(legacyImageBackend().comfyui, true);
 assert.equal(window.WW_ImageStudioBridge.connection().comfyui, true);
 
 // A successful settings PUT must trigger the same refresh path automatically.

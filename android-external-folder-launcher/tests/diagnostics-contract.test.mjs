@@ -74,6 +74,7 @@ assert.match(imageStudioBridge, /WW_ImageStudioBridge/);
 assert.match(imageStudioBridge, /discover-batch/);
 assert.match(imageStudioBridge, /openGenerationSettings/);
 assert.match(imageStudioBridge, /imageBackendProbe/);
+assert.match(imageStudioBridge, /__WML_LEGACY__/);
 assert.match(imageStudioBridge, /generation_settings_saved/);
 assert.ok(main.includes("imagegen-studio-bridge.js"));
 assert.ok(main.includes("imageGenRuntimeStatus"));

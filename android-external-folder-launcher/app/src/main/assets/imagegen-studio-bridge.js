@@ -116,6 +116,48 @@
     void refreshBackendProbe("probe_hooked");
   }
 
+  function wrapLegacyApi(value) {
+    if (!value || typeof value.get !== "function") return value;
+    const originalGet = value.get.bind(value);
+    const wrappedGet = (name, ...args) => {
+      const resolved = originalGet(name, ...args);
+      if (name !== "ph" || typeof resolved !== "function") return resolved;
+      return (...callArgs) => {
+        const current = resolved(...callArgs) || {};
+        const state = runtimeStatus();
+        if (!prefersLauncherLocal() || (!state.available && !state.starting)) return current;
+        return { ...current, baseUrl: LOCAL_ORIGIN, comfyui: state.ready };
+      };
+    };
+    try {
+      return new Proxy(value, {
+        get(target, property, receiver) {
+          if (property === "get") return wrappedGet;
+          return Reflect.get(target, property, receiver);
+        }
+      });
+    } catch (_) {
+      try { value.get = wrappedGet; } catch (ignored) {}
+      return value;
+    }
+  }
+
+  function installLegacyApiHook() {
+    let current = null;
+    try { current = window.__WML_LEGACY__ || null; } catch (_) {}
+    try {
+      Object.defineProperty(window, "__WML_LEGACY__", {
+        configurable: true,
+        enumerable: true,
+        get() { return current; },
+        set(value) { current = wrapLegacyApi(value); }
+      });
+      if (current) current = wrapLegacyApi(current);
+    } catch (_) {
+      if (current) current = wrapLegacyApi(current);
+    }
+  }
+
   function wrapPauseSettingsFactory(factory) {
     if (!factory || typeof factory.connect !== "function" || factory.__waywardImageStudioWrapped) return factory;
     const originalConnect = factory.connect;
@@ -349,6 +391,7 @@
     window.setTimeout(check, 500);
   }
 
+  installLegacyApiHook();
   installPauseSettingsFactoryHook();
   installStudioBridgeHook();
   installSettingsSaveProbe();
