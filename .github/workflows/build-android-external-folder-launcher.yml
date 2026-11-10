@@ -81,12 +81,15 @@ jobs:
                   mode = (entry.external_attr >> 16) & 0xFFFF
                   if stat.S_ISLNK(mode):
                       raise SystemExit("Image Studio source symlink rejected: " + relative)
+                  seen.add(relative)
                   if entry.file_size > 2 * 1024 * 1024:
-                      raise SystemExit("Image Studio source file too large: " + relative)
+                      report.write("SKIPPED" + chr(9) + "file_too_large=" + str(entry.file_size) + chr(9) + relative + chr(10))
+                      continue
+                  if total + entry.file_size > 8 * 1024 * 1024 or count >= 256:
+                      report.write("SKIPPED" + chr(9) + "extraction_limit" + chr(9) + relative + chr(10))
+                      continue
                   total += entry.file_size
                   count += 1
-                  if total > 8 * 1024 * 1024 or count > 256:
-                      raise SystemExit("Image Studio source extraction limit exceeded")
                   target = root.joinpath(*path.parts)
                   target.parent.mkdir(parents=True, exist_ok=True)
                   digest = hashlib.sha256()
@@ -101,7 +104,6 @@ jobs:
                           written += len(chunk)
                   if written != entry.file_size:
                       raise SystemExit("Image Studio source size mismatch: " + relative)
-                  seen.add(relative)
                   report.write(str(written) + chr(9) + digest.hexdigest() + chr(9) + relative + chr(10))
               report.write("TOTAL" + chr(9) + "files=" + str(count) + chr(9) + "bytes=" + str(total) + chr(10))
           PY
