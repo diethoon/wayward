@@ -100,29 +100,12 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("Provider setup must not be treated as generation-ready. "
                     + startupLogs(context), !unconfigured.isReady());
 
-            Instrumentation.ActivityMonitor panelMonitor = instrumentation.addMonitor(
-                    ImageGenPanelActivity.class.getName(), null, false);
-            Activity activityForPanel = launcherActivity;
-            Method openPanel = MainActivity.class.getDeclaredMethod("openImageGenPanel");
-            openPanel.setAccessible(true);
-            instrumentation.runOnMainSync(() -> {
-                try {
-                    openPanel.invoke(activityForPanel);
-                } catch (Exception error) {
-                    throw new RuntimeException("Could not open EasyGen settings while provider setup is pending", error);
-                }
-            });
-            Activity settingsPanel = instrumentation.waitForMonitorWithTimeout(panelMonitor, 10_000L);
-            assertNotNull("EasyGen settings panel stayed blocked while health returned HTTP 503. "
-                    + startupLogs(context), settingsPanel);
-            instrumentation.runOnMainSync(settingsPanel::finish);
-            instrumentation.removeMonitor(panelMonitor);
+            // The one-tap settings action now opens the active game WebView's
+            // native Image Studio UI, not a separate review-page Activity. The
+            // document-start bridge path is exercised against the local server below.
 
-            int settingsCode = updateTestProviderSettings();
-            assertEquals("Could not configure the test-only provider state. "
-                    + startupLogs(context), 200, settingsCode);
-            assertEquals("ImageGen health did not become ready after provider setup. "
-                    + startupLogs(context), 200, awaitStatus(200, 30_000L));
+            // The NAI test token is saved later through the same document-start
+            // WebView proxy used by the real Image Studio settings screen.
             String bunVersion = readText(new File(context.getFilesDir(), "imagegen/bun-version.log"));
             assertTrue("The test did not execute the pinned Android Bun 1.4.4 binary: " + bunVersion,
                     bunVersion.contains("1.4.4"));
@@ -135,6 +118,7 @@ public final class ImageGenServiceRuntimeTest {
             // real Cloudflare Worker from Android, and wait for a data: image to
             // decode in the game page before capturing the screen and diagnostics.
             runCloudflareGamePageSmoke(instrumentation, context, launcherActivity);
+            restartImageGenServerWithKeystoreToken(instrumentation, context, launcherActivity);
 
             Activity activityToFinish = launcherActivity;
             instrumentation.runOnMainSync(activityToFinish::finish);
@@ -296,10 +280,137 @@ public final class ImageGenServiceRuntimeTest {
                     providers.optJSONArray("providers") != null
                             && providers.optJSONArray("providers").length() > 0);
 
+            // Save the test-only NovelAI token through the exact WebView fetch
+            // path used by Image Studio. This must pass through ImageGenProxy,
+            // write to Android Keystore, and never remain in anima-settings.json.
+            String saveDispatch = "(function(){"
+                    + "window.__waywardCiNaiSave={state:'pending'};"
+                    + "fetch('http://127.0.0.1:8189/api/generation/settings',{"
+                    + "method:'PUT',headers:{'Content-Type':'application/json'},"
+                    + "body:JSON.stringify({imageProvider:'nai',naiToken:'ci-smoke-token-not-valid'})"
+                    + "}).then(async function(response){"
+                    + "var body=await response.json().catch(function(){return {};});"
+                    + "window.__waywardCiNaiSave={state:'done',status:response.status,"
+                    + "configured:!!(body.settings&&body.settings.naiTokenConfigured),"
+                    + "model:body.settings&&body.settings.naiModel};"
+                    + "}).catch(function(error){window.__waywardCiNaiSave={state:'error',message:String(error).slice(0,160)};});"
+                    + "return 'dispatched';})()";
+            assertEquals("The Android WebView did not dispatch the NovelAI settings save.",
+                    "dispatched", awaitJsString(instrumentation, gameWeb, saveDispatch, 10_000L));
+            JSONObject naiSave = new JSONObject();
+            long naiSaveDeadline = System.currentTimeMillis() + 30_000L;
+            while (System.currentTimeMillis() < naiSaveDeadline) {
+                naiSave = new JSONObject(awaitJsString(instrumentation, gameWeb,
+                        "JSON.stringify(window.__waywardCiNaiSave||{state:'pending'})", 10_000L));
+                if (!"pending".equals(naiSave.optString("state", ""))) break;
+                Thread.sleep(100L);
+            }
+            assertEquals("NovelAI settings were not saved through the Android WebView proxy: " + naiSave,
+                    "done", naiSave.optString("state", ""));
+            assertEquals("NovelAI settings API returned an unexpected status: " + naiSave,
+                    200, naiSave.optInt("status", -1));
+            assertTrue("The NovelAI settings response did not mark the token as configured: " + naiSave,
+                    naiSave.optBoolean("configured", false));
+            assertEquals("The test must use the launcher's V4.5 Full default.",
+                    "nai-diffusion-4-5-full", naiSave.optString("model", ""));
+            assertEquals("The WebView proxy did not store the NovelAI token in Android Keystore.",
+                    "ci-smoke-token-not-valid", ImageProviderStore.readNovelAiToken(context));
+            File naiSettingsFile = new File(context.getFilesDir(), "imagegen/state/anima-settings.json");
+            String naiSettingsOnDisk = readText(naiSettingsFile);
+            assertTrue("The NovelAI token was written in plaintext to anima-settings.json.",
+                    !naiSettingsOnDisk.contains("ci-smoke-token-not-valid"));
+            assertEquals("ImageGen did not become generation-ready after the settings save.",
+                    200, awaitStatus(200, 30_000L));
+
+            // Exercise the one-tap Image Studio bridge in the actual Android WebView.
+            // The pinned HTML fixture does not install third-party WML mods, so
+            // provide the exact WW_ImageStudioBridge contract returned by the mod.
+            String bridgeFixture = "(function(){"
+                    + "window.WW_ImageStudio={open:function(){}};"
+                    + "var settingsButton=document.createElement('button');"
+                    + "settingsButton.id='wwis-generation-settings';"
+                    + "settingsButton.addEventListener('click',function(){settingsButton.dataset.clicked='yes';});"
+                    + "document.body.appendChild(settingsButton);"
+                    + "window.WW_ImageStudioBridge={"
+                    + "connection:function(){return {baseUrl:'http://127.0.0.1:8189'};},"
+                    + "characters:function(){return {skipped:0,characters:[{"
+                    + "id:'launcher-ci-probe',name:'Launcher CI Probe',"
+                    + "prompt:'portrait illustration',negativePrompt:'',"
+                    + "originalPrompt:'portrait illustration',originalNegativePrompt:''"
+                    + "}]};}"
+                    + "};return 'installed';})()";
+            assertEquals("The Android test could not install the Image Studio bridge fixture.",
+                    "installed", awaitJsString(instrumentation, gameWeb, bridgeFixture, 10_000L));
+
+            String settingsDispatch = "(function(){"
+                    + "window.__waywardCiSettings={state:'pending'};"
+                    + "window.WaywardLauncherImageStudio.openGenerationSettings()"
+                    + ".then(function(result){window.__waywardCiSettings=result;})"
+                    + ".catch(function(error){window.__waywardCiSettings={ok:false,reason:String(error)};});"
+                    + "return 'dispatched';})()";
+            assertEquals("The Android test did not dispatch the real settings bridge.",
+                    "dispatched", awaitJsString(instrumentation, gameWeb, settingsDispatch, 10_000L));
+            JSONObject settingsResult = new JSONObject();
+            long settingsDeadline = System.currentTimeMillis() + 10_000L;
+            while (System.currentTimeMillis() < settingsDeadline) {
+                settingsResult = new JSONObject(awaitJsString(instrumentation, gameWeb,
+                        "JSON.stringify(window.__waywardCiSettings||{state:'pending'})", 10_000L));
+                if (!"pending".equals(settingsResult.optString("state", ""))) break;
+                Thread.sleep(100L);
+            }
+            assertTrue("The Image Studio settings bridge did not click the in-game settings button: "
+                    + settingsResult, settingsResult.optBoolean("ok", false));
+            String clicked = awaitJsString(instrumentation, gameWeb,
+                    "document.getElementById('wwis-generation-settings').dataset.clicked||''", 5_000L);
+            assertEquals("The Image Studio settings button was not clicked.", "yes", clicked);
+
+            // The bridge automatically discovers the live WML roster and writes
+            // it through the same discover-batch API as Image Studio's own button.
+            JSONObject discoveryState = new JSONObject();
+            long discoveryDeadline = System.currentTimeMillis() + 30_000L;
+            while (System.currentTimeMillis() < discoveryDeadline) {
+                discoveryState = new JSONObject(awaitJsString(instrumentation, gameWeb,
+                        "JSON.stringify(window.WaywardLauncherImageStudio.getDiscoveryStatus())", 10_000L));
+                if (discoveryState.optBoolean("complete", false)) break;
+                Thread.sleep(250L);
+            }
+            assertTrue("Automatic character discovery did not complete in Android WebView: "
+                    + discoveryState, discoveryState.optBoolean("complete", false));
+            JSONObject discoveryResult = discoveryState.optJSONObject("result");
+            assertNotNull("Character discovery returned no result.", discoveryResult);
+            assertEquals("The Android bridge discovered the wrong character count.", 1,
+                    discoveryResult.optInt("found", -1));
+            assertEquals("The Android bridge did not register the discovered character.", 1,
+                    discoveryResult.optInt("added", -1));
+
+            String countDispatch = "(function(){"
+                    + "window.__waywardCiCounts={state:'pending'};"
+                    + "window.fetch('http://127.0.0.1:8189/api/wife-image-counts')"
+                    + ".then(function(response){if(!response.ok)throw new Error('HTTP '+response.status);return response.json();})"
+                    + ".then(function(body){window.__waywardCiCounts={state:'loaded',counts:body.counts||{}};})"
+                    + ".catch(function(error){window.__waywardCiCounts={state:'error',message:String(error)};});"
+                    + "return 'dispatched';})()";
+            assertEquals("The Android test did not query the server character index.",
+                    "dispatched", awaitJsString(instrumentation, gameWeb, countDispatch, 10_000L));
+            JSONObject countState = new JSONObject();
+            long countDeadline = System.currentTimeMillis() + 15_000L;
+            while (System.currentTimeMillis() < countDeadline) {
+                countState = new JSONObject(awaitJsString(instrumentation, gameWeb,
+                        "JSON.stringify(window.__waywardCiCounts||{state:'pending'})", 10_000L));
+                if (!"pending".equals(countState.optString("state", ""))) break;
+                Thread.sleep(100L);
+            }
+            assertEquals("The server did not return the character index.", "loaded",
+                    countState.optString("state", ""));
+            JSONObject characterCounts = countState.optJSONObject("counts");
+            assertNotNull("The server character index was empty.", characterCounts);
+            assertTrue("The discovered WML character is missing from the image review filters: "
+                    + characterCounts, characterCounts.has("launcher-ci-probe"));
+
             String trigger = "(function(){"
                     + "window.__waywardCiImage={state:'generating'};"
                     + "var p=window.WaywardImageProviders.generate({"
-                    + "prompt:'An original cozy fantasy shopkeeper in a small woodland general store, polished anime illustration, warm afternoon sunlight, full body, detailed clean composition, no text',"
+                    + "prompt:'A peaceful watercolor landscape of a small wooden cottage beside a river, green hills and wildflowers, warm morning light, detailed digital painting, no people, no text',"
                     + "width:1024,height:1024});"
                     + "p.then(function(result){"
                     + "if(!result||!result.dataUrl||!result.dataUrl.startsWith('data:image/'))"
@@ -359,6 +470,34 @@ public final class ImageGenServiceRuntimeTest {
                         + artifactError.getClass().getSimpleName() + ": " + artifactError.getMessage());
             }
         }
+    }
+
+    private static void restartImageGenServerWithKeystoreToken(
+            Instrumentation instrumentation, Context context, Activity activity) throws Exception {
+        Method stopAction = MainActivity.class.getDeclaredMethod("stopImageGenServer");
+        stopAction.setAccessible(true);
+        instrumentation.runOnMainSync(() -> {
+            try { stopAction.invoke(activity); }
+            catch (Exception error) { throw new RuntimeException("Could not stop ImageGen for token persistence test", error); }
+        });
+        assertTrue("ImageGen did not stop before the Keystore persistence restart test.",
+                awaitServerDown(45_000L));
+
+        Method startAction = MainActivity.class.getDeclaredMethod("startNovelAiServer");
+        startAction.setAccessible(true);
+        instrumentation.runOnMainSync(() -> {
+            try { startAction.invoke(activity); }
+            catch (Exception error) { throw new RuntimeException("Could not restart ImageGen with the Keystore token", error); }
+        });
+        assertEquals("ImageGen did not reload NAI_TOKEN from Android Keystore after a full restart. "
+                + startupLogs(context), 200, awaitStatus(200, 120_000L));
+        assertEquals("The NovelAI token was lost from Android Keystore after restart.",
+                "ci-smoke-token-not-valid", ImageProviderStore.readNovelAiToken(context));
+        String settings = readText(new File(context.getFilesDir(), "imagegen/state/anima-settings.json"));
+        assertTrue("The NovelAI token reappeared in plaintext after server restart.",
+                !settings.contains("ci-smoke-token-not-valid"));
+        DiagnosticsLogger.event(context, "INFO", "imagegen_service",
+                "keystore_token_restart_verified", null);
     }
 
     private static void configureCloudflareProvider(Context context, String profileId) throws Exception {
@@ -530,13 +669,6 @@ public final class ImageGenServiceRuntimeTest {
         } finally {
             descriptor.close();
         }
-    }
-
-    private static int updateTestProviderSettings() throws Exception {
-        JSONObject body = new JSONObject();
-        body.put("imageProvider", "nai");
-        body.put("naiToken", "ci-smoke-token-not-valid");
-        return requestStatus(SETTINGS_URL, "PUT", body.toString());
     }
 
     private static int awaitReachable(long timeoutMs) throws Exception {

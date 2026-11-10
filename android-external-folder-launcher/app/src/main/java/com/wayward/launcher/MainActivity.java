@@ -594,7 +594,7 @@ public final class MainActivity extends Activity {
             return;
         }
         try {
-            for (String assetName : new String[] {"imagegen-proxy.js", "image-provider-bridge.js"}) {
+            for (String assetName : new String[] {"imagegen-proxy.js", "image-provider-bridge.js", "imagegen-studio-bridge.js"}) {
                 try (InputStream in = getAssets().open(assetName)) {
                     ByteArrayOutputStream out = new ByteArrayOutputStream();
                     byte[] buffer = new byte[8192];
@@ -867,14 +867,39 @@ public final class MainActivity extends Activity {
     }
 
     private void openImageGenPanel(){
-        ImageGenStatusStore.State state=ImageGenStatusStore.read(getFilesDir());
-        if(!state.isAvailable()){
-            Toast.makeText(this,"먼저 NovelAI 또는 ComfyUI 연결 서버를 실행해 주세요.",Toast.LENGTH_LONG).show();
+        if (web == null || tree == null) {
+            Toast.makeText(this,"게임 세션을 먼저 실행해 Image Studio 모드를 불러와 주세요.",Toast.LENGTH_LONG).show();
             return;
         }
-        Intent intent=new Intent(this,ImageGenPanelActivity.class);
-        intent.putExtra(ImageGenPanelActivity.EXTRA_MODE,state.backendVersion.endsWith(":comfy")?"comfy":"novelai");
-        startActivity(intent);
+        Runnable openSettings = () -> {
+            ImageGenStatusStore.State state = ImageGenStatusStore.read(getFilesDir());
+            if (!state.isAvailable()) {
+                String detail = state.message == null || state.message.isEmpty()
+                        ? "이미지 서버 응답을 확인하지 못했습니다." : state.message;
+                Toast.makeText(this,detail,Toast.LENGTH_LONG).show();
+                return;
+            }
+            if (home != null) home.setVisibility(View.GONE);
+            web.setVisibility(View.VISIBLE);
+            web.bringToFront();
+            web.postDelayed(() -> {
+                if (web == null) return;
+                web.evaluateJavascript(
+                        "(async()=>{const bridge=window.WaywardLauncherImageStudio;"
+                        + "if(!bridge)return 'launcher_bridge_missing';"
+                        + "const result=await bridge.openGenerationSettings();"
+                        + "return result&&result.ok?'opened':(result&&result.reason)||'open_failed';})()",
+                        value -> {
+                            if (value == null || !value.contains("opened")) {
+                                String reason = value == null ? "unknown" : value;
+                                Toast.makeText(this,"Image Studio 설정 화면을 열지 못했습니다: "+reason,Toast.LENGTH_LONG).show();
+                            }
+                        });
+            }, 100L);
+        };
+        // Reuse the active WML adapter and managed server. HTTP 503 is available
+        // for settings and must not block the credential setup screen.
+        ensureImageGenServer(tree, openSettings);
     }
 
     private void startManagedImageGenServer(String mode,String comfyUrl){
@@ -960,6 +985,7 @@ public final class MainActivity extends Activity {
         config.put("stateDir",new File(getFilesDir(),"imagegen/state").getAbsolutePath());
         config.put("comfyUrl",comfyUrl==null||comfyUrl.isEmpty()?"http://127.0.0.1:8188":comfyUrl);
         config.put("imageProvider","novelai".equals(mode)?"nai":"sdxl");
+        config.put("naiModel","nai-diffusion-4-5-full");
         // Android has no bundled sharp binary; PNG is the supported no-dependency path.
         config.put("webp",false);
         config.put("requireWebp",false);
@@ -1074,6 +1100,17 @@ public final class MainActivity extends Activity {
         }
         @JavascriptInterface public void generateImageWithProvider(String requestId,String providerId,String prompt,int width,int height){
             ImageProviderBridge.generate(MainActivity.this,web,activeProfileId,requestId,providerId,prompt,width,height);
+        }
+        @JavascriptInterface public String imageGenRuntimeStatus(){
+            ImageGenStatusStore.State state=ImageGenStatusStore.read(getFilesDir());
+            try{
+                JSONObject result=new JSONObject();
+                result.put("available",state.isAvailable());
+                result.put("ready",state.isReady());
+                result.put("starting",state.isStarting());
+                result.put("backendVersion",state.backendVersion);
+                return result.toString();
+            }catch(Exception ignored){return "{\"available\":false,\"ready\":false,\"starting\":false}";}
         }
         @JavascriptInterface public void logImageProviderDiagnostic(String eventName,String detailsJson){
             if(eventName==null||!eventName.matches("[a-z0-9_]{1,64}"))return;
