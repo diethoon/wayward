@@ -44,9 +44,9 @@ public final class ZipModStoreTest {
             // launcher ZIP-size regression cannot silently block the module.
             StringBuilder largeModSource = new StringBuilder(
                     "WML.define({ id: 'large-imagestudio', setup(api) {} });\\n/*");
-            while (largeModSource.length() < 320_677) largeModSource.append('x');
+            while (largeModSource.length() < 1_436_177) largeModSource.append('x');
             largeModSource.append("*/");
-            check(largeModSource.length() == 320_679, "large WML fixture matches Image Studio mod.js byte size");
+            check(largeModSource.length() == 1_436_179, "large WML fixture matches Attention Image Prompt mod.js byte size");
             File largeModZip = store.temporaryFile("large-mod-test");
             writeZip(largeModZip, Map.of("mod.js", largeModSource.toString(), "portrait.js", "window.portraitReady=true;"));
             ZipModStore.ModInfo largeInfo = ZipModStore.inspect(largeModZip);
