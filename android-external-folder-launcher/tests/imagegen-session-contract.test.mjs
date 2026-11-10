@@ -22,14 +22,22 @@ assert.match(main, /ImageGenBackendInstaller\.install\(this, imageGenBackendRoot
 const automaticStartup = main.slice(main.indexOf("private void ensureImageGenServer"), main.indexOf("private static boolean sameImageGenVersion"));
 assert.doesNotMatch(automaticStartup, /extractDirectory\(/,
   "automatic Image Studio startup must not extract the original WML ZIP mod");
-assert.match(automaticStartup, /:novelai/,
-  "automatic startup must use the NovelAI-compatible EasyGen mode");
+assert.match(automaticStartup, /String selectedMode = "novelai"/,
+  "automatic startup must retain NovelAI as the fallback provider mode");
+assert.match(automaticStartup, /selectedMode = "launcher"/,
+  "automatic startup must select the configured launcher provider for the active profile");
+assert.match(automaticStartup, /selected\.allowInGame/,
+  "automatic startup must respect the profile provider's in-game permission");
 assert.match(main, /ImageGenBackendInstaller\.install\(this,backend\)/,
   "manual startup must install the server embedded in the launcher APK");
 assert.match(main, /launcher-imagegen:/,
   "server version identity must identify the bundled launcher backend");
-assert.match(main, /writeImageGenRuntimeConfig\(backend,mode,requestedUrl\)/,
-  "the selected provider and ComfyUI endpoint must be configured in app-private storage");
+assert.match(main, /writeImageGenRuntimeConfig\(backend,mode,requestedUrl,launcherProfileId,launcherProviderId\)/,
+  "the selected profile/provider and ComfyUI endpoint must be configured in app-private storage");
+assert.match(main, /launcherProviderToken/ ,
+  "launcher provider IPC token must be represented in the private backend configuration");
+assert.match(service, /new ImageGenLocalProviderServer\(/,
+  "the native provider adapter must be started by the isolated ImageGen service");
 const manualStartup = main.slice(main.indexOf("private void startManagedImageGenServer"), main.indexOf("private void writeImageGenRuntimeConfig"));
 assert.doesNotMatch(manualStartup, /new SafTree|zipMods|wml\/mods\//,
   "manual startup must not search game folders or extract WML ZIP mods");
