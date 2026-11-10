@@ -519,29 +519,28 @@ public final class ImageGenServiceRuntimeTest {
                     gameWeb.loadDataWithBaseURL(
                             GAME_ORIGIN + "/game/__wayward_ci_storage_reset__.html",
                             resetHtml, "text/html", "UTF-8", null);
-                    if (!storageResetFinished.await(10, TimeUnit.SECONDS)) {
-                        throw new IllegalStateException("Could not clear the isolated Wayward WebView origin.");
-                    }
-                    String clearedStorage = awaitJsString(instrumentation, gameWeb,
-                            "JSON.stringify({local:localStorage.length,session:sessionStorage.length})",
-                            5_000L);
-                    if (!"{\"local\":0,\"session\":0}".equals(clearedStorage)) {
-                        throw new IllegalStateException("Wayward CI browser storage did not reset: " + clearedStorage);
-                    }
-                    gameWeb.loadDataWithBaseURL(
-                            GAME_ORIGIN + "/game/Wayward_WML_ko.html",
-                            new String(gameHtml, StandardCharsets.UTF_8),
-                            "text/html", "UTF-8", null);
                 } catch (Throwable error) {
                     pageError.set(error.getClass().getSimpleName() + ": " + error.getMessage());
                     pageFinished.countDown();
                 }
             });
 
-            assertTrue("Pinned Wayward game page did not finish loading: " + pageError.get(),
-                    pageFinished.await(90, TimeUnit.SECONDS));
             WebView gameWeb = webHolder[0];
             assertNotNull("The launcher WebView was not created: " + pageError.get(), gameWeb);
+            assertTrue("Could not clear the isolated Wayward WebView origin.",
+                    storageResetFinished.await(10, TimeUnit.SECONDS));
+            String clearedStorage = awaitJsString(instrumentation, gameWeb,
+                    "JSON.stringify({local:localStorage.length,session:sessionStorage.length})",
+                    5_000L);
+            if (!"{\"local\":0,\"session\":0}".equals(clearedStorage)) {
+                throw new IllegalStateException("Wayward CI browser storage did not reset: " + clearedStorage);
+            }
+            instrumentation.runOnMainSync(() -> gameWeb.loadDataWithBaseURL(
+                    GAME_ORIGIN + "/game/Wayward_WML_ko.html",
+                    new String(gameHtml, StandardCharsets.UTF_8),
+                    "text/html", "UTF-8", null));
+            assertTrue("Pinned Wayward game page did not finish loading: " + pageError.get(),
+                    pageFinished.await(90, TimeUnit.SECONDS));
             dismissWaywardAgeConfirmation(instrumentation, gameWeb);
 
             // A newly opened HTML document starts at Wayward's title menu.
