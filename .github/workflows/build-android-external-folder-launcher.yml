@@ -530,6 +530,17 @@ jobs:
           PY
           cp "$GAME_HTML" "$TEST_ASSETS/Wayward_WML_ko.html"
           test "$(wc -c < "$TEST_ASSETS/Wayward_WML_ko.html" | tr -d ' ')" = "$EXPECTED_BYTES"
+      - name: Upload exact WML HTML and byte-level forensics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wayward-WML-2026-11-01-exact-html-forensics
+          path: |
+            ${{ runner.temp }}/wayward-game-fixture/Wayward_WML_ko.html
+            ${{ runner.temp }}/wayward-game-fixture/game-html-forensics.txt
+            ${{ runner.temp }}/wayward-game-fixture/game-html-chunks.sha256.jsonl
+          if-no-files-found: warn
+          retention-days: 14
 
           # The launcher serves the actual WML runtime tree alongside the
           # HTML. Preserve the pinned files that the game requests at startup;
