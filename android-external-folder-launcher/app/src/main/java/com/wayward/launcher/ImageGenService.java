@@ -204,13 +204,6 @@ public final class ImageGenService extends Service {
             throw new IllegalStateException("런처 내장 wayward-imagegen/package.json 또는 src/cli.ts가 없습니다.");
         }
 
-        if (probeHealth()) {
-            serverReady = true;
-            starting = false;
-            updateNotification("이미지 생성 서버가 이미 실행 중입니다.");
-            return;
-        }
-
         File bun = ensureBun();
         File log = new File(getFilesDir(), "imagegen/server.log");
         File logParent = log.getParentFile();
