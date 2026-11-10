@@ -84,6 +84,7 @@ jobs:
                                   core_blobs.setdefault(key, set()).add(ref)
                           if lower_path.endswith(".zip") and size <= 80_000_000 and (
                               "wml" in lower_path or "wayward_mod" in lower_path
+                              or lower_path == "mods.zip"
                               or lower_path.endswith("/mods.zip")
                               or ("wayward" in Path(lower_path).name and "faith" not in Path(lower_path).name)
                           ):
@@ -141,7 +142,7 @@ jobs:
                               suffix = Path(lowered).suffix
                               if entry.is_dir() or entry.file_size > 8_000_000:
                                   continue
-                              if suffix not in (".js", ".mjs", ".json", ".txt", ".md", ".ts"):
+                              if suffix not in (".js", ".mjs", ".json", ".txt", ".md", ".ts", ".html", ".htm", ".yml", ".yaml", ".properties"):
                                   continue
                               try:
                                   entry_data = archive.read(entry)
