@@ -244,8 +244,8 @@ jobs:
             adb logcat -d -t 6000 > "$OUT/logcat.txt"
             {
               echo "device=Android 15 API 35 Google APIs x86_64 emulator"
-              echo "abi=$(tr -d '\\r\\n' < "$OUT/android-abilist.txt")"
-              echo "native_bridge=$(tr -d '\\r\\n' < "$OUT/native-bridge.txt")"
+              echo "abi=$(tr -d '[:space:]' < "$OUT/android-abilist.txt")"
+              echo "native_bridge=$(tr -d '[:space:]' < "$OUT/native-bridge.txt")"
               echo "arm64_linker=$(head -n 1 "$OUT/arm64-linker.txt")"
               echo "instrumentation_exit=$TEST_EXIT"
             } | tee "$OUT/result.txt"
