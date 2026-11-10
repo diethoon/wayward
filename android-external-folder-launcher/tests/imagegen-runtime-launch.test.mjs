@@ -57,6 +57,8 @@ assert.match(providerUi, /암호화 저장/);
 assert.match(providerUi, /NovelAI 토큰 삭제/);
 
 assert.match(service, /EXTRA_LAUNCH_MODE/);
+assert.match(service, /\.addAction\(android\.R\.drawable\.ic_media_pause, "중지", pendingStop\)/,
+  "the foreground service must retain its explicit Stop action");
 assert.match(service, /ANDROID_LINKER_64 = "\/system\/bin\/linker64"/,
   "app-private Bun must be started through Android's system linker");
 assert.match(service, /private ProcessBuilder bunProcess\(File executable, String\.\.\. arguments\)/,
