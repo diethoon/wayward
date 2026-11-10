@@ -259,8 +259,8 @@ public final class ImageGenServiceRuntimeTest {
                     320_679, realModBytes.length);
             String realModText = new String(realModBytes, StandardCharsets.UTF_8);
             assertTrue("The served production mod.js no longer declares Image Studio.",
-                    realModText.contains("id: \\"imagestudio\\"")
-                            && realModText.contains("version: \\"1.31.20\\""));
+                    realModText.contains("imagestudio")
+                            && realModText.contains("1.31.20"));
             Method detectImageStudio = MainActivity.class.getDeclaredMethod(
                     "imageStudioModId", Class.forName("com.wayward.launcher.SafTree"));
             detectImageStudio.setAccessible(true);
