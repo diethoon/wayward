@@ -95,6 +95,9 @@ fi
 if [ -s "$RUNNER_TEMP/imagestudio-source-index.txt" ]; then
   cp "$RUNNER_TEMP/imagestudio-source-index.txt" "$OUT/"
 fi
+if [ -s "$RUNNER_TEMP/mods-wml-entrypoints-index.txt" ]; then
+  cp "$RUNNER_TEMP/mods-wml-entrypoints-index.txt" "$OUT/"
+fi
 SOURCE_DIR="$PWD/android-external-folder-launcher/app/src/androidTest/assets/imagestudio-source"
 if [ -d "$SOURCE_DIR" ]; then
   cp -R "$SOURCE_DIR" "$OUT/imagestudio-source"
