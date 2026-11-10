@@ -46,13 +46,13 @@ jobs:
           curl --fail --silent --show-error \
             "https://raw.githubusercontent.com/diethoon/3.36/$GAME_COMMIT/$GAME_PATH" \
             -o "$GAME_HTML"
-          python3 - "$GAME_HTML" "$GAME_DIR" "$EXPECTED_BLOB" "$EXPECTED_BYTES" <<'PY'
+          python3 - "$GAME_HTML" "$GAME_DIR" "$EXPECTED_BLOB" "$EXPECTED_BYTES" "$GAME_COMMIT" "$GAME_PATH" <<'PY'
           import hashlib
           import json
           import os
           import sys
 
-          path, out_dir, expected_blob, expected_bytes = sys.argv[1:]
+          path, out_dir, expected_blob, expected_bytes, game_commit, game_path = sys.argv[1:]
           size = os.path.getsize(path)
           if size != int(expected_bytes):
               raise SystemExit(f"Wayward WML HTML size mismatch: {size} != {expected_bytes}")
@@ -110,8 +110,8 @@ jobs:
               raise SystemExit(f"Wayward WML Git blob SHA mismatch: {actual_blob} != {expected_blob}")
 
           report = [
-              f"source_commit={GAME_COMMIT}",
-              f"source_path={path}",
+              f"source_commit={game_commit}",
+              f"source_path={game_path}",
               f"bytes={size}",
               f"git_blob_sha1={actual_blob}",
               f"sha256={sha256.hexdigest()}",
