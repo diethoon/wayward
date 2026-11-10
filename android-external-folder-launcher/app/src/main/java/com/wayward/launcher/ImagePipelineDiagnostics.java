@@ -60,7 +60,8 @@ final class ImagePipelineDiagnostics {
             "elementTag", "pendingCount", "srcHost", "srcPath", "elementId",
             "elementClass", "elementAlt", "repeatCount", "srcAttrKind", "srcAttrPath",
             "resolveImageMs", "imageAccessMs", "openInputStreamMs", "sourceReadMs",
-            "cacheWriteMs", "cacheWaitMs", "cacheOpenMs", "directoryWaitMs", "directoryQueryMs",
+            "cacheWriteMs", "cacheFinalizeMs", "cacheWaitMs", "cacheOpenMs",
+            "directoryWaitMs", "directoryQueryMs",
             "directoryChildCount", "imageSizeBytes", "cacheState"
     ));
 

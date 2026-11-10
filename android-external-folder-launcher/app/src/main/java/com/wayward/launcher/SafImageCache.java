@@ -145,11 +145,13 @@ final class SafImageCache {
         }
     }
 
-    private void recordCacheCompleted(long sourceReadMs, long cacheWriteMs, long copiedBytes, boolean success) {
+    private void recordCacheCompleted(long sourceReadMs, long cacheWriteMs,
+                                      long cacheFinalizeMs, long copiedBytes, boolean success) {
         try {
             org.json.JSONObject details = new org.json.JSONObject();
             details.put("sourceReadMs", sourceReadMs);
             details.put("cacheWriteMs", cacheWriteMs);
+            details.put("cacheFinalizeMs", cacheFinalizeMs);
             details.put("imageSizeBytes", copiedBytes);
             details.put("cacheState", success ? "cached" : "failed");
             ImagePipelineDiagnostics.record(context, "saf_image_cache_completed", details);
@@ -176,6 +178,7 @@ final class SafImageCache {
         long copiedBytes;
         long sourceReadNanos;
         long cacheWriteNanos;
+        long cacheFinalizeNanos;
         boolean active = true;
         boolean finished;
 
@@ -207,14 +210,16 @@ final class SafImageCache {
                 return;
             }
             long writeStarted = System.nanoTime();
+            IOException writeError = null;
             try {
                 output.write(bytes, offset, length);
                 copiedBytes += length;
             } catch (IOException error) {
-                failLocked();
+                writeError = error;
             } finally {
                 cacheWriteNanos += Math.max(0L, System.nanoTime() - writeStarted);
             }
+            if (writeError != null) failLocked();
         }
 
         synchronized void recordSourceReadDuration(long nanos) {
@@ -225,6 +230,7 @@ final class SafImageCache {
             if (finished) return;
             finished = true;
             if (!active) return;
+            long finalizeStarted = System.nanoTime();
             try {
                 output.flush();
                 output.getFD().sync();
@@ -243,11 +249,14 @@ final class SafImageCache {
                 }
                 target.setLastModified(System.currentTimeMillis());
                 trimCache(target);
+                cacheFinalizeNanos = Math.max(0L, System.nanoTime() - finalizeStarted);
                 active = false;
                 completed.complete(target);
                 inFlight.remove(key, this);
-                recordCacheCompleted(sourceReadNanos / 1_000_000L, cacheWriteNanos / 1_000_000L, copiedBytes, true);
+                recordCacheCompleted(sourceReadNanos / 1_000_000L, cacheWriteNanos / 1_000_000L,
+                        cacheFinalizeNanos / 1_000_000L, copiedBytes, true);
             } catch (Exception error) {
+                cacheFinalizeNanos = Math.max(0L, System.nanoTime() - finalizeStarted);
                 failLocked();
             }
         }
@@ -267,7 +276,8 @@ final class SafImageCache {
             if (part.exists()) part.delete();
             completed.completeExceptionally(new IOException("SAF image cache fill failed"));
             inFlight.remove(key, this);
-            recordCacheCompleted(sourceReadNanos / 1_000_000L, cacheWriteNanos / 1_000_000L, copiedBytes, false);
+            recordCacheCompleted(sourceReadNanos / 1_000_000L, cacheWriteNanos / 1_000_000L,
+                    cacheFinalizeNanos / 1_000_000L, copiedBytes, false);
             finished = true;
         }
     }
