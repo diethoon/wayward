@@ -51,7 +51,8 @@ assert.match(imageDiagnosticsActivity, /server\.log/);
 assert.match(imageDiagnosticsActivity, /startup\.log/);
 assert.match(imageDiagnosticsActivity, /redactRuntimeLog/);
 assert.match(imageGenStatusStore, /boolean isAvailable\(\)/);
-assert.match(main, /if\(!state\.isAvailable\(\)\)/);
+assert.ok(main.includes("ensureImageGenServer(tree, openSettings)"),
+  "settings action must wait for/attach to the active Image Studio server without requiring provider readiness");
 assert.match(service, /HTTP 503\(공급자 설정\/인증 대기\)/);
 assert.match(imageDiagnosticsActivity, /로그 복사/);
 assert.match(imageProviderBridge, /native_image_received/);
