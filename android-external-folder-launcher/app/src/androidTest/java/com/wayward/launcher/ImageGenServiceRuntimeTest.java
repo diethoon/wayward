@@ -221,14 +221,14 @@ public final class ImageGenServiceRuntimeTest {
 
     private static String runtimeDiagnostics(Context context) {
         StringBuilder output = new StringBuilder();
-        output.append("=== imagegen-status.properties ===\\n")
-                .append(readText(new File(context.getFilesDir(), "imagegen-status.properties"))).append('\\n');
-        output.append("=== imagegen/startup.log ===\\n")
-                .append(readText(new File(context.getFilesDir(), "imagegen/startup.log"))).append('\\n');
-        output.append("=== imagegen/server.log ===\\n")
-                .append(readText(new File(context.getFilesDir(), "imagegen/server.log"))).append('\\n');
-        output.append("=== imagegen/bun-version.log ===\\n")
-                .append(readText(new File(context.getFilesDir(), "imagegen/bun-version.log"))).append('\\n');
+        output.append("=== imagegen-status.properties ===\n")
+                .append(readText(new File(context.getFilesDir(), "imagegen-status.properties"))).append('\n');
+        output.append("=== imagegen/startup.log ===\n")
+                .append(readText(new File(context.getFilesDir(), "imagegen/startup.log"))).append('\n');
+        output.append("=== imagegen/server.log ===\n")
+                .append(readText(new File(context.getFilesDir(), "imagegen/server.log"))).append('\n');
+        output.append("=== imagegen/bun-version.log ===\n")
+                .append(readText(new File(context.getFilesDir(), "imagegen/bun-version.log"))).append('\n');
         return output.toString();
     }
 
