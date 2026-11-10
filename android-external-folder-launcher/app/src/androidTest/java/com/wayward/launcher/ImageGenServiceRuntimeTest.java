@@ -67,6 +67,10 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("This test requires a 64-bit Android ABI",
                     Build.SUPPORTED_64_BIT_ABIS != null && Build.SUPPORTED_64_BIT_ABIS.length > 0);
 
+            // Seed the exact pinned Android ARM64 Bun binary from a SHA-256-verified
+            // CI fixture. This keeps the emulator test independent of emulator DNS
+            // while still exercising the real Android linker/native-bridge execution.
+            preparePinnedBunFixture(instrumentation, context);
             grantNotificationPermission(instrumentation, context);
             launcherActivity = instrumentation.startActivitySync(
                     new Intent(context, MainActivity.class)
@@ -163,6 +167,14 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("Foreground notification remained after Stop",
                     findImageGenNotification(notifications) == null);
         } finally {
+            // Preserve the app-private service diagnostics even when startup fails
+            // before the game WebView smoke test is reached.
+            try {
+                exportRuntimeDiagnostics(instrumentation, context);
+            } catch (Throwable artifactError) {
+                System.out.println("WAYWARD_RUNTIME_DIAGNOSTICS_EXPORT_FAILED: "
+                        + artifactError.getClass().getSimpleName() + ": " + artifactError.getMessage());
+            }
             if (launcherActivity != null) {
                 Activity activity = launcherActivity;
                 instrumentation.runOnMainSync(activity::finish);
@@ -179,6 +191,64 @@ public final class ImageGenServiceRuntimeTest {
         }
     }
 
+
+    private static void preparePinnedBunFixture(Instrumentation instrumentation, Context context)
+            throws Exception {
+        File runtimeDirectory = new File(context.getFilesDir(), "imagegen/runtime");
+        if (!runtimeDirectory.isDirectory() && !runtimeDirectory.mkdirs()) {
+            throw new IllegalStateException("Could not create app-private Bun runtime directory.");
+        }
+        File binary = new File(runtimeDirectory, "bun");
+        try (InputStream input = instrumentation.getContext().getAssets().open("bun-android-aarch64");
+             FileOutputStream output = new FileOutputStream(binary)) {
+            byte[] buffer = new byte[32768];
+            int count;
+            long copied = 0;
+            while ((count = input.read(buffer)) >= 0) {
+                if (count == 0) continue;
+                copied += count;
+                output.write(buffer, 0, count);
+            }
+            output.flush();
+            output.getFD().sync();
+        }
+        if (!binary.isFile() || binary.length() < 10L * 1024L * 1024L) {
+            throw new IllegalStateException("Pinned Android Bun test fixture is missing or truncated: "
+                    + binary.length() + " bytes");
+        }
+        System.out.println("WAYWARD_ANDROID_BUN_FIXTURE bytes=" + binary.length());
+    }
+
+    private static String runtimeDiagnostics(Context context) {
+        StringBuilder output = new StringBuilder();
+        output.append("=== imagegen-status.properties ===\\n")
+                .append(readText(new File(context.getFilesDir(), "imagegen-status.properties"))).append('\\n');
+        output.append("=== imagegen/startup.log ===\\n")
+                .append(readText(new File(context.getFilesDir(), "imagegen/startup.log"))).append('\\n');
+        output.append("=== imagegen/server.log ===\\n")
+                .append(readText(new File(context.getFilesDir(), "imagegen/server.log"))).append('\\n');
+        output.append("=== imagegen/bun-version.log ===\\n")
+                .append(readText(new File(context.getFilesDir(), "imagegen/bun-version.log"))).append('\\n');
+        return output.toString();
+    }
+
+    private static void exportRuntimeDiagnostics(Instrumentation instrumentation, Context context)
+            throws Exception {
+        File directory = new File(context.getFilesDir(), "ci-artifacts");
+        if (!directory.isDirectory() && !directory.mkdirs()) {
+            throw new IllegalStateException("Could not create runtime diagnostics directory.");
+        }
+        File outputFile = new File(directory, "Wayward-Android15-ImageGen-runtime-diagnostics.txt");
+        try (FileOutputStream output = new FileOutputStream(outputFile)) {
+            output.write(runtimeDiagnostics(context).getBytes(StandardCharsets.UTF_8));
+            output.flush();
+            output.getFD().sync();
+        }
+        copyPrivateArtifact(instrumentation, context,
+                "files/ci-artifacts/Wayward-Android15-ImageGen-runtime-diagnostics.txt",
+                "/sdcard/Download/Wayward-CI/Wayward-Android15-ImageGen-runtime-diagnostics.txt");
+        System.out.println("WAYWARD_RUNTIME_DIAGNOSTICS_EXPORTED bytes=" + outputFile.length());
+    }
 
     private static final String GAME_PROFILE_ID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     private static final String FLUX_PROVIDER_ID = "0123456789abcdef0123456789abcdef";
@@ -547,7 +617,8 @@ public final class ImageGenServiceRuntimeTest {
             if (last >= 200) return last;
             Thread.sleep(1000L);
         }
-        fail("ImageGen HTTP endpoint never became reachable; last status=" + last);
+        fail("ImageGen HTTP endpoint never became reachable; last status=" + last
+                + "\\n" + runtimeDiagnostics(InstrumentationRegistry.getInstrumentation().getTargetContext()));
         return -1;
     }
 
