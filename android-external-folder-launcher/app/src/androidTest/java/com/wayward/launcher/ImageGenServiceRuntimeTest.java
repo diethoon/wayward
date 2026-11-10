@@ -100,23 +100,9 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("Provider setup must not be treated as generation-ready. "
                     + startupLogs(context), !unconfigured.isReady());
 
-            Instrumentation.ActivityMonitor panelMonitor = instrumentation.addMonitor(
-                    ImageGenPanelActivity.class.getName(), null, false);
-            Activity activityForPanel = launcherActivity;
-            Method openPanel = MainActivity.class.getDeclaredMethod("openImageGenPanel");
-            openPanel.setAccessible(true);
-            instrumentation.runOnMainSync(() -> {
-                try {
-                    openPanel.invoke(activityForPanel);
-                } catch (Exception error) {
-                    throw new RuntimeException("Could not open EasyGen settings while provider setup is pending", error);
-                }
-            });
-            Activity settingsPanel = instrumentation.waitForMonitorWithTimeout(panelMonitor, 10_000L);
-            assertNotNull("EasyGen settings panel stayed blocked while health returned HTTP 503. "
-                    + startupLogs(context), settingsPanel);
-            instrumentation.runOnMainSync(settingsPanel::finish);
-            instrumentation.removeMonitor(panelMonitor);
+            // The one-tap settings action now opens the active game WebView's
+            // native Image Studio UI, not a separate review-page Activity. The
+            // document-start bridge path is exercised against the local server below.
 
             int settingsCode = updateTestProviderSettings();
             assertEquals("Could not configure the test-only provider state. "
@@ -295,6 +281,91 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("The Cloudflare provider is not listed as enabled.",
                     providers.optJSONArray("providers") != null
                             && providers.optJSONArray("providers").length() > 0);
+
+            // Exercise the one-tap Image Studio bridge in the actual Android WebView.
+            // The pinned HTML fixture does not install third-party WML mods, so
+            // provide the exact WW_ImageStudioBridge contract returned by the mod.
+            String bridgeFixture = "(function(){"
+                    + "window.WW_ImageStudio={open:function(){}};"
+                    + "var settingsButton=document.createElement('button');"
+                    + "settingsButton.id='wwis-generation-settings';"
+                    + "settingsButton.addEventListener('click',function(){settingsButton.dataset.clicked='yes';});"
+                    + "document.body.appendChild(settingsButton);"
+                    + "window.WW_ImageStudioBridge={"
+                    + "connection:function(){return {baseUrl:'http://127.0.0.1:8189'};},"
+                    + "characters:function(){return {skipped:0,characters:[{"
+                    + "id:'launcher-ci-probe',name:'Launcher CI Probe',"
+                    + "prompt:'portrait illustration',negativePrompt:'',"
+                    + "originalPrompt:'portrait illustration',originalNegativePrompt:''"
+                    + "}]};}"
+                    + "};return 'installed';})()";
+            assertEquals("The Android test could not install the Image Studio bridge fixture.",
+                    "installed", awaitJsString(instrumentation, gameWeb, bridgeFixture, 10_000L));
+
+            String settingsDispatch = "(function(){"
+                    + "window.__waywardCiSettings={state:'pending'};"
+                    + "window.WaywardLauncherImageStudio.openGenerationSettings()"
+                    + ".then(function(result){window.__waywardCiSettings=result;})"
+                    + ".catch(function(error){window.__waywardCiSettings={ok:false,reason:String(error)};});"
+                    + "return 'dispatched';})()";
+            assertEquals("The Android test did not dispatch the real settings bridge.",
+                    "dispatched", awaitJsString(instrumentation, gameWeb, settingsDispatch, 10_000L));
+            JSONObject settingsResult = new JSONObject();
+            long settingsDeadline = System.currentTimeMillis() + 10_000L;
+            while (System.currentTimeMillis() < settingsDeadline) {
+                settingsResult = new JSONObject(awaitJsString(instrumentation, gameWeb,
+                        "JSON.stringify(window.__waywardCiSettings||{state:'pending'})", 10_000L));
+                if (!"pending".equals(settingsResult.optString("state", ""))) break;
+                Thread.sleep(100L);
+            }
+            assertTrue("The Image Studio settings bridge did not click the in-game settings button: "
+                    + settingsResult, settingsResult.optBoolean("ok", false));
+            String clicked = awaitJsString(instrumentation, gameWeb,
+                    "document.getElementById('wwis-generation-settings').dataset.clicked||''", 5_000L);
+            assertEquals("The Image Studio settings button was not clicked.", "yes", clicked);
+
+            // The bridge automatically discovers the live WML roster and writes
+            // it through the same discover-batch API as Image Studio's own button.
+            JSONObject discoveryState = new JSONObject();
+            long discoveryDeadline = System.currentTimeMillis() + 30_000L;
+            while (System.currentTimeMillis() < discoveryDeadline) {
+                discoveryState = new JSONObject(awaitJsString(instrumentation, gameWeb,
+                        "JSON.stringify(window.WaywardLauncherImageStudio.getDiscoveryStatus())", 10_000L));
+                if (discoveryState.optBoolean("complete", false)) break;
+                Thread.sleep(250L);
+            }
+            assertTrue("Automatic character discovery did not complete in Android WebView: "
+                    + discoveryState, discoveryState.optBoolean("complete", false));
+            JSONObject discoveryResult = discoveryState.optJSONObject("result");
+            assertNotNull("Character discovery returned no result.", discoveryResult);
+            assertEquals("The Android bridge discovered the wrong character count.", 1,
+                    discoveryResult.optInt("found", -1));
+            assertEquals("The Android bridge did not register the discovered character.", 1,
+                    discoveryResult.optInt("added", -1));
+
+            String countDispatch = "(function(){"
+                    + "window.__waywardCiCounts={state:'pending'};"
+                    + "window.fetch('http://127.0.0.1:8189/api/wife-image-counts')"
+                    + ".then(function(response){if(!response.ok)throw new Error('HTTP '+response.status);return response.json();})"
+                    + ".then(function(body){window.__waywardCiCounts={state:'loaded',counts:body.counts||{}};})"
+                    + ".catch(function(error){window.__waywardCiCounts={state:'error',message:String(error)};});"
+                    + "return 'dispatched';})()";
+            assertEquals("The Android test did not query the server character index.",
+                    "dispatched", awaitJsString(instrumentation, gameWeb, countDispatch, 10_000L));
+            JSONObject countState = new JSONObject();
+            long countDeadline = System.currentTimeMillis() + 15_000L;
+            while (System.currentTimeMillis() < countDeadline) {
+                countState = new JSONObject(awaitJsString(instrumentation, gameWeb,
+                        "JSON.stringify(window.__waywardCiCounts||{state:'pending'})", 10_000L));
+                if (!"pending".equals(countState.optString("state", ""))) break;
+                Thread.sleep(100L);
+            }
+            assertEquals("The server did not return the character index.", "loaded",
+                    countState.optString("state", ""));
+            JSONObject characterCounts = countState.optJSONObject("counts");
+            assertNotNull("The server character index was empty.", characterCounts);
+            assertTrue("The discovered WML character is missing from the image review filters: "
+                    + characterCounts, characterCounts.has("launcher-ci-probe"));
 
             String trigger = "(function(){"
                     + "window.__waywardCiImage={state:'generating'};"
