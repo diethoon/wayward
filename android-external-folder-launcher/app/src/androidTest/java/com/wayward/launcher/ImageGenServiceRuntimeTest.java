@@ -313,7 +313,7 @@ public final class ImageGenServiceRuntimeTest {
                 }
                 gameHtml = output.toByteArray();
             }
-            if (gameHtml.length != 4_383_674) {
+            if (gameHtml.length != 4_373_978) {
                 throw new IllegalStateException("Unexpected pinned Wayward_WML_ko.html size: " + gameHtml.length);
             }
 
@@ -831,8 +831,8 @@ public final class ImageGenServiceRuntimeTest {
                     imageState.optBoolean("visible", false));
             resultSummary = "state=loaded\nportraitHook=imageUsagePortraitPanel\ndisplayedInPortraitHook=true\nvisibleOnScreen=true\n"
                     + "gameHtmlBytes=" + gameHtml.length + "\n"
-                    + "gameHtmlSourceCommit=5e5c78c4e32198e460ba040256e920d37ed1711c\n"
-                    + "gameHtmlBlob=8d998b50e82febe18b5c1d1159b16663b9169775\n"
+                    + "gameHtmlSourceCommit=eca525d4fd5191ea7c887d9ea1b8cf19dd75aed5\n"
+                    + "gameHtmlBlob=d198eacfc127c55dc44bd5d1b8e29ff2bb7d08e6\n"
                     + "cloudflareEndpoint=" + FLUX_ENDPOINT + "\n"
                     + "providerType=cloudflare-worker\n"
                     + "imagePath=" + imageState.optString("imagePath") + "\n"
