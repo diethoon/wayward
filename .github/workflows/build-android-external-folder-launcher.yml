@@ -315,7 +315,7 @@ jobs:
           WML_SOURCE_ROOT="https://raw.githubusercontent.com/diethoon/3.36/$GAME_COMMIT/Wayward_MOD_v4.0_WML_%EA%B2%80%EC%88%98%EC%99%84%EB%A3%8C/wml"
           WML_TEST_ROOT="$TEST_ASSETS/wml-runtime/wml"
           mkdir -p "$WML_TEST_ROOT/i18n/ko" "$WML_TEST_ROOT/runtime" "$WML_TEST_ROOT/mods"
-          while IFS="$(printf '\\t')" read -r relative expected_bytes expected_blob; do
+          while IFS=$'\t' read -r relative expected_bytes expected_blob; do
             [ -n "$relative" ] || continue
             destination="$WML_TEST_ROOT/$relative"
             mkdir -p "$(dirname "$destination")"
@@ -331,7 +331,7 @@ jobs:
               raise SystemExit(f"WML fixture size mismatch for {relative}: {size} != {expected_bytes}")
           sha = hashlib.sha256()
           git_blob = hashlib.sha1()
-          git_blob.update(f"blob {size}\\0".encode("ascii"))
+          git_blob.update(f"blob {size}\0".encode("ascii"))
           manifest = path + ".chunks.sha256.jsonl"
           offset = 0
           with open(path, "rb") as source, open(manifest, "w", encoding="utf-8") as chunks:
@@ -341,7 +341,7 @@ jobs:
                       break
                   digest = hashlib.sha256(data).hexdigest()
                   chunks.write(json.dumps({"offset": offset, "length": len(data), "sha256": digest},
-                                          separators=(",", ":")) + "\\n")
+                                          separators=(",", ":")) + "\n")
                   sha.update(data)
                   git_blob.update(data)
                   offset += len(data)
