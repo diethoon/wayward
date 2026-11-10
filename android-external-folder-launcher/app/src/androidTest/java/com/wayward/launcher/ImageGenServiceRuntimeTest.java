@@ -410,7 +410,7 @@ public final class ImageGenServiceRuntimeTest {
             String trigger = "(function(){"
                     + "window.__waywardCiImage={state:'generating'};"
                     + "var p=window.WaywardImageProviders.generate({"
-                    + "prompt:'An original cozy fantasy shopkeeper in a small woodland general store, polished anime illustration, warm afternoon sunlight, full body, detailed clean composition, no text',"
+                    + "prompt:'A peaceful watercolor landscape of a small wooden cottage beside a river, green hills and wildflowers, warm morning light, detailed digital painting, no people, no text',"
                     + "width:1024,height:1024});"
                     + "p.then(function(result){"
                     + "if(!result||!result.dataUrl||!result.dataUrl.startsWith('data:image/'))"
