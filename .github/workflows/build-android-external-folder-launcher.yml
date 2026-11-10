@@ -315,7 +315,7 @@ jobs:
           WML_SOURCE_ROOT="https://raw.githubusercontent.com/diethoon/3.36/$GAME_COMMIT/Wayward_MOD_v4.0_WML_%EA%B2%80%EC%88%98%EC%99%84%EB%A3%8C/wml"
           WML_TEST_ROOT="$TEST_ASSETS/wml-runtime/wml"
           mkdir -p "$WML_TEST_ROOT/i18n/ko" "$WML_TEST_ROOT/runtime" "$WML_TEST_ROOT/mods"
-          while IFS=$'\t' read -r relative expected_bytes expected_blob; do
+          while IFS=' ' read -r relative expected_bytes expected_blob; do
             [ -n "$relative" ] || continue
             destination="$WML_TEST_ROOT/$relative"
             mkdir -p "$(dirname "$destination")"
