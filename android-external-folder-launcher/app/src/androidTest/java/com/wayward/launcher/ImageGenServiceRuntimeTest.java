@@ -58,6 +58,7 @@ public final class ImageGenServiceRuntimeTest {
         Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
         Context context = instrumentation.getTargetContext();
         Activity launcherActivity = null;
+        Activity homeActivity = null;
         boolean stopActionSent = false;
         NotificationManager notifications =
                 (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
@@ -81,7 +82,8 @@ public final class ImageGenServiceRuntimeTest {
             configureCloudflareProvider(context, GAME_PROFILE_ID);
             launcherActivity = instrumentation.startActivitySync(
                     new Intent(context, MainActivity.class)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
+                            .setData(Uri.parse("wayward://session/" + GAME_PROFILE_ID))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT));
             assertNotNull("Launcher activity did not start", launcherActivity);
             setField(launcherActivity, "activeProfileId", GAME_PROFILE_ID);
 
@@ -131,8 +133,13 @@ public final class ImageGenServiceRuntimeTest {
             // call Cloudflare through the authenticated native provider adapter,
             // save through JobRunner/cache, and read the result back through /api/pack.
             runCloudflareGamePageSmoke(instrumentation, context, launcherActivity);
+            homeActivity = verifyCrossTaskImageStudioSettingsRouting(
+                    instrumentation, context, launcherActivity);
             restartImageGenServerWithKeystoreToken(instrumentation, context, launcherActivity);
 
+            Activity homeToFinish = homeActivity;
+            if (homeToFinish != null) instrumentation.runOnMainSync(homeToFinish::finish);
+            homeActivity = null;
             Activity activityToFinish = launcherActivity;
             instrumentation.runOnMainSync(activityToFinish::finish);
             launcherActivity = null;
@@ -160,6 +167,10 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("Foreground notification remained after Stop",
                     findImageGenNotification(notifications) == null);
         } finally {
+            if (homeActivity != null) {
+                Activity activity = homeActivity;
+                instrumentation.runOnMainSync(activity::finish);
+            }
             if (launcherActivity != null) {
                 Activity activity = launcherActivity;
                 instrumentation.runOnMainSync(activity::finish);
@@ -289,6 +300,7 @@ public final class ImageGenServiceRuntimeTest {
                     pageFinished.await(90, TimeUnit.SECONDS));
             WebView gameWeb = webHolder[0];
             assertNotNull("The launcher WebView was not created: " + pageError.get(), gameWeb);
+            dismissWaywardAgeConfirmation(instrumentation, gameWeb);
 
             String bridgeType = awaitJsString(instrumentation, gameWeb,
                     "typeof window.WaywardImageProviders", 30_000L);
@@ -465,7 +477,9 @@ public final class ImageGenServiceRuntimeTest {
                     + "var img=document.createElement('img');img.id='wayward-ci-cloudflare-image';"
                     + "img.alt='Image Studio cached Cloudflare image';"
                     + "img.style.cssText='position:fixed;z-index:2147483647;right:20px;top:20px;width:340px;height:340px;object-fit:contain;background:#fff;border:6px solid #2d6b49;border-radius:12px;box-shadow:0 4px 24px #0008';"
-                    + "img.onload=function(){window.__waywardCiImage={state:'loaded',naturalWidth:img.naturalWidth,naturalHeight:img.naturalHeight,"
+                    + "img.onload=function(){var rect=img.getBoundingClientRect();var style=getComputedStyle(img);"
+                    + "window.__waywardCiImage={state:'loaded',naturalWidth:img.naturalWidth,naturalHeight:img.naturalHeight,"
+                    + "visible:rect.width>0&&rect.height>0&&rect.right>0&&rect.bottom>0&&style.display!=='none'&&style.visibility!=='hidden'&&Number(style.opacity)>0,"
                     + "mimeType:blob.type||'',imagePath:entry.imagePath,entryCount:pack.entryCount,cacheCompleted:batchStatus.completed,cacheCount:batchStatus.cached};};"
                     + "img.onerror=function(){window.__waywardCiImage={state:'img_error',naturalWidth:img.naturalWidth,naturalHeight:img.naturalHeight,imagePath:entry.imagePath};};"
                     + "document.body.appendChild(img);img.src=dataUrl;"
@@ -489,7 +503,9 @@ public final class ImageGenServiceRuntimeTest {
                     "loaded", imageState.optString("state", ""));
             assertTrue("The cached image did not decode in Android WebView: " + imageState,
                     imageState.optInt("naturalWidth", 0) > 0 && imageState.optInt("naturalHeight", 0) > 0);
-            resultSummary = "state=loaded\n"
+            assertTrue("The generated image element decoded but was not visibly laid out on screen: " + imageState,
+                    imageState.optBoolean("visible", false));
+            resultSummary = "state=loaded\nvisibleOnScreen=true\n"
                     + "gameHtmlBytes=" + gameHtml.length + "\n"
                     + "gameHtmlSourceCommit=5e5c78c4e32198e460ba040256e920d37ed1711c\n"
                     + "gameHtmlBlob=8d998b50e82febe18b5c1d1159b16663b9169775\n"
