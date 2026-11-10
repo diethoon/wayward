@@ -68,7 +68,15 @@
     if (!backendProbe || !prefersLauncherLocal()) return Promise.resolve({ ok: false, reason: "probe_unavailable" });
     const state = runtimeStatus();
     if (!state.available && !state.starting) return Promise.resolve({ ok: false, retry: true, reason: "server_not_available" });
-    if (probeRunning) return probeRunning;
+    if (probeRunning) {
+      if (reason === "generation_settings_saved") {
+        return probeRunning.then(
+          () => refreshBackendProbe("generation_settings_saved_after_pending_probe"),
+          () => refreshBackendProbe("generation_settings_saved_after_pending_probe")
+        );
+      }
+      return probeRunning;
+    }
 
     const settings = gameSettings();
     const mode = String(settings.imageBackendMode || "auto");
@@ -112,37 +120,43 @@
     if (!factory || typeof factory.connect !== "function" || factory.__waywardImageStudioWrapped) return factory;
     const originalConnect = factory.connect;
     try { Object.defineProperty(factory, "__waywardImageStudioWrapped", { value: true }); } catch (_) {}
-    factory.connect = function(wmlApi, config, ...rest) {
-      const api = originalConnect.call(this, wmlApi, config, ...rest);
-      if (!config || config.id !== "imagestudio" || !api || typeof api.fn !== "function") return api;
-      const originalFn = api.fn.bind(api);
-      api.fn = function(name, ...args) {
-        const value = originalFn(name, ...args);
-        if (name === "imageBackendProbe" && typeof value === "function") {
-          registerBackendProbe(value);
-          return value;
-        }
-        if (name === "imageServerUrl" && typeof value === "function") {
-          return path => localEndpoint(path) || value(path);
-        }
-        if (name === "imageBackend" && typeof value === "function") {
-          return (...callArgs) => {
-            const current = value(...callArgs) || {};
-            const state = runtimeStatus();
-            if (!prefersLauncherLocal() || (!state.available && !state.starting)) return current;
-            return { ...current, baseUrl: LOCAL_ORIGIN, comfyui: state.ready };
+    try {
+      factory.connect = function(wmlApi, config, ...rest) {
+        const api = originalConnect.call(this, wmlApi, config, ...rest);
+        if (!config || config.id !== "imagestudio" || !api || typeof api.fn !== "function") return api;
+        const originalFn = api.fn.bind(api);
+        try {
+          api.fn = function(name, ...args) {
+            const value = originalFn(name, ...args);
+            if (name === "imageBackendProbe" && typeof value === "function") {
+              registerBackendProbe(value);
+              return value;
+            }
+            if (name === "imageServerUrl" && typeof value === "function") {
+              return path => localEndpoint(path) || value(path);
+            }
+            if (name === "imageBackend" && typeof value === "function") {
+              return (...callArgs) => {
+                const current = value(...callArgs) || {};
+                const state = runtimeStatus();
+                if (!prefersLauncherLocal() || (!state.available && !state.starting)) return current;
+                return { ...current, baseUrl: LOCAL_ORIGIN, comfyui: state.ready };
+              };
+            }
+            return value;
           };
+        } catch (_) {
+          report("studio_api_probe_wrapper_unavailable", {});
         }
-        return value;
+        try {
+          const probe = originalFn("imageBackendProbe");
+          if (typeof probe === "function") registerBackendProbe(probe);
+        } catch (_) {}
+        return api;
       };
-      // Image Studio uses this binding indirectly through its bridge. Register
-      // it here even though the current mod does not request it as a local var.
-      try {
-        const probe = originalFn("imageBackendProbe");
-        if (typeof probe === "function") registerBackendProbe(probe);
-      } catch (_) {}
-      return api;
-    };
+    } catch (_) {
+      report("studio_factory_wrapper_unavailable", {});
+    }
     return factory;
   }
 

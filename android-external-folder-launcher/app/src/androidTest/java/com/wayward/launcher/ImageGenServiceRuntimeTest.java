@@ -104,11 +104,8 @@ public final class ImageGenServiceRuntimeTest {
             // native Image Studio UI, not a separate review-page Activity. The
             // document-start bridge path is exercised against the local server below.
 
-            int settingsCode = updateTestProviderSettings();
-            assertEquals("Could not configure the test-only provider state. "
-                    + startupLogs(context), 200, settingsCode);
-            assertEquals("ImageGen health did not become ready after provider setup. "
-                    + startupLogs(context), 200, awaitStatus(200, 30_000L));
+            // The NAI test token is saved later through the same document-start
+            // WebView proxy used by the real Image Studio settings screen.
             String bunVersion = readText(new File(context.getFilesDir(), "imagegen/bun-version.log"));
             assertTrue("The test did not execute the pinned Android Bun 1.4.4 binary: " + bunVersion,
                     bunVersion.contains("1.4.4"));
@@ -121,6 +118,7 @@ public final class ImageGenServiceRuntimeTest {
             // real Cloudflare Worker from Android, and wait for a data: image to
             // decode in the game page before capturing the screen and diagnostics.
             runCloudflareGamePageSmoke(instrumentation, context, launcherActivity);
+            restartImageGenServerWithKeystoreToken(instrumentation, context, launcherActivity);
 
             Activity activityToFinish = launcherActivity;
             instrumentation.runOnMainSync(activityToFinish::finish);
@@ -282,6 +280,48 @@ public final class ImageGenServiceRuntimeTest {
                     providers.optJSONArray("providers") != null
                             && providers.optJSONArray("providers").length() > 0);
 
+            // Save the test-only NovelAI token through the exact WebView fetch
+            // path used by Image Studio. This must pass through ImageGenProxy,
+            // write to Android Keystore, and never remain in anima-settings.json.
+            String saveDispatch = "(function(){"
+                    + "window.__waywardCiNaiSave={state:'pending'};"
+                    + "fetch('http://127.0.0.1:8189/api/generation/settings',{"
+                    + "method:'PUT',headers:{'Content-Type':'application/json'},"
+                    + "body:JSON.stringify({imageProvider:'nai',naiToken:'ci-smoke-token-not-valid'})"
+                    + "}).then(async function(response){"
+                    + "var body=await response.json().catch(function(){return {};});"
+                    + "window.__waywardCiNaiSave={state:'done',status:response.status,"
+                    + "configured:!!(body.settings&&body.settings.naiTokenConfigured),"
+                    + "model:body.settings&&body.settings.naiModel};"
+                    + "}).catch(function(error){window.__waywardCiNaiSave={state:'error',message:String(error).slice(0,160)};});"
+                    + "return 'dispatched';})()";
+            assertEquals("The Android WebView did not dispatch the NovelAI settings save.",
+                    "dispatched", awaitJsString(instrumentation, gameWeb, saveDispatch, 10_000L));
+            JSONObject naiSave = new JSONObject();
+            long naiSaveDeadline = System.currentTimeMillis() + 30_000L;
+            while (System.currentTimeMillis() < naiSaveDeadline) {
+                naiSave = new JSONObject(awaitJsString(instrumentation, gameWeb,
+                        "JSON.stringify(window.__waywardCiNaiSave||{state:'pending'})", 10_000L));
+                if (!"pending".equals(naiSave.optString("state", ""))) break;
+                Thread.sleep(100L);
+            }
+            assertEquals("NovelAI settings were not saved through the Android WebView proxy: " + naiSave,
+                    "done", naiSave.optString("state", ""));
+            assertEquals("NovelAI settings API returned an unexpected status: " + naiSave,
+                    200, naiSave.optInt("status", -1));
+            assertTrue("The NovelAI settings response did not mark the token as configured: " + naiSave,
+                    naiSave.optBoolean("configured", false));
+            assertEquals("The test must use the launcher's V4.5 Full default.",
+                    "nai-diffusion-4-5-full", naiSave.optString("model", ""));
+            assertEquals("The WebView proxy did not store the NovelAI token in Android Keystore.",
+                    "ci-smoke-token-not-valid", ImageProviderStore.readNovelAiToken(context));
+            File naiSettingsFile = new File(context.getFilesDir(), "imagegen/state/anima-settings.json");
+            String naiSettingsOnDisk = readText(naiSettingsFile);
+            assertTrue("The NovelAI token was written in plaintext to anima-settings.json.",
+                    !naiSettingsOnDisk.contains("ci-smoke-token-not-valid"));
+            assertEquals("ImageGen did not become generation-ready after the settings save.",
+                    200, awaitStatus(200, 30_000L));
+
             // Exercise the one-tap Image Studio bridge in the actual Android WebView.
             // The pinned HTML fixture does not install third-party WML mods, so
             // provide the exact WW_ImageStudioBridge contract returned by the mod.
@@ -430,6 +470,34 @@ public final class ImageGenServiceRuntimeTest {
                         + artifactError.getClass().getSimpleName() + ": " + artifactError.getMessage());
             }
         }
+    }
+
+    private static void restartImageGenServerWithKeystoreToken(
+            Instrumentation instrumentation, Context context, Activity activity) throws Exception {
+        Method stopAction = MainActivity.class.getDeclaredMethod("stopImageGenServer");
+        stopAction.setAccessible(true);
+        instrumentation.runOnMainSync(() -> {
+            try { stopAction.invoke(activity); }
+            catch (Exception error) { throw new RuntimeException("Could not stop ImageGen for token persistence test", error); }
+        });
+        assertTrue("ImageGen did not stop before the Keystore persistence restart test.",
+                awaitServerDown(45_000L));
+
+        Method startAction = MainActivity.class.getDeclaredMethod("startNovelAiServer");
+        startAction.setAccessible(true);
+        instrumentation.runOnMainSync(() -> {
+            try { startAction.invoke(activity); }
+            catch (Exception error) { throw new RuntimeException("Could not restart ImageGen with the Keystore token", error); }
+        });
+        assertEquals("ImageGen did not reload NAI_TOKEN from Android Keystore after a full restart. "
+                + startupLogs(context), 200, awaitStatus(200, 120_000L));
+        assertEquals("The NovelAI token was lost from Android Keystore after restart.",
+                "ci-smoke-token-not-valid", ImageProviderStore.readNovelAiToken(context));
+        String settings = readText(new File(context.getFilesDir(), "imagegen/state/anima-settings.json"));
+        assertTrue("The NovelAI token reappeared in plaintext after server restart.",
+                !settings.contains("ci-smoke-token-not-valid"));
+        DiagnosticsLogger.event(context, "INFO", "imagegen_service",
+                "keystore_token_restart_verified", null);
     }
 
     private static void configureCloudflareProvider(Context context, String profileId) throws Exception {
@@ -601,13 +669,6 @@ public final class ImageGenServiceRuntimeTest {
         } finally {
             descriptor.close();
         }
-    }
-
-    private static int updateTestProviderSettings() throws Exception {
-        JSONObject body = new JSONObject();
-        body.put("imageProvider", "nai");
-        body.put("naiToken", "ci-smoke-token-not-valid");
-        return requestStatus(SETTINGS_URL, "PUT", body.toString());
     }
 
     private static int awaitReachable(long timeoutMs) throws Exception {
