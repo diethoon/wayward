@@ -537,15 +537,21 @@ public final class ImageGenServiceRuntimeTest {
                 + "if(!yes)return 'age_confirmation_yes_button_not_found';"
                 + "var target=yes.closest('button,[role=button],a')||yes;target.click();return 'age_confirmation_accepted';"
                 + "})()";
-        String result = awaitJsString(instrumentation, gameWeb, dispatch, 10_000L);
+        String result = "";
+        long deadline = System.currentTimeMillis() + 10_000L;
+        while (System.currentTimeMillis() < deadline) {
+            result = awaitJsString(instrumentation, gameWeb, dispatch, 5_000L);
+            if ("age_confirmation_accepted".equals(result)) break;
+            Thread.sleep(100L);
+        }
         assertEquals("The Android test did not dismiss Wayward's age confirmation gate.",
                 "age_confirmation_accepted", result);
         Thread.sleep(700L);
         String visibleGate = awaitJsString(instrumentation, gameWeb,
-                "(function(){return Array.from(document.querySelectorAll('body *')).some(function(e){"
+                "(function(){return String(Array.from(document.querySelectorAll('body *')).some(function(e){"
                         + "if(e.children.length>0||String(e.textContent||'').trim()!=='연령 확인')return false;"
                         + "var s=getComputedStyle(e),r=e.getBoundingClientRect();"
-                        + "return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0;});})()",
+                        + "return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0;}));})()",
                 5_000L);
         assertEquals("The Wayward age confirmation gate remained visible after acceptance.", "false", visibleGate);
     }
