@@ -307,6 +307,57 @@ jobs:
           PY
           cp "$GAME_HTML" "$TEST_ASSETS/Wayward_WML_ko.html"
           test "$(wc -c < "$TEST_ASSETS/Wayward_WML_ko.html" | tr -d ' ')" = "$EXPECTED_BYTES"
+
+          # The launcher serves the actual WML runtime tree alongside the
+          # HTML. Preserve the pinned files that the game requests at startup;
+          # the Android test will prepend the same folder bootstrap as
+          # MainActivity.FolderHandler before returning wml-core.js.
+          WML_SOURCE_ROOT="https://raw.githubusercontent.com/diethoon/3.36/$GAME_COMMIT/Wayward_MOD_v4.0_WML_%EA%B2%80%EC%88%98%EC%99%84%EB%A3%8C/wml"
+          WML_TEST_ROOT="$TEST_ASSETS/wml-runtime/wml"
+          mkdir -p "$WML_TEST_ROOT/i18n/ko" "$WML_TEST_ROOT/runtime" "$WML_TEST_ROOT/mods"
+          while IFS="$(printf '\\t')" read -r relative expected_bytes expected_blob; do
+            [ -n "$relative" ] || continue
+            destination="$WML_TEST_ROOT/$relative"
+            mkdir -p "$(dirname "$destination")"
+            curl --fail --silent --show-error "$WML_SOURCE_ROOT/$relative" -o "$destination"
+            python3 - "$destination" "$expected_bytes" "$expected_blob" "$GAME_COMMIT" "$relative" <<'PY'
+          import hashlib
+          import json
+          import os
+          import sys
+          path, expected_bytes, expected_blob, commit, relative = sys.argv[1:]
+          size = os.path.getsize(path)
+          if size != int(expected_bytes):
+              raise SystemExit(f"WML fixture size mismatch for {relative}: {size} != {expected_bytes}")
+          sha = hashlib.sha256()
+          git_blob = hashlib.sha1()
+          git_blob.update(f"blob {size}\\0".encode("ascii"))
+          manifest = path + ".chunks.sha256.jsonl"
+          offset = 0
+          with open(path, "rb") as source, open(manifest, "w", encoding="utf-8") as chunks:
+              while True:
+                  data = source.read(4096)
+                  if not data:
+                      break
+                  digest = hashlib.sha256(data).hexdigest()
+                  chunks.write(json.dumps({"offset": offset, "length": len(data), "sha256": digest},
+                                          separators=(",", ":")) + "\\n")
+                  sha.update(data)
+                  git_blob.update(data)
+                  offset += len(data)
+          actual_blob = git_blob.hexdigest()
+          if actual_blob != expected_blob:
+              raise SystemExit(f"WML fixture Git blob mismatch for {relative}: {actual_blob} != {expected_blob}")
+          print(f"WML fixture {relative}: bytes={size} git_blob={actual_blob} sha256={sha.hexdigest()}")
+          PY
+          done <<'WML_FIXTURES'
+          i18n/ko/finals.js 1219 5ee71baf69e1c0ee7a2e52591aa6a5634a757490
+          i18n/ko/display.js 105762 066b82bee117219741e985a46eeb0e02e4ff1746
+          i18n/ko/voice.js 439915 7abf2ede3f5b358ecfc8f93b694ddec944840386
+          i18n/ko/runtime.js 16121 f5373186d8d0d4906156714c6fe06ba5fe84c588
+          runtime/wml-core.js 116652 21d4efd8a2d4e959c81c3edbc89a3cb6c7333f2f
+          mods/mods.js 79 aa4355cb5ee0c644f0798cba904670222a1d39c1
+          WML_FIXTURES
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: '1.4.0'
