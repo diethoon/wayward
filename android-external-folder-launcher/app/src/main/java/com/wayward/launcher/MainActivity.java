@@ -41,8 +41,11 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.SequenceInputStream;
 import java.io.OutputStream;
+import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -60,6 +63,14 @@ public final class MainActivity extends Activity {
     private static final String KO="Wayward_WML_ko.html", EN="Wayward_WML.html";
     private static final Pattern ID=Pattern.compile("^[a-z0-9][a-z0-9._-]*$");
     private static final Set<String> RUNNING_SESSIONS=Collections.synchronizedSet(new HashSet<>());
+    // The home launcher and game sessions are separate Android document tasks.
+    // Keep weak references so settings actions can return to the Activity that
+    // actually owns the active game's WebView and SAF tree.
+    private static final Map<String, WeakReference<MainActivity>> SESSION_ACTIVITIES =
+            new ConcurrentHashMap<>();
+    private static volatile String LAST_ACTIVE_SESSION_ID = "";
+    private static final String EXTRA_OPEN_IMAGE_STUDIO_SETTINGS =
+            "com.wayward.launcher.OPEN_IMAGE_STUDIO_SETTINGS";
     private static final Pattern MOD_ID=Pattern.compile("(?:\\bid\\s*:\\s*|[\\\"']id[\\\"']\\s*:\\s*)[\\\"']([a-z0-9][a-z0-9._-]*)[\\\"']");
     private Uri treeUri;
     private SafTree tree;
@@ -72,6 +83,8 @@ public final class MainActivity extends Activity {
     private TextView status, folderText, profileSummary, zipSummary, imageGenStatus;
     private EditText comfyUrlInput;
     private String imageGenSessionMessage = "";
+    private boolean imageStudioSessionDetected = false;
+    private boolean pendingOpenImageStudioSettings = false;
     private static volatile boolean imageGenCopying = false;
     private static volatile boolean manualImageGenPreparing = false;
     private final Handler imageGenHandler = new Handler(Looper.getMainLooper());
@@ -98,15 +111,23 @@ public final class MainActivity extends Activity {
         loadProfiles();
         long revision=getSharedPreferences(PREFS,MODE_PRIVATE).getLong(KEY_ZIP_REV,0);
         if(web!=null&&revision!=loadedZipRevision){loadedZipRevision=revision;web.reload();}
+        if(web!=null&&tree!=null)registerSessionActivity();
         if(home!=null&&home.getVisibility()==View.VISIBLE){renderProfiles();renderZipMods();refreshStatus();refreshImageGenStatus();}
     }
     @Override protected void onNewIntent(Intent intent){
         super.onNewIntent(intent);setIntent(intent);
         String sessionId=sessionProfileId(intent);
         if(sessionId==null)return;
+        boolean openSettings=intent.getBooleanExtra(EXTRA_OPEN_IMAGE_STUDIO_SETTINGS,false);
+        if(openSettings)pendingOpenImageStudioSettings=true;
         if(sessionId.equals(activeProfileId)&&web!=null){
             if(home!=null)home.setVisibility(View.GONE);
             web.setVisibility(View.VISIBLE);
+            registerSessionActivity();
+            if(openSettings){
+                pendingOpenImageStudioSettings=false;
+                openImageGenPanel();
+            }
         }else openProfileSession(sessionId);
     }
     private static final class GameProfile{
@@ -339,6 +360,7 @@ public final class MainActivity extends Activity {
             if(home!=null)home.setVisibility(View.GONE);
             loadedZipRevision=getZipRevision();
             createWeb();web.setVisibility(View.VISIBLE);
+            registerSessionActivity();
             String gameUrl=sessionOrigin(activeProfileId)+"/game/"+Uri.encode(file)+"?launcher="+System.currentTimeMillis();
             SafTree sessionTree=tree;
             web.setVisibility(View.VISIBLE);
@@ -687,6 +709,7 @@ public final class MainActivity extends Activity {
         final String version;
         try {
             String detected = imageStudioModId(sessionTree);
+            imageStudioSessionDetected = "imagestudio".equals(detected);
             if (detected == null) {
                 imageGenSessionMessage = "현재 세션의 WML Image Studio 모드가 없어 이미지 서버를 시작하지 않았습니다.";
                 refreshImageGenStatus();
@@ -908,6 +931,25 @@ public final class MainActivity extends Activity {
 
     private void openImageGenPanel(){
         if (web == null || tree == null) {
+            MainActivity session = findActiveSessionActivity();
+            if (session != null && session != this) {
+                String sessionId = session.activeProfileId;
+                // The owner Activity is already alive in this process. Invoke its
+                // settings action directly, then bring its document task forward.
+                // Relying only on NEW_DOCUMENT/onNewIntent can reorder the task without
+                // delivering the UI action on some Android document-task stacks.
+                try {
+                    session.openImageGenPanel();
+                    Intent route = new Intent(this, MainActivity.class);
+                    route.setData(Uri.parse("wayward://session/" + Uri.encode(sessionId)));
+                    route.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+                    startActivity(route);
+                    DiagnosticsLogger.event(this,"INFO","imagegen","session_settings_routed",null);
+                    return;
+                } catch (Throwable error) {
+                    DiagnosticsLogger.error(this,"imagegen","session_settings_route_failed",error);
+                }
+            }
             Toast.makeText(this,"게임 세션을 먼저 실행해 Image Studio 모드를 불러와 주세요.",Toast.LENGTH_LONG).show();
             return;
         }
@@ -937,9 +979,50 @@ public final class MainActivity extends Activity {
                         });
             }, 100L);
         };
-        // Reuse the active WML adapter and managed server. HTTP 503 is available
-        // for settings and must not block the credential setup screen.
-        ensureImageGenServer(tree, openSettings);
+        // A verified active session can reuse the running service without a
+        // second SAF scan. Otherwise retain the normal detection/startup flow.
+        ImageGenStatusStore.State existing = ImageGenStatusStore.read(getFilesDir());
+        if (imageStudioSessionDetected && existing.isAvailable()) openSettings.run();
+        else ensureImageGenServer(tree, openSettings);
+    }
+
+    private void registerSessionActivity() {
+        String id = activeProfileId;
+        if (id == null || !id.matches("[a-f0-9]{32}") || web == null || tree == null) return;
+        SESSION_ACTIVITIES.put(id, new WeakReference<>(this));
+        LAST_ACTIVE_SESSION_ID = id;
+    }
+
+    private static MainActivity findActiveSessionActivity() {
+        String lastId = LAST_ACTIVE_SESSION_ID;
+        if (lastId != null && !lastId.isEmpty()) {
+            WeakReference<MainActivity> last = SESSION_ACTIVITIES.get(lastId);
+            MainActivity activity = last == null ? null : last.get();
+            if (activity != null && !activity.isFinishing()
+                    && activity.web != null && activity.tree != null) return activity;
+            if (last != null && activity == null) SESSION_ACTIVITIES.remove(lastId, last);
+        }
+        for (Map.Entry<String, WeakReference<MainActivity>> entry : SESSION_ACTIVITIES.entrySet()) {
+            MainActivity activity = entry.getValue().get();
+            if (activity != null && !activity.isFinishing()
+                    && activity.web != null && activity.tree != null) {
+                LAST_ACTIVE_SESSION_ID = entry.getKey();
+                return activity;
+            }
+            if (activity == null) SESSION_ACTIVITIES.remove(entry.getKey(), entry.getValue());
+        }
+        LAST_ACTIVE_SESSION_ID = "";
+        return null;
+    }
+
+    private void unregisterSessionActivity() {
+        for (Map.Entry<String, WeakReference<MainActivity>> entry : SESSION_ACTIVITIES.entrySet()) {
+            if (entry.getValue().get() == this) {
+                SESSION_ACTIVITIES.remove(entry.getKey(), entry.getValue());
+                if (entry.getKey().equals(LAST_ACTIVE_SESSION_ID)) LAST_ACTIVE_SESSION_ID = "";
+            }
+        }
+        if (LAST_ACTIVE_SESSION_ID.isEmpty()) findActiveSessionActivity();
     }
 
     private void startManagedImageGenServer(String mode,String comfyUrl){
@@ -1186,6 +1269,7 @@ public final class MainActivity extends Activity {
     @Override public void onBackPressed(){if(web!=null&&web.getVisibility()==View.VISIBLE){if(web.canGoBack())web.goBack();else showHomePanel();return;}super.onBackPressed();}
     @Override protected void onDestroy(){
         String sessionId=sessionProfileId(getIntent());if(sessionId!=null)RUNNING_SESSIONS.remove(sessionId);
+        unregisterSessionActivity();
         DiagnosticsLogger.event(this,"INFO","launcher","activity_destroy",null);
         destroyWeb();if(zipMods!=null)zipMods.close();super.onDestroy();
     }
