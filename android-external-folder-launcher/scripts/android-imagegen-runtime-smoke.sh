@@ -31,11 +31,9 @@ adb shell getprop ro.enable.native.bridge.exec > "$OUT/native-bridge-exec.txt"
   adb version 2>&1 | head -n 4 || true
   echo
   echo "[device properties]"
-  for property in ro.build.fingerprint ro.build.id ro.build.version.incremental \\
-    ro.product.manufacturer ro.product.model ro.product.device ro.hardware \\
-    ro.boot.qemu.avd_name ro.dalvik.vm.native.bridge ro.enable.native.bridge.exec; do
+  for property in ro.build.fingerprint ro.build.id ro.build.version.incremental ro.product.manufacturer ro.product.model ro.product.device ro.hardware ro.boot.qemu.avd_name ro.dalvik.vm.native.bridge ro.enable.native.bridge.exec; do
     printf '%s=' "$property"
-    adb shell getprop "$property" | tr -d '\\r'
+    adb shell getprop "$property" | tr -d '\r'
   done
   echo
   echo "[installed Android 35 Google APIs x86_64 image]"
@@ -55,8 +53,10 @@ adb shell getprop ro.enable.native.bridge.exec > "$OUT/native-bridge-exec.txt"
   echo "[AVD configuration]"
   AVD_ROOT="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
   if [ -d "$AVD_ROOT" ]; then
-    find "$AVD_ROOT" -maxdepth 3 -type f \\( -name config.ini -o -name '*.ini' \\) -print \\
-      -exec sed -n '1,180p' {} \\;
+    find "$AVD_ROOT" -maxdepth 3 -type f -name config.ini -print | while IFS= read -r ini; do
+      echo "--- $ini"
+      sed -n '1,180p' "$ini"
+    done
   else
     echo "AVD directory not exposed: $AVD_ROOT"
   fi
