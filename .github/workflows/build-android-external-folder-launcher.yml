@@ -431,8 +431,8 @@ jobs:
                       except zipfile.BadZipFile:
                           continue
 
-          with zipfile.ZipFile(archive_path) as top:
-              walk(top, "wayward 11.2.zip")
+          top = zipfile.ZipFile(archive_path)
+          walk(top, "wayward 11.2.zip")
 
           core_versions = []
           for zf, entry, label, name in core_candidates:
@@ -542,9 +542,9 @@ jobs:
         with:
           name: Wayward-2026-11-01-WML-0.9.5-package-runtime
           path: |
-            \${{ runner.temp }}/wayward-11.2.zip
-            \${{ runner.temp }}/wayward-11.2-wml-index.json
-            \${{ runner.temp }}/wayward-11.2-wml-report.txt
+            ${{ runner.temp }}/wayward-11.2.zip
+            ${{ runner.temp }}/wayward-11.2-wml-index.json
+            ${{ runner.temp }}/wayward-11.2-wml-report.txt
             android-external-folder-launcher/app/src/androidTest/assets/wml-runtime
           if-no-files-found: warn
           retention-days: 14
