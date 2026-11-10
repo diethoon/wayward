@@ -150,6 +150,7 @@ jobs:
           path: |
             ${{ runner.temp }}/imagestudio-archive-index.txt
             ${{ runner.temp }}/imagestudio-source-index.txt
+            ${{ runner.temp }}/mods-wml-entrypoints-index.txt
             android-external-folder-launcher/app/src/androidTest/assets/imagestudio-source
           if-no-files-found: warn
           retention-days: 14
