@@ -57,6 +57,23 @@ assert.match(providerUi, /암호화 저장/);
 assert.match(providerUi, /NovelAI 토큰 삭제/);
 
 assert.match(service, /EXTRA_LAUNCH_MODE/);
+assert.match(service, /ANDROID_LINKER_64 = "\/system\/bin\/linker64"/,
+  "app-private Bun must be started through Android's system linker");
+assert.match(service, /private ProcessBuilder bunProcess\(File executable, String\.\.\. arguments\)/,
+  "all Bun invocations must share the linker-backed command builder");
+assert.match(service, /prepareBunExecutable\(binary\)/,
+  "an existing Bun binary must be permission-hardened before validation");
+assert.match(service, /prepareBunExecutable\(stagedBinary\)/);
+assert.match(service, /prepareBunExecutable\(installed\)/);
+assert.match(service, /runCommand\(\s*bunProcess\(binary, "--version"\)/);
+assert.match(service, /runCommand\(bunProcess\(installed, "--version"\)/);
+assert.doesNotMatch(service, /new ProcessBuilder\(binary\.getAbsolutePath\(\), "--version"\)/);
+assert.doesNotMatch(service, /new ProcessBuilder\(installed\.getAbsolutePath\(\), "--version"\)/);
+assert.doesNotMatch(service, /command\.add\(bun\.getAbsolutePath\(\)\)/,
+  "the long-running server must also use the linker-backed builder");
+assert.match(service, /long nextHealthNoticeAt = 0L/);
+assert.doesNotMatch(service, /long deadline = System\.currentTimeMillis\(\) \+ 60000L/);
+assert.doesNotMatch(service, /60초 안에 \/api\/image\/health 응답이 오지 않았습니다/);
 assert.match(service, /EXTRA_COMFY_URL/);
 assert.match(service, /command\.add\("src\/cli\.ts"\)/);
 assert.match(service, /command\.add\("--config"\)/);
