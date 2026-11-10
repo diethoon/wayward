@@ -346,7 +346,7 @@ jobs:
           git fetch --no-tags origin main
           git cat-file -e "${SOURCE_COMMIT}:wayward 11.2.zip"
           git show "${SOURCE_COMMIT}:wayward 11.2.zip" > "$ARCHIVE"
-          python3 - "$ARCHIVE" "$EXPECTED_BYTES" "$EXPECTED_BLOB" "$ASSETS/wml-runtime/wml" "$RUNNER_TEMP/wayward-11.2-wml-index.json" "$RUNNER_TEMP/wayward-11.2-wml-report.txt" <<'PY'
+          python3 - "$ARCHIVE" "$EXPECTED_BYTES" "$EXPECTED_BLOB" "$ASSETS/wml-runtime/wml" "$RUNNER_TEMP/wayward-11.2-wml-index.json" "$RUNNER_TEMP/wayward-11.2-wml-report.txt" "$GITHUB_WORKSPACE/android-external-folder-launcher/app/src/main/assets/wml/symbols/2026-11-01.js" <<'PY'
           import hashlib
           import io
           import json
@@ -355,7 +355,7 @@ jobs:
           import sys
           import zipfile
 
-          archive_path, expected_bytes, expected_blob, output_root, index_path, report_path = sys.argv[1:]
+          archive_path, expected_bytes, expected_blob, output_root, index_path, report_path, bundled_symbols_path = sys.argv[1:]
           expected_bytes = int(expected_bytes)
           archive_hash = hashlib.sha1()
           archive_sha256 = hashlib.sha256()
@@ -377,12 +377,9 @@ jobs:
           html_md5 = "d75797d4101f4a1312b3ae0571d77f68"
           core_suffix = "wml/runtime/wml-core.js"
           required = (
-              "wml/i18n/ko/finals.js",
-              "wml/i18n/ko/display.js",
-              "wml/i18n/ko/voice.js",
-              "wml/i18n/ko/runtime.js",
               "wml/runtime/wml-core.js",
               "wml/mods/mods.js",
+              "wml/symbols/2026-11-01.js",
           )
           archives = []
           core_candidates = []
@@ -523,6 +520,44 @@ jobs:
                   "path": relative, "bytes": written,
                   "git_blob_sha1": git_blob.hexdigest(), "sha256": sha256.hexdigest()
               })
+          # Compare every official game mapping from Wayward 11.2 with the launcher's
+          # richer fallback table. The fallback may add mod-specific entries, but it
+          # must never point an official game symbol at a different minified name.
+          def read_symbols(path):
+              source = Path(path).read_text(encoding="utf-8")
+              start = source.find("WML.symbols(")
+              end = source.rfind(");")
+              if start < 0 or end < start:
+                  raise SystemExit("Invalid WML.symbols wrapper: " + str(path))
+              return json.loads(source[start + len("WML.symbols("):end])
+
+          official_table = read_symbols(output_root / "wml/symbols/2026-11-01.js")
+          bundled_table = read_symbols(bundled_symbols_path)
+          if official_table.get("game") != "2026-11-01":
+              raise SystemExit("Official WML symbol table game version mismatch.")
+          official_symbols = official_table.get("symbols", {})
+          bundled_symbols = bundled_table.get("symbols", {})
+          mapping_mismatches = {
+              name: {"official": value.get("name"), "bundled": bundled_symbols.get(name, {}).get("name")}
+              for name, value in official_symbols.items()
+              if bundled_symbols.get(name, {}).get("name") != value.get("name")
+          }
+          if mapping_mismatches:
+              raise SystemExit(
+                  "Bundled WML symbol table disagrees with the exact Wayward 11.2 game: "
+                  + json.dumps(mapping_mismatches, ensure_ascii=False, sort_keys=True)
+              )
+          required_image_symbols = ("imageLookup", "imageEntryUrl", "imageUsagePortraitPanel")
+          missing_image_symbols = [name for name in required_image_symbols if name not in bundled_symbols]
+          if missing_image_symbols:
+              raise SystemExit("Bundled Image Studio hook symbols missing: " + repr(missing_image_symbols))
+          report["symbol_validation"] = {
+              "game": official_table.get("game"),
+              "official_symbol_count": len(official_symbols),
+              "bundled_symbol_count": len(bundled_symbols),
+              "official_mapping_mismatches": 0,
+              "image_studio_extra_symbols": list(required_image_symbols),
+          }
           Path(index_path).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
           Path(report_path).write_text(
               "source=diethoon/wayward@26d6c32e0b0abbb886e3029efd548b7ca6774401\n"
