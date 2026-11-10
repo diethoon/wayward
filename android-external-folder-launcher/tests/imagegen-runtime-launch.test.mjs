@@ -75,9 +75,8 @@ assert.match(service, /long nextHealthNoticeAt = 0L/);
 assert.doesNotMatch(service, /long deadline = System\.currentTimeMillis\(\) \+ 60000L/);
 assert.doesNotMatch(service, /60초 안에 \/api\/image\/health 응답이 오지 않았습니다/);
 assert.match(service, /EXTRA_COMFY_URL/);
-assert.match(service, /command\.add\("src\/cli\.ts"\)/);
-assert.match(service, /command\.add\("--config"\)/);
-assert.match(service, /command\.add\("--no-webp"\)/);
+assert.match(service, /bunProcess\(bun,\s*"src\/cli\.ts",\s*"--config",\s*config\.getAbsolutePath\(\),\s*"--no-webp"\)/,
+  "the long-running server must pass its CLI arguments through the linker-backed builder");
 assert.match(service, /NAI_TOKEN/);
 assert.match(service, /ImageProviderStore\.readNovelAiToken\(this\)/);
 assert.match(service, /token != null && !token\.trim\(\)\.isEmpty\(\)/,
