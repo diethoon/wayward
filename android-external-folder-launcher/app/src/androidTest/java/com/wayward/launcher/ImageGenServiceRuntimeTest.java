@@ -27,6 +27,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
@@ -79,8 +80,15 @@ public final class ImageGenServiceRuntimeTest {
                     + startupLogs(context), 200, settingsCode);
             assertEquals("ImageGen health did not become ready after provider setup. "
                     + startupLogs(context), 200, awaitStatus(200, 30_000L));
+            String bunVersion = readText(new File(context.getFilesDir(), "imagegen/bun-version.log"));
+            assertTrue("The test did not execute the pinned Android Bun 1.4.4 binary: " + bunVersion,
+                    bunVersion.contains("1.4.4"));
+            String serverLog = readText(new File(context.getFilesDir(), "imagegen/server.log"));
+            assertTrue("The embedded wayward-imagegen server did not report listening: " + serverLog,
+                    serverLog.contains("wayward-imagegen 0.8.4") && serverLog.toLowerCase().contains("listening"));
 
-            instrumentation.runOnMainSync(() -> launcherActivity.finish());
+            Activity activityToFinish = launcherActivity;
+            instrumentation.runOnMainSync(activityToFinish::finish);
             launcherActivity = null;
 
             long keepAliveUntil = System.currentTimeMillis() + 15_000L;
@@ -226,8 +234,9 @@ public final class ImageGenServiceRuntimeTest {
             if (body != null) {
                 connection.setDoOutput(true);
                 connection.setRequestProperty("content-type", "application/json");
-                try (FileOutputStream ignored = null) {
-                    connection.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));
+                try (OutputStream output = connection.getOutputStream()) {
+                    output.write(body.getBytes(StandardCharsets.UTF_8));
+                    output.flush();
                 }
             }
             return connection.getResponseCode();
@@ -253,6 +262,19 @@ public final class ImageGenServiceRuntimeTest {
             if (action.title != null && "중지".contentEquals(action.title)) return action;
         }
         return null;
+    }
+
+    private static String readText(File file) throws Exception {
+        if (!file.isFile()) return "";
+        try (InputStream input = new FileInputStream(file);
+             java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                if (read > 0) output.write(buffer, 0, read);
+            }
+            return output.toString("UTF-8");
+        }
     }
 
     private static String startupLogs(Context context) {
