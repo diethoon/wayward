@@ -2,7 +2,7 @@ name: Build Wayward external-folder Android launcher
 
 on:
   push:
-    branches: [feature/android-external-folder-launcher-v1, feature/android-external-folder-launcher-viewport-fit, feature/android-launcher-zip-mods-multi-sessions, feature/android-imagegen-launcher-one-tap, perf/launcher-saf-webview-20261109]
+    branches: [feature/android-external-folder-launcher-v1, feature/android-external-folder-launcher-viewport-fit, feature/android-launcher-zip-mods-multi-sessions, feature/android-imagegen-launcher-one-tap, perf/launcher-saf-webview-20261109, audit/wayward-11-2-runtime-20261111]
     paths:
       - "android-external-folder-launcher/**"
       - ".github/workflows/build-android-external-folder-launcher.yml"
@@ -630,6 +630,163 @@ jobs:
               output.write("\n".join(report) + "\n")
           print("\n".join(report))
           PY
+      - name: Inspect exact Wayward 11.2 distribution and embedded WML runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_COMMIT="26d6c32e0b0abbb886e3029efd548b7ca6774401"
+          EXPECTED_BYTES="4017867"
+          EXPECTED_BLOB="5c563bdc7c0d19bd40f44c5c61c91d450dbfc4ff"
+          ARCHIVE="$RUNNER_TEMP/wayward-11.2.zip"
+          git fetch --no-tags origin main
+          git cat-file -e "\${SOURCE_COMMIT}:wayward 11.2.zip"
+          git show "\${SOURCE_COMMIT}:wayward 11.2.zip" > "$ARCHIVE"
+          python3 - "$ARCHIVE" "$EXPECTED_BYTES" "$EXPECTED_BLOB" "$RUNNER_TEMP/wayward-11.2-forensics" <<'PY'
+          import hashlib
+          import io
+          import json
+          from pathlib import Path, PurePosixPath
+          import sys
+          import zipfile
+
+          archive_path, expected_bytes, expected_blob, output_root = sys.argv[1:]
+          root = Path(output_root)
+          root.mkdir(parents=True, exist_ok=True)
+          expected_bytes = int(expected_bytes)
+          sha256 = hashlib.sha256()
+          md5 = hashlib.md5()
+          git_blob = hashlib.sha1()
+          git_blob.update(f"blob {expected_bytes}\0".encode("ascii"))
+          size = 0
+          with open(archive_path, "rb") as source:
+              while True:
+                  chunk = source.read(4096)
+                  if not chunk:
+                      break
+                  size += len(chunk)
+                  sha256.update(chunk)
+                  md5.update(chunk)
+                  git_blob.update(chunk)
+          if size != expected_bytes or git_blob.hexdigest() != expected_blob:
+              raise SystemExit(
+                  f"wayward 11.2.zip mismatch: bytes={size} git_blob={git_blob.hexdigest()}"
+              )
+
+          markers = (
+              b"0.9.5", b"0.7.0", b"wml-core.js", b"wml/runtime",
+              b"pauseSettings", b"WML.VERSION", b"__WML__", b"mods.js",
+          )
+          relevant_paths = []
+          marker_hits = []
+          nested_archives = []
+          exact_html = []
+          extracted = []
+          def scan_zip(zf, label, depth=0):
+              for entry in zf.infolist():
+                  name = entry.filename.replace("\\", "/")
+                  if entry.is_dir():
+                      continue
+                  lower = name.lower()
+                  suffix = PurePosixPath(lower).suffix
+                  relevant = (
+                      "wml" in lower or "runtime" in lower or "core" in lower
+                      or "mods" in lower or lower.endswith("wayward_wml_ko.html")
+                      or suffix == ".zip"
+                  )
+                  if relevant:
+                      relevant_paths.append({
+                          "archive": label, "path": name,
+                          "bytes": entry.file_size, "compressed": entry.compress_size
+                      })
+                  if lower.endswith("wayward_wml_ko.html") and entry.file_size <= 10_000_000:
+                      data = zf.read(entry)
+                      digest = hashlib.md5(data).hexdigest()
+                      exact_html.append({
+                          "archive": label, "path": name, "bytes": len(data),
+                          "md5": digest,
+                          "matches_target": digest == "d75797d4101f4a1312b3ae0571d77f68"
+                      })
+                  if "wml" in lower and entry.file_size <= 8_000_000:
+                      data = zf.read(entry)
+                      safe = PurePosixPath(name)
+                      if not safe.is_absolute() and all(p not in ("", ".", "..") for p in safe.parts):
+                          target = root / "extracted" / Path(*safe.parts)
+                          target.parent.mkdir(parents=True, exist_ok=True)
+                          target.write_bytes(data)
+                          extracted.append({"archive": label, "path": name, "bytes": len(data)})
+                  if suffix in (".js", ".mjs", ".json", ".md", ".txt", ".html", ".htm", ".yml", ".yaml", ".properties") and entry.file_size <= 8_000_000:
+                      data = zf.read(entry)
+                      folded = data.lower()
+                      for marker in markers:
+                          at = folded.find(marker.lower())
+                          if at >= 0 and len(marker_hits) < 1000:
+                              context = data[max(0, at-120):min(len(data), at+240)]
+                              marker_hits.append({
+                                  "archive": label, "path": name,
+                                  "marker": marker.decode("ascii"),
+                                  "offset": at,
+                                  "context": context.decode("utf-8", "replace")
+                              })
+                  if suffix == ".zip" and depth < 2 and entry.file_size <= 64_000_000:
+                      data = zf.read(entry)
+                      try:
+                          with zipfile.ZipFile(io.BytesIO(data)) as nested:
+                              nested_label = label + "::" + name
+                              nested_archives.append({
+                                  "archive": label, "path": name,
+                                  "bytes": entry.file_size, "entry_count": len(nested.infolist())
+                              })
+                              scan_zip(nested, nested_label, depth + 1)
+                      except zipfile.BadZipFile:
+                          pass
+
+          with zipfile.ZipFile(archive_path) as bundle:
+              scan_zip(bundle, "wayward 11.2.zip")
+              top = sorted({
+                  entry.filename.replace("\\", "/").split("/", 1)[0]
+                  for entry in bundle.infolist() if entry.filename
+              })
+              entry_count = len(bundle.infolist())
+
+          report = {
+              "source_commit": "26d6c32e0b0abbb886e3029efd548b7ca6774401",
+              "archive_bytes": size,
+              "archive_git_blob_sha1": git_blob.hexdigest(),
+              "archive_sha256": sha256.hexdigest(),
+              "archive_md5": md5.hexdigest(),
+              "archive_entries": entry_count,
+              "top_level": top,
+              "exact_html_matches": exact_html,
+              "nested_archives": nested_archives,
+              "relevant_paths": relevant_paths,
+              "marker_hits": marker_hits,
+              "extracted_wml_files": extracted,
+          }
+          report_path = root / "wayward-11.2-forensics.json"
+          report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          print(json.dumps({
+              "archive_bytes": size,
+              "archive_sha256": sha256.hexdigest(),
+              "archive_md5": md5.hexdigest(),
+              "entry_count": entry_count,
+              "top_level": top,
+              "exact_html_matches": exact_html,
+              "nested_archives": nested_archives,
+              "relevant_paths_count": len(relevant_paths),
+              "marker_hits_count": len(marker_hits),
+              "extracted_wml_files": extracted,
+          }, ensure_ascii=False, indent=2))
+          PY
+      - name: Upload exact Wayward 11.2 WML distribution forensics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wayward-11.2-WML-distribution-forensics
+          path: |
+            \${{ runner.temp }}/wayward-11.2.zip
+            \${{ runner.temp }}/wayward-11.2-forensics
+          if-no-files-found: warn
+          retention-days: 14
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: '1.4.0'
