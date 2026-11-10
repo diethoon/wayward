@@ -232,6 +232,7 @@ public final class ImageGenServiceRuntimeTest {
         AtomicBoolean wmlCoreScriptServed = new AtomicBoolean(false);
         AtomicBoolean wmlSymbolsScriptServed = new AtomicBoolean(false);
         AtomicBoolean wmlModsManifestServed = new AtomicBoolean(false);
+        AtomicBoolean wmlLocaleBundleMissing = new AtomicBoolean(false);
         ConcurrentLinkedQueue<String> moduleRequests = new ConcurrentLinkedQueue<>();
         File artifactDirectory = new File(context.getFilesDir(), "ci-artifacts");
         if (!artifactDirectory.isDirectory() && !artifactDirectory.mkdirs()) {
@@ -417,18 +418,22 @@ public final class ImageGenServiceRuntimeTest {
                             } else if (requestPath != null && requestPath.startsWith("/wml/")) {
                                 wmlRelative = requestPath.substring(1);
                             }
-                            if (wmlRelative != null && (wmlRelative.startsWith("wml/i18n/")
-                                    || "wml/mods/mods.js".equals(wmlRelative))) {
+                            if (wmlRelative != null && wmlRelative.startsWith("wml/i18n/ko/")) {
+                                // Wayward 11.2 ships the 0.9.5 core but not the optional
+                                // Korean translation sidecars. Return a subresource 404 so
+                                // the real core boots in its documented English fallback;
+                                // do not mistake this packaging omission for a core failure.
+                                wmlLocaleBundleMissing.set(true);
+                                return new WebResourceResponse("application/javascript", "UTF-8",
+                                        404, "Not Found", java.util.Collections.emptyMap(),
+                                        new java.io.ByteArrayInputStream(new byte[0]));
+                            }
+                            if ("wml/mods/mods.js".equals(wmlRelative)) {
                                 try {
                                     InputStream fixture = instrumentation.getContext().getAssets()
                                             .open("wml-runtime/" + wmlRelative);
-                                    if ("wml/mods/mods.js".equals(wmlRelative)) {
-                                        wmlModsManifestServed.set(true);
-                                    }
-                                    String mime = wmlRelative.endsWith(".js") ? "application/javascript"
-                                            : wmlRelative.endsWith(".json") ? "application/json"
-                                            : "application/octet-stream";
-                                    return new WebResourceResponse(mime, "UTF-8", 200, "OK",
+                                    wmlModsManifestServed.set(true);
+                                    return new WebResourceResponse("application/javascript", "UTF-8", 200, "OK",
                                             java.util.Collections.emptyMap(), fixture);
                                 } catch (Exception error) {
                                     pageError.set("WML runtime fixture " + wmlRelative + ": " + error.getMessage());
@@ -673,6 +678,14 @@ public final class ImageGenServiceRuntimeTest {
                             + "bridgeType:typeof bridge,bridgeIsNull:bridge===null,bridgeKeys:bridge?Object.keys(bridge):[],"
                             + "charactersType:bridge?typeof bridge.characters:'missing',"
                             + "studioType:typeof window.WW_ImageStudio,"
+                            + "wmlVersion:window.WML?window.WML.VERSION:null,"
+                            + "localeBundleMissing:" + wmlLocaleBundleMissing.get() + ","
+                            + "officialSymbols:status&&status.symbols&&status.symbols.symbols?{"
+                            + "setScene:status.symbols.symbols.setScene&&status.symbols.symbols.setScene.name,"
+                            + "heroineDriveCalc:status.symbols.symbols.heroineDriveCalc&&status.symbols.symbols.heroineDriveCalc.name,"
+                            + "imageLookup:status.symbols.symbols.imageLookup&&status.symbols.symbols.imageLookup.name,"
+                            + "imageEntryUrl:status.symbols.symbols.imageEntryUrl&&status.symbols.symbols.imageEntryUrl.name,"
+                            + "imageUsagePortraitPanel:status.symbols.symbols.imageUsagePortraitPanel&&status.symbols.symbols.imageUsagePortraitPanel.name}:null,"
                             + "wml:status?{game:status.game,booted:status.booted,listed:status.listed,"
                             + "loaded:status.loaded,failed:status.failed,warnings:status.warnings,missing:status.missing,"
                             + "symbolsGame:status.symbols&&status.symbols.game,modSymbolIds:Object.keys(status.modSymbols||{})}:null,"
@@ -695,6 +708,25 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("WML did not complete a game boot before Image Studio was inspected: "
                             + wmlBridgeDiagnostics,
                     wmlState.optBoolean("booted", false));
+            assertEquals("The launcher did not load the exact WML 0.9.5 core from Wayward 11.2. "
+                            + wmlBridgeDiagnostics,
+                    "0.9.5", wmlBridgeState.optString("wmlVersion", ""));
+            assertTrue("The test must record the package's omitted Korean WML translation sidecars. "
+                            + wmlBridgeDiagnostics,
+                    wmlBridgeState.optBoolean("localeBundleMissing", false));
+            JSONObject officialSymbols = wmlBridgeState.optJSONObject("officialSymbols");
+            assertNotNull("The launcher did not register the merged 2026-11-01 symbol table. "
+                            + wmlBridgeDiagnostics, officialSymbols);
+            assertEquals("Official WML 0.9.5 setScene mapping is wrong.", "aie",
+                    officialSymbols.optString("setScene", ""));
+            assertEquals("Official WML 0.9.5 heroineDriveCalc mapping is wrong.", "il",
+                    officialSymbols.optString("heroineDriveCalc", ""));
+            assertEquals("Image Studio imageLookup hook mapping is missing.", "vy",
+                    officialSymbols.optString("imageLookup", ""));
+            assertEquals("Image Studio imageEntryUrl hook mapping is missing.", "o_",
+                    officialSymbols.optString("imageEntryUrl", ""));
+            assertEquals("Image Studio portrait panel hook mapping is missing.", "rv",
+                    officialSymbols.optString("imageUsagePortraitPanel", ""));
             assertEquals("The bundled 2026-11-01 semantic symbol table was not registered: "
                             + wmlBridgeDiagnostics,
                     "2026-11-01", wmlState.optString("symbolsGame", ""));
