@@ -486,25 +486,25 @@ public final class ImageGenServiceRuntimeTest {
             assertEquals("ImageGen did not become generation-ready after the settings save.",
                     200, awaitStatus(200, 30_000L));
 
-            // Exercise the one-tap Image Studio bridge in the actual Android WebView.
-            // The pinned HTML fixture does not install third-party WML mods, so
-            // provide the exact WW_ImageStudioBridge contract returned by the mod.
-            String bridgeFixture = "(function(){"
-                    + "window.WW_ImageStudio={open:function(){}};"
-                    + "var settingsButton=document.createElement('button');"
-                    + "settingsButton.id='wwis-generation-settings';"
-                    + "settingsButton.addEventListener('click',function(){settingsButton.dataset.clicked='yes';});"
-                    + "document.body.appendChild(settingsButton);"
-                    + "window.WW_ImageStudioBridge={"
-                    + "connection:function(){return {baseUrl:'http://127.0.0.1:8189'};},"
-                    + "characters:function(){return {skipped:0,characters:[{"
-                    + "id:'launcher-ci-probe',name:'Launcher CI Probe',"
-                    + "prompt:'portrait illustration',negativePrompt:'',"
-                    + "originalPrompt:'portrait illustration',originalNegativePrompt:''"
-                    + "}]};}"
-                    + "};return 'installed';})()";
-            assertEquals("The Android test could not install the Image Studio bridge fixture.",
-                    "installed", awaitJsString(instrumentation, gameWeb, bridgeFixture, 10_000L));
+            // Exercise the actual WW_ImageStudioBridge registered by the
+            // pinned WML Image Studio module. No fake bridge or fake settings
+            // button is installed into the game page.
+            String actualImageStudioBridgeType = awaitJsString(instrumentation, gameWeb,
+                    "typeof window.WW_ImageStudioBridge", 30_000L);
+            assertEquals("The real WML Image Studio module did not register its runtime bridge.",
+                    "object", actualImageStudioBridgeType);
+            String actualCharacterApiType = awaitJsString(instrumentation, gameWeb,
+                    "typeof window.WW_ImageStudioBridge.characters", 5_000L);
+            assertEquals("The real Image Studio character discovery API is missing.",
+                    "function", actualCharacterApiType);
+            String observeSettingsButton = "(function(){"
+                    + "var button=document.getElementById('wwis-generation-settings');"
+                    + "if(!button)return 'missing';"
+                    + "window.__waywardCiSettingsClicks=0;"
+                    + "button.addEventListener('click',function(){window.__waywardCiSettingsClicks++;},true);"
+                    + "return 'observing';})()";
+            assertEquals("The actual Image Studio WML UI did not render its settings button.",
+                    "observing", awaitJsString(instrumentation, gameWeb, observeSettingsButton, 10_000L));
 
             String settingsDispatch = "(function(){"
                     + "window.__waywardCiSettings={state:'pending'};"
