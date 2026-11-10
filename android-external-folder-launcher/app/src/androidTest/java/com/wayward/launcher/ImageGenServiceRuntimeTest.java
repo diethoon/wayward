@@ -39,6 +39,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.SequenceInputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
@@ -215,6 +216,8 @@ public final class ImageGenServiceRuntimeTest {
         AtomicReference<String> pageError = new AtomicReference<>("");
         AtomicBoolean imageStudioScriptServed = new AtomicBoolean(false);
         AtomicBoolean imageSearchScriptServed = new AtomicBoolean(false);
+        AtomicBoolean wmlCoreScriptServed = new AtomicBoolean(false);
+        AtomicBoolean wmlModsManifestServed = new AtomicBoolean(false);
         ConcurrentLinkedQueue<String> moduleRequests = new ConcurrentLinkedQueue<>();
         File artifactDirectory = new File(context.getFilesDir(), "ci-artifacts");
         if (!artifactDirectory.isDirectory() && !artifactDirectory.mkdirs()) {
@@ -367,6 +370,44 @@ public final class ImageGenServiceRuntimeTest {
                                     pageError.set("ZIP WML module " + zipPath + ": " + error.getMessage());
                                 }
                             }
+
+                            // Match MainActivity.FolderHandler: serve the pinned WML runtime tree,
+                            // and prepend the exact launcher folder bootstrap before wml-core.js.
+                            String wmlRelative = null;
+                            if (requestPath != null && requestPath.startsWith("/game/wml/")) {
+                                wmlRelative = requestPath.substring("/game/".length());
+                            } else if (requestPath != null && requestPath.startsWith("/wml/")) {
+                                wmlRelative = requestPath.substring(1);
+                            }
+                            if (wmlRelative != null && (wmlRelative.startsWith("wml/i18n/")
+                                    || "wml/mods/mods.js".equals(wmlRelative))) {
+                                try {
+                                    InputStream fixture = instrumentation.getContext().getAssets()
+                                            .open("wml-runtime/" + wmlRelative);
+                                    if ("wml/mods/mods.js".equals(wmlRelative)) {
+                                        wmlModsManifestServed.set(true);
+                                    }
+                                    String mime = wmlRelative.endsWith(".js") ? "application/javascript"
+                                            : wmlRelative.endsWith(".json") ? "application/json"
+                                            : "application/octet-stream";
+                                    return new WebResourceResponse(mime, "UTF-8", 200, "OK",
+                                            java.util.Collections.emptyMap(), fixture);
+                                } catch (Exception error) {
+                                    pageError.set("WML runtime fixture " + wmlRelative + ": " + error.getMessage());
+                                }
+                            }
+                            if ("wml/runtime/wml-core.js".equals(wmlRelative)) {
+                                try {
+                                    InputStream bootstrap = main.getAssets().open("wml-folder-bootstrap.js");
+                                    InputStream core = instrumentation.getContext().getAssets()
+                                            .open("wml-runtime/wml/runtime/wml-core.js");
+                                    wmlCoreScriptServed.set(true);
+                                    return new WebResourceResponse("application/javascript", "UTF-8", 200, "OK",
+                                            java.util.Collections.emptyMap(), new SequenceInputStream(bootstrap, core));
+                                } catch (Exception error) {
+                                    pageError.set("WML core/bootstrap fixture: " + error.getMessage());
+                                }
+                            }
                             return super.shouldInterceptRequest(view, request);
                         }
                         @Override public void onPageFinished(WebView view, String url) {
@@ -489,6 +530,10 @@ public final class ImageGenServiceRuntimeTest {
                     && (!imageStudioScriptServed.get() || !imageSearchScriptServed.get())) {
                 Thread.sleep(150L);
             }
+            assertTrue("The real pinned WML core was not served with the launcher folder bootstrap. "
+                    + "page=" + pageError.get(), wmlCoreScriptServed.get());
+            assertTrue("The real pinned WML mods.js manifest was not served. page=" + pageError.get(),
+                    wmlModsManifestServed.get());
             assertTrue("The game WML loader did not request the real Image Studio module. "
                     + "served=" + imageStudioScriptServed.get() + " page=" + pageError.get()
                     + " requests=" + moduleRequests,
