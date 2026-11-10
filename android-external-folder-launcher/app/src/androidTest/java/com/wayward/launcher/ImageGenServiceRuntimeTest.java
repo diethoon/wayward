@@ -68,6 +68,16 @@ public final class ImageGenServiceRuntimeTest {
                     Build.SUPPORTED_64_BIT_ABIS != null && Build.SUPPORTED_64_BIT_ABIS.length > 0);
 
             grantNotificationPermission(instrumentation, context);
+            // Isolate every CI run from any stale batch/cache result and stop a
+            // leftover service before binding the fixed test port.
+            try {
+                context.startService(new Intent(context, ImageGenService.class)
+                        .setAction(ImageGenService.ACTION_STOP));
+            } catch (Exception ignored) {}
+            awaitServerDown(15_000L);
+            deleteTestTree(new File(context.getFilesDir(), "imagegen"));
+            ImageGenStatusStore.write(context.getFilesDir(), false, false, false,
+                    "CI runtime test reset", "");
             configureCloudflareProvider(context, GAME_PROFILE_ID);
             launcherActivity = instrumentation.startActivitySync(
                     new Intent(context, MainActivity.class)
@@ -166,6 +176,17 @@ public final class ImageGenServiceRuntimeTest {
         }
     }
 
+
+    private static void deleteTestTree(File file) {
+        if (file == null || !file.exists()) return;
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) for (File child : children) deleteTestTree(child);
+        }
+        if (!file.delete() && file.exists()) {
+            throw new IllegalStateException("Could not reset ImageGen CI directory: " + file.getAbsolutePath());
+        }
+    }
 
     private static final String GAME_PROFILE_ID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     private static final String FLUX_PROVIDER_ID = "0123456789abcdef0123456789abcdef";
