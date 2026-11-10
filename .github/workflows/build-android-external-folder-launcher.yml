@@ -344,8 +344,8 @@ jobs:
           ASSETS="$GITHUB_WORKSPACE/android-external-folder-launcher/app/src/androidTest/assets"
           mkdir -p "$ASSETS/wml-runtime/wml"
           git fetch --no-tags origin main
-          git cat-file -e "\${SOURCE_COMMIT}:wayward 11.2.zip"
-          git show "\${SOURCE_COMMIT}:wayward 11.2.zip" > "$ARCHIVE"
+          git cat-file -e "${SOURCE_COMMIT}:wayward 11.2.zip"
+          git show "${SOURCE_COMMIT}:wayward 11.2.zip" > "$ARCHIVE"
           python3 - "$ARCHIVE" "$EXPECTED_BYTES" "$EXPECTED_BLOB" "$ASSETS/wml-runtime/wml" "$RUNNER_TEMP/wayward-11.2-wml-index.json" "$RUNNER_TEMP/wayward-11.2-wml-report.txt" <<'PY'
           import hashlib
           import io
