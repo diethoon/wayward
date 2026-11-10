@@ -39,6 +39,26 @@ public final class ZipModStoreTest {
             check(!new File(temp, "wml-zip-mods/sample-mod/mod.js").exists(), "ZIP not extracted");
             check(store.fileFor("sample-mod").isFile(), "original ZIP retained in app store");
 
+            // Image Studio 1.31.20 ships a real 320,679-byte mod.js. Exercise
+            // the same size class in the install/inspect/stream path so a
+            // launcher ZIP-size regression cannot silently block the module.
+            StringBuilder largeModSource = new StringBuilder(
+                    "WML.define({ id: 'large-imagestudio', setup(api) {} });\\n/*");
+            while (largeModSource.length() < 320_677) largeModSource.append('x');
+            largeModSource.append("*/");
+            check(largeModSource.length() == 320_679, "large WML fixture matches Image Studio mod.js byte size");
+            File largeModZip = store.temporaryFile("large-mod-test");
+            writeZip(largeModZip, Map.of("mod.js", largeModSource.toString(), "portrait.js", "window.portraitReady=true;"));
+            ZipModStore.ModInfo largeInfo = ZipModStore.inspect(largeModZip);
+            check("large-imagestudio".equals(largeInfo.id), "large WML mod.js ID parsed beyond 64KB");
+            store.install(largeModZip);
+            check(store.listModIds().contains("large-imagestudio"), "large WML mod registered from ZIP");
+            check(largeModSource.toString().equals(read(store.open("wml/mods/large-imagestudio/mod.js"))),
+                    "large WML mod.js streams intact through ZIP overlay");
+            check("window.portraitReady=true;".equals(
+                    read(store.open("wml/mods/large-imagestudio/portrait.js"))),
+                    "large WML mod adjacent assets remain served");
+
             File nestedZip = store.temporaryFile("nested-test");
             Map<String, String> nestedEntries = new LinkedHashMap<>();
             nestedEntries.put("bundle-root/mod.js", "WML.define({ id: \"nested-mod\", setup(api) {} });");
