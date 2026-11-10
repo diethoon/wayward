@@ -226,6 +226,7 @@ public final class ImageGenServiceRuntimeTest {
         String resultSummary = "state=not_started";
         WebView[] webHolder = new WebView[1];
         CountDownLatch pageFinished = new CountDownLatch(1);
+        CountDownLatch storageResetFinished = new CountDownLatch(1);
         AtomicReference<String> pageError = new AtomicReference<>("");
         AtomicBoolean imageStudioScriptServed = new AtomicBoolean(false);
         AtomicBoolean imageSearchScriptServed = new AtomicBoolean(false);
@@ -467,7 +468,11 @@ public final class ImageGenServiceRuntimeTest {
                             return super.shouldInterceptRequest(view, request);
                         }
                         @Override public void onPageFinished(WebView view, String url) {
-                            pageFinished.countDown();
+                            if (url != null && url.contains("__wayward_ci_storage_reset__")) {
+                                storageResetFinished.countDown();
+                            } else {
+                                pageFinished.countDown();
+                            }
                             super.onPageFinished(view, url);
                         }
                         @Override public void onReceivedError(WebView view,
@@ -506,6 +511,23 @@ public final class ImageGenServiceRuntimeTest {
                             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
                     gameWeb.setVisibility(View.VISIBLE);
                     webHolder[0] = gameWeb;
+                    // This test uses a fixed localhost origin. Clear browser-persisted
+                    // consent and WML toggles before loading the real game so a previous
+                    // CI session cannot silently hide the age gate or turn Image Studio off.
+                    String resetHtml = "<!doctype html><html><head><meta charset='utf-8'></head>"
+                            + "<body><script>localStorage.clear();sessionStorage.clear();</script></body></html>";
+                    gameWeb.loadDataWithBaseURL(
+                            GAME_ORIGIN + "/game/__wayward_ci_storage_reset__.html",
+                            resetHtml, "text/html", "UTF-8", null);
+                    if (!storageResetFinished.await(10, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("Could not clear the isolated Wayward WebView origin.");
+                    }
+                    String clearedStorage = awaitJsString(instrumentation, gameWeb,
+                            "JSON.stringify({local:localStorage.length,session:sessionStorage.length})",
+                            5_000L);
+                    if (!"{\"local\":0,\"session\":0}".equals(clearedStorage)) {
+                        throw new IllegalStateException("Wayward CI browser storage did not reset: " + clearedStorage);
+                    }
                     gameWeb.loadDataWithBaseURL(
                             GAME_ORIGIN + "/game/Wayward_WML_ko.html",
                             new String(gameHtml, StandardCharsets.UTF_8),
@@ -991,10 +1013,28 @@ public final class ImageGenServiceRuntimeTest {
                 Thread.sleep(450L);
                 continue;
             }
-            if ("no_visible_age_gate".equals(result)) break;
+            // DOMContentLoaded/onPageFinished can precede the game's async
+            // save/settings hydration. A blank first probe is not proof that the
+            // age gate is absent; keep observing until the dialog appears or the
+            // bounded readiness window expires.
+            if ("no_visible_age_gate".equals(result)) {
+                Thread.sleep(200L);
+                continue;
+            }
             Thread.sleep(150L);
         }
-        assertTrue("The Android test never observed Wayward's age/consent gate.", sawGate);
+        if (!sawGate) {
+            String readiness = awaitJsString(instrumentation, gameWeb,
+                    "(function(){var root=document.getElementById('root');var state=null;"
+                            + "try{var raw=localStorage.getItem('tavern-settings');state=raw?JSON.parse(raw):null;}catch(e){state='parse_error:'+String(e);}"
+                            + "var status=null;try{status=window.WML&&window.WML.status?window.WML.status():null;}catch(e){status='status_error:'+String(e);}"
+                            + "return JSON.stringify({title:document.title,body:String(document.body&&document.body.innerText||'').slice(0,1200),"
+                            + "rootText:String(root&&root.innerText||'').slice(0,1200),settings:state,"
+                            + "wmlVersion:window.WML&&window.WML.VERSION||null,wmlStatus:status});})()",
+                    5_000L);
+            fail("The Android test never observed Wayward's age/consent gate after waiting for page hydration. "
+                    + "DOM/WML diagnostics: " + readiness + "; lastGateProbe=" + result);
+        }
         String visibleGate = awaitJsString(instrumentation, gameWeb,
                 "(function(){var labels=['연령 확인','성인 콘텐츠 안내'];"
                         + "return String(Array.from(document.querySelectorAll('body *')).some(function(e){"
