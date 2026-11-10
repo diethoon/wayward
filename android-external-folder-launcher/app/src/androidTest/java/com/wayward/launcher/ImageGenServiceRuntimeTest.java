@@ -74,6 +74,29 @@ public final class ImageGenServiceRuntimeTest {
             int initialHealth = awaitReachable(SERVER_START_TIMEOUT_MS);
             assertEquals("Bundled ARM64 Bun did not start the actual ImageGen HTTP server. "
                     + startupLogs(context), 503, initialHealth);
+            ImageGenStatusStore.State unconfigured = ImageGenStatusStore.read(context.getFilesDir());
+            assertTrue("HTTP 503 means the API is reachable but provider setup is pending. "
+                    + startupLogs(context), unconfigured.isAvailable());
+            assertTrue("Provider setup must not be treated as generation-ready. "
+                    + startupLogs(context), !unconfigured.isReady());
+
+            Instrumentation.ActivityMonitor panelMonitor = instrumentation.addMonitor(
+                    ImageGenPanelActivity.class.getName(), null, false);
+            Activity activityForPanel = launcherActivity;
+            Method openPanel = MainActivity.class.getDeclaredMethod("openImageGenPanel");
+            openPanel.setAccessible(true);
+            instrumentation.runOnMainSync(() -> {
+                try {
+                    openPanel.invoke(activityForPanel);
+                } catch (Exception error) {
+                    throw new RuntimeException("Could not open EasyGen settings while provider setup is pending", error);
+                }
+            });
+            Activity settingsPanel = instrumentation.waitForMonitorWithTimeout(panelMonitor, 10_000L);
+            assertNotNull("EasyGen settings panel stayed blocked while health returned HTTP 503. "
+                    + startupLogs(context), settingsPanel);
+            instrumentation.runOnMainSync(settingsPanel::finish);
+            instrumentation.removeMonitor(panelMonitor);
 
             int settingsCode = updateTestProviderSettings();
             assertEquals("Could not configure the test-only provider state. "

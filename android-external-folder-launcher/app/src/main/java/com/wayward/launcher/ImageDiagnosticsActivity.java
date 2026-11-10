@@ -17,6 +17,9 @@ import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -28,7 +31,9 @@ public final class ImageDiagnosticsActivity extends Activity {
     private static final int TEXT = Color.rgb(232, 239, 233);
     private static final int MUTED = Color.rgb(164, 182, 170);
     private TextView logText;
+    private Button clearLogButton;
     private String lastLog = "";
+    private boolean showingServerLog = false;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -55,12 +60,14 @@ public final class ImageDiagnosticsActivity extends Activity {
         page.addView(description, descParams);
 
         page.addView(actionButton("새 진단 시작 · 이전 로그 지우기", true, this::startCapture));
-        page.addView(actionButton("로그 새로고침", false, this::refreshLog));
+        page.addView(actionButton("이미지 전달 이벤트 보기", false, this::refreshLog));
+        page.addView(actionButton("ImageGen 서버 실행 로그 보기", false, this::refreshServerLog));
         page.addView(actionButton("로그 복사", false, this::copyLog));
-        page.addView(actionButton("로그 초기화", false, this::clearLog));
+        clearLogButton = actionButton("이미지 전달 로그 초기화", false, this::clearLog);
+        page.addView(clearLogButton);
 
         TextView legend = new TextView(this);
-        legend.setText("주요 단계: game_generate_requested → native_image_received → data_url_probe_loaded / img_element_error. 404 항목에는 srcHost/srcPath, DOM id/class/alt, 반복 횟수가 표시됩니다.");
+        legend.setText("이미지 전달 이벤트와 ImageGen 서버 실행 로그는 서로 다른 파일입니다. 서버 상태가 HTTP 503이면 ‘ImageGen 서버 실행 로그 보기’를 열어 startup.log와 server.log를 확인하세요. 요청 프롬프트, API 토큰, 이미지 데이터는 표시하지 않습니다.");
         legend.setTextColor(MUTED);
         legend.setTextSize(11);
         legend.setLineSpacing(dp(2), 1f);
@@ -89,7 +96,8 @@ public final class ImageDiagnosticsActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
-        refreshLog();
+        if (showingServerLog) refreshServerLog();
+        else refreshLog();
     }
 
     private Button actionButton(String label, boolean primary, Runnable action) {
@@ -121,6 +129,8 @@ public final class ImageDiagnosticsActivity extends Activity {
     }
 
     private void refreshLog() {
+        showingServerLog = false;
+        if (clearLogButton != null) clearLogButton.setVisibility(View.VISIBLE);
         try {
             JSONArray events = ImagePipelineDiagnostics.readRecent(this, 200);
             StringBuilder out = new StringBuilder();
@@ -146,8 +156,56 @@ public final class ImageDiagnosticsActivity extends Activity {
         }
     }
 
+    private void refreshServerLog() {
+        showingServerLog = true;
+        if (clearLogButton != null) clearLogButton.setVisibility(View.GONE);
+        try {
+            ImageGenStatusStore.State state = ImageGenStatusStore.read(getFilesDir());
+            StringBuilder out = new StringBuilder();
+            out.append("ImageGen 서버 상태\n");
+            out.append("available=").append(state.isAvailable())
+                    .append(" ready=").append(state.isReady())
+                    .append(" starting=").append(state.isStarting()).append('\n');
+            out.append(state.message).append("\n\n");
+            File directory = new File(getFilesDir(), "imagegen");
+            appendFileTail(out, "startup.log", new File(directory, "startup.log"), 16 * 1024);
+            appendFileTail(out, "server.log", new File(directory, "server.log"), 48 * 1024);
+            lastLog = out.toString();
+            logText.setText(lastLog);
+        } catch (Exception error) {
+            showError("서버 로그 읽기 실패", error);
+        }
+    }
+
+    private void appendFileTail(StringBuilder out, String title, File file, int maxBytes) {
+        out.append("==== ").append(title).append(" ====\n");
+        if (!file.isFile()) {
+            out.append("(아직 로그 파일이 생성되지 않았습니다.)\n\n");
+            return;
+        }
+        try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
+            long length = input.length();
+            long offset = Math.max(0L, length - maxBytes);
+            int count = (int) (length - offset);
+            byte[] bytes = new byte[count];
+            input.seek(offset);
+            input.readFully(bytes);
+            String content = new String(bytes, StandardCharsets.UTF_8);
+            if (offset > 0L) {
+                int newline = content.indexOf('\n');
+                if (newline >= 0) content = content.substring(newline + 1);
+            }
+            out.append(content.trim()).append("\n\n");
+        } catch (Exception error) {
+            out.append("(읽기 실패: ").append(error.getClass().getSimpleName()).append(")\n\n");
+        }
+    }
+
     private void copyLog() {
-        if (TextUtils.isEmpty(lastLog)) refreshLog();
+        if (TextUtils.isEmpty(lastLog)) {
+            if (showingServerLog) refreshServerLog();
+            else refreshLog();
+        }
         ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (clipboard == null) {
             Toast.makeText(this, "클립보드를 사용할 수 없습니다.", Toast.LENGTH_SHORT).show();
@@ -158,6 +216,8 @@ public final class ImageDiagnosticsActivity extends Activity {
     }
 
     private void clearLog() {
+        showingServerLog = false;
+        if (clearLogButton != null) clearLogButton.setVisibility(View.VISIBLE);
         try {
             ImagePipelineDiagnostics.clear(this);
             ImagePipelineDiagnostics.record(this, "log_cleared", null);
