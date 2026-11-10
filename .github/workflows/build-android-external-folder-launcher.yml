@@ -28,11 +28,13 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import hashlib
+          import io
           import json
           from pathlib import Path
           import re
           import subprocess
           import tempfile
+          import zipfile
 
           target_md5 = "d75797d4101f4a1312b3ae0571d77f68"
           repositories = ("diethoon/3.36", "diethoon/wayward")
@@ -53,6 +55,7 @@ jobs:
                   ], text=True).splitlines()
                   html_blobs = {}
                   core_blobs = {}
+                  archive_blobs = {}
                   for ref in refs:
                       listing = subprocess.check_output([
                           "git", "-C", str(directory), "ls-tree", "-rl", "--full-tree", ref
@@ -79,6 +82,11 @@ jobs:
                               if size <= 4_000_000:
                                   key = (blob_sha, file_path, size)
                                   core_blobs.setdefault(key, set()).add(ref)
+                          if lower_path.endswith(".zip") and size <= 80_000_000 and (
+                              "wml" in lower_path or "wayward_mod" in lower_path or lower_path.endswith("/mods.zip")
+                          ):
+                              key = (blob_sha, file_path, size)
+                              archive_blobs.setdefault(key, set()).add(ref)
 
                   report.append(f"REPOSITORY {repository} branch_count={len(refs)}")
                   for (blob_sha, file_path, size), refs_for_blob in sorted(html_blobs.items()):
@@ -108,6 +116,88 @@ jobs:
                               "WML_RUNTIME " + json.dumps({
                                   "path": file_path, "bytes": size, "git_blob": blob_sha,
                                   "sha256": hashlib.sha256(data).hexdigest(), "versions": versions,
+                                  "branches": sorted(refs_for_blob)
+                              }, ensure_ascii=False)
+                          )
+                  for (blob_sha, file_path, size), refs_for_blob in sorted(archive_blobs.items()):
+                      data = subprocess.check_output(["git", "-C", str(directory), "cat-file", "blob", blob_sha])
+                      archive_sha = hashlib.sha256(data).hexdigest()
+                      try:
+                          archive = zipfile.ZipFile(io.BytesIO(data))
+                      except zipfile.BadZipFile:
+                          report.append("WML_ARCHIVE_INVALID " + json.dumps({
+                              "path": file_path, "bytes": size, "git_blob": blob_sha,
+                              "sha256": archive_sha, "branches": sorted(refs_for_blob)
+                          }, ensure_ascii=False))
+                          continue
+                      matched_entries = []
+                      version_literals = []
+                      with archive:
+                          for entry in archive.infolist():
+                              entry_name = entry.filename.replace("\\", "/")
+                              lowered = entry_name.lower()
+                              suffix = Path(lowered).suffix
+                              if entry.is_dir() or entry.file_size > 8_000_000:
+                                  continue
+                              if suffix not in (".js", ".mjs", ".json", ".txt", ".md", ".ts"):
+                                  continue
+                              try:
+                                  entry_data = archive.read(entry)
+                              except Exception as error:
+                                  report.append("WML_ARCHIVE_ENTRY_ERROR " + json.dumps({
+                                      "archive": file_path, "entry": entry_name, "error": str(error)[:180]
+                                  }, ensure_ascii=False))
+                                  continue
+                              lower_data = entry_data.lower()
+                              is_runtime = (
+                                  lowered.endswith("wml-core.js")
+                                  or "/wml/runtime/" in lowered
+                                  or lowered.endswith("/wml/package.json")
+                                  or lowered.endswith("/wml/manifest.json")
+                                  or lowered.endswith("/wml/version.json")
+                              )
+                              version_match = (
+                                  b"0.9.5" in lower_data
+                                  or b"0.7.0" in lower_data
+                              )
+                              if is_runtime:
+                                  patterns = (
+                                      rb"\b(?:const|let|var)\s+VERSION\s*=\s*['\"]([^'\"]+)['\"]",
+                                      rb"\bversion\s*:\s*['\"]([^'\"]+)['\"]",
+                                      rb"['\"]version['\"]\s*:\s*['\"]([^'\"]+)['\"]",
+                                  )
+                                  versions = sorted({
+                                      value.decode("ascii", "replace")
+                                      for pattern in patterns
+                                      for value in re.findall(pattern, entry_data)
+                                  })
+                                  matched_entries.append({
+                                      "entry": entry_name,
+                                      "bytes": entry.file_size,
+                                      "sha256": hashlib.sha256(entry_data).hexdigest(),
+                                      "versions": versions,
+                                      "contains_095": b"0.9.5" in lower_data,
+                                      "contains_070": b"0.7.0" in lower_data,
+                                  })
+                              elif version_match and len(version_literals) < 100:
+                                  at = lower_data.find(b"0.9.5")
+                                  if at < 0:
+                                      at = lower_data.find(b"0.7.0")
+                                  snippet = entry_data[max(0, at-100):at+180]
+                                  version_literals.append({
+                                      "entry": entry_name,
+                                      "offset": at,
+                                      "context": snippet.decode("utf-8", "replace")
+                                  })
+                      if matched_entries or version_literals or "wml" in file_path.lower():
+                          report.append(
+                              "WML_ARCHIVE " + json.dumps({
+                                  "path": file_path,
+                                  "bytes": size,
+                                  "git_blob": blob_sha,
+                                  "sha256": archive_sha,
+                                  "runtime_entries": matched_entries,
+                                  "version_literals": version_literals[:30],
                                   "branches": sorted(refs_for_blob)
                               }, ensure_ascii=False)
                           )
