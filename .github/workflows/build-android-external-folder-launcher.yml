@@ -137,12 +137,13 @@ jobs:
                   define = re.search(r"WML\.define\s*\(\s*\{", source)
                   head = source[define.end():] if define else source
                   def field(name):
-                      match = re.search(r"\b" + re.escape(name) + r"\s*:\s*'([^']+)'", head)
-                      if match is None:
-                          match = re.search(r'\b' + re.escape(name) + r'\s*:\s*"([^"]+)"', head)
+                      match = re.search(r"""\b""" + re.escape(name) + r"""\s*:\s*['"]([^'"]+)['"]""", head)
                       return match.group(1) if match else ""
+                  def array_field(name):
+                      match = re.search(r"""\b""" + re.escape(name) + r"""\s*:\s*\[([^\]]*)\]""", head)
+                      return ",".join(re.findall(r"""['"]([^'"]+)['"]""", match.group(1))) if match else ""
                   report.write(chr(9).join((name, str(entry.file_size), digest.hexdigest(),
-                      field("id"), field("version"), field("game"))) + chr(10))
+                      field("id"), field("version"), field("game"), array_field("requires"), array_field("loadAfter"))) + chr(10))
           PY
       - name: Preserve pinned Image Studio module source for runtime forensics
         if: always()
