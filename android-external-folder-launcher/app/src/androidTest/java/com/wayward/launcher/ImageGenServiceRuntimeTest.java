@@ -705,13 +705,17 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("WML did not load image-search-customize after registering the shared symbols: "
                             + wmlBridgeDiagnostics,
                     containsJsonString(wmlState.optJSONArray("loaded"), "image-search-customize"));
+            // The settings launcher button is rendered inside the Image Studio panel.
+            // openGenerationSettings() opens that panel first, so observe clicks at the
+            // document level instead of requiring the panel button before it exists.
             String observeSettingsButton = "(function(){"
-                    + "var button=document.getElementById('wwis-generation-settings');"
-                    + "if(!button)return 'missing';"
                     + "window.__waywardCiSettingsClicks=0;"
-                    + "button.addEventListener('click',function(){window.__waywardCiSettingsClicks++;},true);"
+                    + "document.addEventListener('click',function(event){"
+                    + "var target=event.target&&event.target.closest?event.target.closest('#wwis-generation-settings'):null;"
+                    + "if(target)window.__waywardCiSettingsClicks++;"
+                    + "},true);"
                     + "return 'observing';})()";
-            assertEquals("The actual Image Studio WML UI did not render its settings button.",
+            assertEquals("The Android test could not install the settings-button click observer.",
                     "observing", awaitJsString(instrumentation, gameWeb, observeSettingsButton, 10_000L));
 
             String settingsDispatch = "(function(){"
@@ -1306,24 +1310,3 @@ public final class ImageGenServiceRuntimeTest {
             if (action.title != null && "중지".contentEquals(action.title)) return action;
         }
         return null;
-    }
-
-    private static String readText(File file) throws Exception {
-        if (!file.isFile()) return "";
-        try (InputStream input = new FileInputStream(file);
-             java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = input.read(buffer)) >= 0) {
-                if (read > 0) output.write(buffer, 0, read);
-            }
-            return output.toString("UTF-8");
-        }
-    }
-
-    private static String startupLogs(Context context) {
-        return "startup.log=" + new File(context.getFilesDir(), "imagegen/startup.log").getAbsolutePath()
-                + "; server.log=" + new File(context.getFilesDir(), "imagegen/server.log").getAbsolutePath()
-                + "; bun-version.log=" + new File(context.getFilesDir(), "imagegen/bun-version.log").getAbsolutePath();
-    }
-}
