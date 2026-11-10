@@ -92,6 +92,13 @@ fi
 if [ -s "$RUNNER_TEMP/imagestudio-archive-index.txt" ]; then
   cp "$RUNNER_TEMP/imagestudio-archive-index.txt" "$OUT/"
 fi
+if [ -s "$RUNNER_TEMP/imagestudio-source-index.txt" ]; then
+  cp "$RUNNER_TEMP/imagestudio-source-index.txt" "$OUT/"
+fi
+SOURCE_DIR="$PWD/android-external-folder-launcher/app/src/androidTest/assets/imagestudio-source"
+if [ -d "$SOURCE_DIR" ]; then
+  cp -R "$SOURCE_DIR" "$OUT/imagestudio-source"
+fi
 adb logcat -d -t 12000 > "$OUT/logcat.txt"
 
 {
