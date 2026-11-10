@@ -1,0 +1,90 @@
+name: Temporary pinned Wayward source audit
+on:
+  push:
+    branches:
+      - audit/mods-zip-inspection-20261110
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact game and mods snapshot
+        uses: actions/checkout@v4
+        with:
+          ref: 26d6c32e0b0abbb886e3029efd548b7ca6774401
+      - name: Verify and inventory source bytes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, re, zipfile
+          from pathlib import Path
+          from collections import Counter
+          root = Path.cwd()
+          out = root / "audit-output"
+          out.mkdir()
+          html = root / "Wayward_WML_ko.html"
+          mods = root / "mods.zip"
+          expected = {"Wayward_WML_ko.html": 4373978, "mods.zip": 46036105}
+          summary = {"commit": "26d6c32e0b0abbb886e3029efd548b7ca6774401", "files": {}}
+          def scan(path):
+              whole = hashlib.sha256()
+              chunks = []
+              overlap = b""
+              offset = 0
+              with path.open("rb") as f:
+                  while True:
+                      data = f.read(4096)
+                      if not data: break
+                      whole.update(data)
+                      chunks.append({"offset": offset, "length": len(data), "sha256": hashlib.sha256(data).hexdigest()})
+                      offset += len(data)
+              return offset, whole.hexdigest(), chunks
+          for p in (html, mods):
+              size, digest, chunks = scan(p)
+              if size != expected[p.name]:
+                  raise SystemExit(f"{p.name}: size mismatch {size} != {expected[p.name]}")
+              summary["files"][p.name] = {"bytes": size, "sha256": digest, "chunks_4096": len(chunks)}
+              (out / (p.name + ".chunks.json")).write_text(json.dumps(chunks, ensure_ascii=False, indent=2))
+          shutil = __import__("shutil")
+          shutil.copy2(html, out / html.name)
+          shutil.copy2(mods, out / mods.name)
+          inventory = []
+          keyword_summary = {}
+          text_exts = {".js",".mjs",".cjs",".json",".md",".txt",".html",".htm",".css",".yaml",".yml",".xml",".toml"}
+          with zipfile.ZipFile(mods) as z:
+              bad = z.testzip()
+              if bad: raise SystemExit("ZIP CRC failure: " + bad)
+              for info in z.infolist():
+                  name = info.filename
+                  item = {"path": name, "bytes": info.file_size, "compressed": info.compress_size, "crc32": f"{info.CRC:08x}", "is_dir": info.is_dir()}
+                  inventory.append(item)
+                  if info.is_dir() or Path(name).suffix.lower() not in text_exts or info.file_size > 20_000_000:
+                      continue
+                  raw = z.read(info)
+                  digest = hashlib.sha256(raw).hexdigest()
+                  item["sha256"] = digest
+                  # Preserve the archive path under audit-output for direct inspection.
+                  target = out / "mods" / name
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(raw)
+                  sample = raw[:2_000_000].decode("utf-8", "replace")
+                  counts = {}
+                  for term in ["settings","setting","config","options","easygen","imagegen","imagestudio","novelai","comfyui","cloudflare","provider","generation","image","prompt","token","server","8189"]:
+                      n = len(re.findall(re.escape(term), sample, re.I))
+                      if n: counts[term] = n
+                  if counts: keyword_summary[name] = counts
+          (out / "mods-inventory.json").write_text(json.dumps(inventory, ensure_ascii=False, indent=2))
+          summary["zip_entries"] = len(inventory)
+          summary["text_sources_extracted"] = sum(1 for p in (out / "mods").rglob("*") if p.is_file())
+          summary["keyword_summary"] = keyword_summary
+          (out / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2))
+          print(json.dumps({"commit": summary["commit"], "files": summary["files"], "zip_entries": summary["zip_entries"], "text_sources_extracted": summary["text_sources_extracted"]}, ensure_ascii=False, indent=2))
+          PY
+      - name: Upload original and extracted audit sources
+        uses: actions/upload-artifact@v4
+        with:
+          name: wayward-pinned-mods-source-audit
+          path: audit-output/
+          if-no-files-found: error
+          retention-days: 7
