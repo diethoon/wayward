@@ -200,6 +200,7 @@ jobs:
             ${{ runner.temp }}/mods-wml-entrypoints-index.txt
             ${{ runner.temp }}/wml-runtime-module-zips-index.txt
             ${{ runner.temp }}/wml-runtime-version.txt
+            ${{ runner.temp }}/mods-zip-layout.txt
             android-external-folder-launcher/app/src/androidTest/assets/wml-runtime
             android-external-folder-launcher/app/src/androidTest/assets/imagestudio-source
           if-no-files-found: warn
@@ -314,112 +315,89 @@ jobs:
           # HTML. Preserve the pinned files that the game requests at startup;
           # the Android test will prepend the same folder bootstrap as
           # MainActivity.FolderHandler before returning wml-core.js.
-          # Extract the WML runtime from the SAME pinned mods.zip as the game HTML.
-          python3 - "$RUNNER_TEMP/wayward-mods.zip" "$TEST_ASSETS/wml-runtime/wml" "$RUNNER_TEMP/wml-runtime-module-zips-index.txt" "$RUNNER_TEMP/wml-runtime-version.txt" <<'PY'
+          # Inventory the pinned root mods.zip before assuming its internal WML layout.
+          python3 - "$RUNNER_TEMP/wayward-mods.zip" "$RUNNER_TEMP/mods-zip-layout.txt" "$RUNNER_TEMP/wml-runtime-version.txt" <<'PY'
           import hashlib
-          from pathlib import Path, PurePosixPath
-          import re
+          from collections import Counter
+          from pathlib import PurePosixPath
           import sys
           import zipfile
 
-          archive, output_root, index_path, version_path = sys.argv[1:]
+          archive, layout_path, version_path = sys.argv[1:]
           expected_bytes = 46036105
           expected_git_blob = "a4d1cb369f61a746c7bf52865ee88523c777fd9e"
           blob = hashlib.sha1()
-          archive_sha256 = hashlib.sha256()
+          archive_sha = hashlib.sha256()
           blob.update(f"blob {expected_bytes}\0".encode("ascii"))
-          actual_bytes = 0
+          total_bytes = 0
           with open(archive, "rb") as source:
               while True:
                   chunk = source.read(4096)
                   if not chunk:
                       break
-                  actual_bytes += len(chunk)
+                  total_bytes += len(chunk)
                   blob.update(chunk)
-                  archive_sha256.update(chunk)
-          if actual_bytes != expected_bytes:
-              raise SystemExit(f"pinned mods.zip size mismatch: {actual_bytes} != {expected_bytes}")
-          if blob.hexdigest() != expected_git_blob:
-              raise SystemExit(f"pinned mods.zip Git blob mismatch: {blob.hexdigest()} != {expected_git_blob}")
-
-          core_suffix = "wml/runtime/wml-core.js"
-          required = (
-              "wml/runtime/wml-core.js",
-              "wml/i18n/ko/finals.js",
-              "wml/i18n/ko/display.js",
-              "wml/i18n/ko/voice.js",
-              "wml/i18n/ko/runtime.js",
-              "wml/mods/mods.js",
-          )
-          with zipfile.ZipFile(archive) as bundle:
-              candidates = [
-                  item.filename.replace("\\", "/")
-                  for item in bundle.infolist()
-                  if not item.is_dir() and item.filename.replace("\\", "/").endswith(core_suffix)
-              ]
-              if len(candidates) != 1:
-                  raise SystemExit(
-                      "expected exactly one WML core in pinned mods.zip; found: " + repr(candidates[:20])
-                  )
-              core_path = candidates[0]
-              prefix = core_path[:-len(core_suffix)]
-              selected = []
-              for relative in required:
-                  entry_name = prefix + relative
-                  try:
-                      entry = bundle.getinfo(entry_name)
-                  except KeyError:
-                      raise SystemExit("required WML runtime file missing from the same mods.zip: " + entry_name)
-                  selected.append((relative, entry))
-              core_entry = bundle.getinfo(core_path)
-              with bundle.open(core_entry) as stream:
-                  core_source = stream.read()
-              version_match = re.search(
-                  rb"\b(?:const|let|var)\s+VERSION\s*=\s*['\"]([^'\"]+)['\"]",
-                  core_source
+                  archive_sha.update(chunk)
+          if total_bytes != expected_bytes or blob.hexdigest() != expected_git_blob:
+              raise SystemExit(
+                  f"pinned mods.zip mismatch: bytes={total_bytes}, git_blob={blob.hexdigest()}"
               )
-              if not version_match:
-                  raise SystemExit("could not read VERSION declaration from " + core_path)
-              wml_version = version_match.group(1).decode("ascii")
-              if wml_version != "0.9.5":
-                  raise SystemExit(f"pinned Wayward mods.zip WML version mismatch: {wml_version} != 0.9.5")
 
-              output = Path(output_root)
-              output.mkdir(parents=True, exist_ok=True)
-              with open(index_path, "w", encoding="utf-8") as report:
-                  for relative, entry in selected:
-                      destination = output.joinpath(*PurePosixPath(relative).parts)
-                      destination.parent.mkdir(parents=True, exist_ok=True)
-                      sha = hashlib.sha256()
-                      git = hashlib.sha1()
-                      size = 0
-                      git.update(f"blob {entry.file_size}\0".encode("ascii"))
-                      with bundle.open(entry) as source, destination.open("wb") as target:
-                          while True:
-                              chunk = source.read(4096)
-                              if not chunk:
-                                  break
-                              target.write(chunk)
-                              sha.update(chunk)
-                              git.update(chunk)
-                              size += len(chunk)
-                      if size != entry.file_size:
-                          raise SystemExit("WML runtime extraction size mismatch: " + relative)
-                      report.write(f"{relative}\t{size}\t{git.hexdigest()}\t{sha.hexdigest()}\n")
+          top = Counter()
+          relevant = []
+          version_hits = []
+          core_candidates = []
+          with zipfile.ZipFile(archive) as bundle, open(layout_path, "w", encoding="utf-8") as layout:
+              for entry in bundle.infolist():
+                  name = entry.filename.replace("\\", "/")
+                  if not name:
+                      continue
+                  first = name.split("/", 1)[0]
+                  top[first] += 1
+                  layout.write(f"{entry.file_size}\t{entry.compress_size}\t{name}\n")
+                  folded = name.lower()
+                  if any(term in folded for term in ("wml", "runtime", "core", "mods.js")):
+                      relevant.append((entry.file_size, name))
+                  if folded.endswith("wml-core.js") or folded.endswith("wml_core.js"):
+                      core_candidates.append(name)
+                  suffix = PurePosixPath(name).suffix.lower()
+                  if entry.is_dir() or suffix not in {".js", ".mjs", ".json", ".txt", ".md"}:
+                      continue
+                  if entry.file_size > 16 * 1024 * 1024:
+                      continue
+                  overlap = b""
+                  offset = 0
+                  with bundle.open(entry) as stream:
+                      while True:
+                          data = stream.read(4096)
+                          if not data:
+                              break
+                          scan = overlap + data
+                          lower = scan.lower()
+                          for needle in (b"0.9.5", b"version", b"wml-core", b"pauseSettings"):
+                              pos = lower.find(needle)
+                              if pos >= 0 and len(version_hits) < 500:
+                                  context = scan[max(0, pos-80):min(len(scan), pos+160)]
+                                  version_hits.append(
+                                      f"{name}\toffset={offset-len(overlap)+pos}\t{context.decode('utf-8', errors='replace')!r}"
+                                  )
+                          overlap = scan[-256:]
+                          offset += len(data)
 
-              report = (
-                  "game_commit=26d6c32e0b0abbb886e3029efd548b7ca6774401\n"
-                  f"mods_zip_bytes={actual_bytes}\n"
-                  f"mods_zip_git_blob={blob.hexdigest()}\n"
-                  f"mods_zip_sha256={archive_sha256.hexdigest()}\n"
-                  f"wml_core_path={core_path}\n"
-                  f"wml_version={wml_version}\n"
-                  f"wml_core_bytes={core_entry.file_size}\n"
-                  f"wml_core_sha256={hashlib.sha256(core_source).hexdigest()}\n"
-              )
-              Path(version_path).write_text(report, encoding="utf-8")
-              print(report, end="")
-              print("Extracted only the six WML runtime files requested by the pinned game page.")
+          report = [
+              f"game_commit=26d6c32e0b0abbb886e3029efd548b7ca6774401",
+              f"mods_zip_bytes={total_bytes}",
+              f"mods_zip_git_blob={blob.hexdigest()}",
+              f"mods_zip_sha256={archive_sha.hexdigest()}",
+              f"entry_count={sum(top.values())}",
+              "top_level_entries=" + repr(top.most_common(80)),
+              "wml_core_candidates=" + repr(core_candidates),
+              "relevant_paths=" + repr(sorted(relevant)[:500]),
+              "version_and_runtime_string_hits=" + repr(version_hits[:300]),
+          ]
+          with open(version_path, "w", encoding="utf-8") as output:
+              output.write("\n".join(report) + "\n")
+          print("\n".join(report))
           PY
       - uses: oven-sh/setup-bun@v2
         with:
