@@ -530,30 +530,56 @@ public final class ImageGenServiceRuntimeTest {
 
     private static void dismissWaywardAgeConfirmation(Instrumentation instrumentation, WebView gameWeb)
             throws Exception {
+        // The pinned Korean game build has two distinct, sequential prompts:
+        // the game's "연령 확인" self-confirmation (예/아니오), and the optional
+        // Image Studio "성인 콘텐츠 안내" consent (이해하고 동의합니다). Do not
+        // guess one button globally; only click the affirmative button inside
+        // the matching, currently visible dialog.
         String dispatch = "(function(){"
-                + "var nodes=Array.from(document.querySelectorAll('button,[role=button],input[type=button],a,div,span'));"
-                + "var accept=nodes.find(function(e){var t=String(e.innerText||e.value||e.getAttribute('aria-label')||'').replace(/\\s+/g,' ').trim();"
-                + "return t==='이해하고 동의합니다'&&e.getClientRects().length>0;});"
-                + "if(!accept)return 'adult_content_accept_button_not_found';"
-                + "var target=accept.closest('button,[role=button],a')||accept;target.click();return 'adult_content_accepted';"
-                + "})()";
+                + "var norm=function(e){return String(e.innerText||e.value||e.getAttribute('aria-label')||'').replace(/\\s+/g,' ').trim();};"
+                + "var visible=function(e){var s=getComputedStyle(e),r=e.getBoundingClientRect();"
+                + "return e.getClientRects().length>0&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)>0&&r.width>0&&r.height>0;};"
+                + "var gates=[{title:'연령 확인',accept:'예',id:'age_confirmation'},"
+                + "{title:'성인 콘텐츠 안내',accept:'이해하고 동의합니다',id:'adult_content_consent'}];"
+                + "for(var i=0;i<gates.length;i++){var gate=gates[i];"
+                + "var title=Array.from(document.querySelectorAll('body *')).find(function(e){"
+                + "return e.children.length===0&&norm(e)===gate.title&&visible(e);});"
+                + "if(!title)continue;var root=title;"
+                + "for(var depth=0;root&&depth<10;depth++,root=root.parentElement){"
+                + "var nodes=Array.from(root.querySelectorAll('button,[role=button],input[type=button],a,div,span'));"
+                + "if(root.matches&&root.matches('button,[role=button],input[type=button],a,div,span'))nodes.unshift(root);"
+                + "var accept=nodes.find(function(e){return norm(e)===gate.accept&&visible(e);});"
+                + "if(accept){var target=accept.closest('button,[role=button],a')||accept;"
+                + "target.click();return gate.id+'_accepted';}}"
+                + "return gate.id+'_accept_button_not_found';}"
+                + "return 'no_visible_age_gate';})()";
+        boolean sawGate = false;
         String result = "";
-        long deadline = System.currentTimeMillis() + 10_000L;
+        long deadline = System.currentTimeMillis() + 30_000L;
         while (System.currentTimeMillis() < deadline) {
             result = awaitJsString(instrumentation, gameWeb, dispatch, 5_000L);
-            if ("adult_content_accepted".equals(result)) break;
-            Thread.sleep(100L);
+            if (result.endsWith("_accept_button_not_found")) {
+                fail("Visible age/consent dialog had no matching affirmative button: " + result);
+            }
+            if (result.endsWith("_accepted")) {
+                sawGate = true;
+                Thread.sleep(450L);
+                continue;
+            }
+            if ("no_visible_age_gate".equals(result)) break;
+            Thread.sleep(150L);
         }
-        assertEquals("The Android test did not dismiss Wayward's age confirmation gate.",
-                "adult_content_accepted", result);
-        Thread.sleep(700L);
+        assertTrue("The Android test never observed Wayward's age/consent gate.", sawGate);
         String visibleGate = awaitJsString(instrumentation, gameWeb,
-                "(function(){return String(Array.from(document.querySelectorAll('body *')).some(function(e){"
-                        + "if(e.children.length>0||String(e.textContent||'').trim()!=='성인 콘텐츠 안내')return false;"
+                "(function(){var labels=['연령 확인','성인 콘텐츠 안내'];"
+                        + "return String(Array.from(document.querySelectorAll('body *')).some(function(e){"
+                        + "if(e.children.length>0||labels.indexOf(String(e.innerText||e.textContent||'').trim())<0)return false;"
                         + "var s=getComputedStyle(e),r=e.getBoundingClientRect();"
-                        + "return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0;}));})()",
+                        + "return e.getClientRects().length>0&&s.display!=='none'&&s.visibility!=='hidden'&&"
+                        + "Number(s.opacity)>0&&r.width>0&&r.height>0;}));})()",
                 5_000L);
-        assertEquals("The Wayward adult-content gate remained visible after acceptance.", "false", visibleGate);
+        assertEquals("Wayward's age/consent dialog remained visible after its affirmative action.",
+                "false", visibleGate);
     }
 
     private static Activity verifyCrossTaskImageStudioSettingsRouting(
