@@ -145,6 +145,50 @@ jobs:
                   report.write(chr(9).join((name, str(entry.file_size), digest.hexdigest(),
                       field("id"), field("version"), field("game"), array_field("requires"), array_field("loadAfter"))) + chr(10))
           PY
+          python3 - "$RUNNER_TEMP/wayward-mods.zip" "$GITHUB_WORKSPACE/android-external-folder-launcher/app/src/androidTest/assets/imagestudio-source/wml-mods" "$RUNNER_TEMP/wml-runtime-module-zips-index.txt" <<'PY'
+          import hashlib
+          from pathlib import Path, PurePosixPath
+          import sys
+          import zipfile
+          archive, output_root, index_path = sys.argv[1:]
+          root = Path(output_root)
+          root.mkdir(parents=True, exist_ok=True)
+          selected = ("image-search-customize", "addon-compat", "attention-image-prompt", "image-look")
+          with zipfile.ZipFile(archive) as source, open(index_path, "w", encoding="utf-8") as report:
+              for mod_id in selected:
+                  prefix = mod_id + "/"
+                  output_zip = root / (mod_id + ".zip")
+                  count = 0
+                  total = 0
+                  with zipfile.ZipFile(output_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as target_zip:
+                      for entry in source.infolist():
+                          name = entry.filename.replace(chr(92), "/")
+                          if entry.is_dir() or not name.startswith(prefix):
+                              continue
+                          relative = name[len(prefix):]
+                          path = PurePosixPath(relative)
+                          if path.is_absolute() or any(part in ("", ".", "..") for part in path.parts):
+                              raise SystemExit("unsafe WML module path: " + name)
+                          if mod_id == "image-search-customize" and relative.startswith("imagestudio/"):
+                              continue
+                          if relative.endswith("/mod.js"):
+                              continue
+                          if entry.file_size > 2 * 1024 * 1024:
+                              report.write("SKIPPED" + chr(9) + mod_id + chr(9) + str(entry.file_size) + chr(9) + relative + chr(10))
+                              continue
+                          if total + entry.file_size > 12 * 1024 * 1024 or count >= 512:
+                              report.write("SKIPPED_LIMIT" + chr(9) + mod_id + chr(9) + relative + chr(10))
+                              continue
+                          data = source.read(entry)
+                          if len(data) != entry.file_size:
+                              raise SystemExit("WML module asset size mismatch: " + name)
+                          target_zip.writestr(relative, data)
+                          count += 1
+                          total += len(data)
+                          report.write(chr(9).join(("FILE", mod_id, str(len(data)),
+                              hashlib.sha256(data).hexdigest(), relative)) + chr(10))
+                  report.write(chr(9).join(("ZIP", mod_id, str(count), str(total), str(output_zip))) + chr(10))
+          PY
       - name: Preserve pinned Image Studio module source for runtime forensics
         if: always()
         uses: actions/upload-artifact@v4
