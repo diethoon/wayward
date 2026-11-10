@@ -25,10 +25,8 @@ import org.junit.runner.RunWith;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -60,16 +58,18 @@ public final class ImageGenServiceRuntimeTest {
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
             assertNotNull("Launcher activity did not start", launcherActivity);
 
-            File backend = installBundledBackend(context);
-            prepareRuntimeConfig(context, backend);
-
-            Intent start = new Intent(context, ImageGenService.class)
-                    .setAction(ImageGenService.ACTION_START)
-                    .putExtra(ImageGenService.EXTRA_BACKEND_ROOT, backend.getAbsolutePath())
-                    .putExtra(ImageGenService.EXTRA_BACKEND_VERSION, "launcher-imagegen:0.8.4:novelai")
-                    .putExtra(ImageGenService.EXTRA_LAUNCH_MODE, "novelai")
-                    .putExtra(ImageGenService.EXTRA_COMFY_URL, "");
-            context.startForegroundService(start);
+            // Invoke the exact launcher action behind the NovelAI server Start button.
+            // This exercises backend installation, config creation and service launch together.
+            Activity activityToStart = launcherActivity;
+            Method startAction = MainActivity.class.getDeclaredMethod("startNovelAiServer");
+            startAction.setAccessible(true);
+            instrumentation.runOnMainSync(() -> {
+                try {
+                    startAction.invoke(activityToStart);
+                } catch (Exception error) {
+                    throw new RuntimeException("Could not invoke the launcher ImageGen Start action", error);
+                }
+            });
 
             int initialHealth = awaitReachable(SERVER_START_TIMEOUT_MS);
             assertEquals("Bundled ARM64 Bun did not start the actual ImageGen HTTP server. "
@@ -141,45 +141,6 @@ public final class ImageGenServiceRuntimeTest {
             while (input.read(buffer) >= 0) { /* drain shell output */ }
         } finally {
             descriptor.close();
-        }
-    }
-
-    private static File installBundledBackend(Context context) throws Exception {
-        File destination = new File(context.getFilesDir(), "imagegen/backend");
-        Class<?> installer = Class.forName("com.wayward.launcher.ImageGenBackendInstaller");
-        Method install = installer.getDeclaredMethod("install", Context.class, File.class);
-        install.setAccessible(true);
-        try {
-            return (File) install.invoke(null, context, destination);
-        } catch (InvocationTargetException error) {
-            Throwable cause = error.getTargetException();
-            if (cause instanceof Exception) throw (Exception) cause;
-            throw error;
-        }
-    }
-
-    private static void prepareRuntimeConfig(Context context, File backend) throws Exception {
-        File project = new File(backend, "wayward-imagegen");
-        File images = new File(context.getFilesDir(), "imagegen/images");
-        File state = new File(context.getFilesDir(), "imagegen/state");
-        if (!images.isDirectory() && !images.mkdirs()) throw new IllegalStateException("Cannot create images directory");
-        if (!state.isDirectory() && !state.mkdirs()) throw new IllegalStateException("Cannot create state directory");
-
-        JSONObject config = new JSONObject();
-        config.put("host", "127.0.0.1");
-        config.put("port", 8189);
-        config.put("imagesDir", images.getAbsolutePath());
-        config.put("stateDir", state.getAbsolutePath());
-        config.put("comfyUrl", "http://127.0.0.1:8188");
-        config.put("imageProvider", "nai");
-        config.put("webp", false);
-        config.put("requireWebp", false);
-
-        File destination = new File(project, "wayward-imagegen.config.json");
-        try (FileOutputStream output = new FileOutputStream(destination)) {
-            output.write(config.toString().getBytes(StandardCharsets.UTF_8));
-            output.flush();
-            output.getFD().sync();
         }
     }
 
