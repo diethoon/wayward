@@ -602,14 +602,39 @@ public final class ImageGenServiceRuntimeTest {
             // Exercise the actual WW_ImageStudioBridge registered by the
             // pinned WML Image Studio module. No fake bridge or fake settings
             // button is installed into the game page.
-            String actualImageStudioBridgeType = awaitJsString(instrumentation, gameWeb,
-                    "typeof window.WW_ImageStudioBridge", 30_000L);
-            assertEquals("The real WML Image Studio module did not register its runtime bridge.",
-                    "object", actualImageStudioBridgeType);
-            String actualCharacterApiType = awaitJsString(instrumentation, gameWeb,
-                    "typeof window.WW_ImageStudioBridge.characters", 5_000L);
-            assertEquals("The real Image Studio character discovery API is missing.",
-                    "function", actualCharacterApiType);
+            String wmlBridgeDiagnostics = awaitJsString(instrumentation, gameWeb,
+                    "(function(){"
+                            + "var bridge=window.WW_ImageStudioBridge;"
+                            + "var status=window.WML&&typeof window.WML.status==='function'?window.WML.status():null;"
+                            + "return JSON.stringify({"
+                            + "bridgeType:typeof bridge,bridgeIsNull:bridge===null,bridgeKeys:bridge?Object.keys(bridge):[],"
+                            + "charactersType:bridge?typeof bridge.characters:'missing',"
+                            + "studioType:typeof window.WW_ImageStudio,"
+                            + "wml:status?{game:status.game,booted:status.booted,listed:status.listed,"
+                            + "loaded:status.loaded,failed:status.failed,warnings:status.warnings,missing:status.missing,"
+                            + "symbolsGame:status.symbols&&status.symbols.game,modSymbolIds:Object.keys(status.modSymbols||{})}:null,"
+                            + "folderMods:localStorage.getItem('wml.folders')"
+                            + "});})()",
+                    10_000L);
+            resultSummary = "state=wml_bridge_diagnostics\\n" + wmlBridgeDiagnostics + "\\n";
+            JSONObject wmlBridgeState = new JSONObject(wmlBridgeDiagnostics);
+            assertEquals("The real Image Studio module did not install a non-null global bridge. "
+                            + wmlBridgeDiagnostics,
+                    "object", wmlBridgeState.optString("bridgeType", ""));
+            assertTrue("The Image Studio global bridge is still the launcher's uninitialized null placeholder. "
+                            + wmlBridgeDiagnostics, !wmlBridgeState.optBoolean("bridgeIsNull", true));
+            assertEquals("The pinned Image Studio bridge does not expose its real character collector. "
+                            + wmlBridgeDiagnostics,
+                    "function", wmlBridgeState.optString("charactersType", ""));
+            JSONObject wmlState = wmlBridgeState.optJSONObject("wml");
+            assertNotNull("The pinned WML runtime did not expose its boot diagnostics: " + wmlBridgeDiagnostics,
+                    wmlState);
+            assertTrue("WML did not complete a game boot before Image Studio was inspected: "
+                            + wmlBridgeDiagnostics,
+                    wmlState.optBoolean("booted", false));
+            assertTrue("WML did not load the pinned imagestudio module: " + wmlBridgeDiagnostics,
+                    wmlState.optJSONArray("loaded") != null
+                            && containsJsonString(wmlState.optJSONArray("loaded"), "imagestudio"));
             String observeSettingsButton = "(function(){"
                     + "var button=document.getElementById('wwis-generation-settings');"
                     + "if(!button)return 'missing';"
@@ -976,6 +1001,14 @@ public final class ImageGenServiceRuntimeTest {
         snapshot.providers.add(provider);
         snapshot.defaults.put(profileId, provider.id);
         new ImageProviderStore(context).save(snapshot);
+    }
+
+    private static boolean containsJsonString(org.json.JSONArray values, String expected) {
+        if (values == null || expected == null) return false;
+        for (int index = 0; index < values.length(); index++) {
+            if (expected.equals(values.optString(index))) return true;
+        }
+        return false;
     }
 
     private static String awaitJsString(Instrumentation instrumentation, WebView web,
