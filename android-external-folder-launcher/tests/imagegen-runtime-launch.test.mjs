@@ -62,7 +62,7 @@ assert.match(service, /\.addAction\(android\.R\.drawable\.ic_media_pause, "ì¤‘ì§
   "the foreground service must retain its explicit Stop action");
 assert.match(service, /ANDROID_LINKER_64 = "\/system\/bin\/linker64"/,
   "app-private Bun must be started through Android's system linker");
-assert.match(service, /ANDROID_BRIDGE_ARM64_LINKER_64 = "\\/system\\/lib64\\/arm64\\/linker64"/,
+assert.ok(service.includes('ANDROID_BRIDGE_ARM64_LINKER_64 = "/system/lib64/arm64/linker64"'),
   "x86_64 Google API emulators must select the ARM64 native-bridge linker");
 assert.match(service, /private File resolveAndroidArm64Linker\(\)/,
   "select the system linker for the device ABI before launching Bun");
@@ -130,16 +130,16 @@ assert.match(endpoint, /normalizeOptional/);
 
 assert.match(instrumentation, /context\.startForegroundService\(start\)/,
   "instrumentation must start the real foreground ImageGenService");
-assert.match(instrumentation, /imagegen\\/bun-version\\.log/,
+assert.ok(instrumentation.includes("imagegen/bun-version.log"),
   "instrumentation must verify the downloaded Android Bun version");
-assert.match(instrumentation, /bunVersion\.contains\("1\\.4\\.4"\)/,
+assert.ok(instrumentation.includes('bunVersion.contains("1.4.4")'),
   "instrumentation must run Bun 1.4.4 on Android, not host Bun");
-assert.match(instrumentation, /serverLog\.contains\("wayward-imagegen 0\\.8\\.4"\)/,
+assert.ok(instrumentation.includes('serverLog.contains("wayward-imagegen 0.8.4")'),
   "instrumentation must verify that the embedded server actually booted");
-assert.match(instrumentation, /activityToFinish::finish/,
+assert.ok(instrumentation.includes("activityToFinish::finish"),
   "instrumentation must close the launcher Activity while leaving service alive");
-assert.match(instrumentation, /stopIntent\.send\(\)/,
+assert.ok(instrumentation.includes("stopIntent.send()"),
   "instrumentation must invoke the notification Stop action");
-assert.match(instrumentation, /awaitServerDown\(45_000L\)/,
+assert.ok(instrumentation.includes("awaitServerDown(45_000L)"),
   "instrumentation must verify the server endpoint actually shuts down");
 console.log("Embedded ImageGen runtime launch contract tests passed.");
