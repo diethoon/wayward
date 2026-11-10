@@ -134,10 +134,10 @@ jobs:
                           if len(prefix) < 65536:
                               prefix.extend(chunk[:65536-len(prefix)])
                   source = prefix.decode("utf-8", errors="replace")
-                  define = re.search(r"WML\\.define\\s*\\(\\s*\\{", source)
+                  define = re.search(r"WML\.define\s*\(\s*\{", source)
                   head = source[define.end():] if define else source
                   def field(name):
-                      match = re.search(r"\\b" + name + r"\\s*:\\s*['\\\"]([^'\\\"]+)", head)
+                      match = re.search(r"\b" + re.escape(name) + r"\s*:\s*['"]([^'"]+)", head)
                       return match.group(1) if match else ""
                   report.write(chr(9).join((name, str(entry.file_size), digest.hexdigest(),
                       field("id"), field("version"), field("game"))) + chr(10))
