@@ -206,16 +206,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          GAME_COMMIT="5e5c78c4e32198e460ba040256e920d37ed1711c"
+          GAME_COMMIT="eca525d4fd5191ea7c887d9ea1b8cf19dd75aed5"
           GAME_PATH="Wayward_WML_ko.html"
-          EXPECTED_BLOB="8d998b50e82febe18b5c1d1159b16663b9169775"
-          EXPECTED_BYTES="4383674"
+          EXPECTED_BLOB="d198eacfc127c55dc44bd5d1b8e29ff2bb7d08e6"
+          EXPECTED_BYTES="4373978"
+          WML_COMMIT="5e5c78c4e32198e460ba040256e920d37ed1711c"
           GAME_DIR="$RUNNER_TEMP/wayward-game-fixture"
           TEST_ASSETS="$GITHUB_WORKSPACE/android-external-folder-launcher/app/src/androidTest/assets"
           mkdir -p "$GAME_DIR" "$TEST_ASSETS"
           GAME_HTML="$GAME_DIR/Wayward_WML_ko.html"
           curl --fail --silent --show-error \
-            "https://raw.githubusercontent.com/diethoon/3.36/$GAME_COMMIT/$GAME_PATH" \
+            "https://raw.githubusercontent.com/diethoon/wayward/$GAME_COMMIT/$GAME_PATH" \
             -o "$GAME_HTML"
           python3 - "$GAME_HTML" "$GAME_DIR" "$EXPECTED_BLOB" "$EXPECTED_BYTES" "$GAME_COMMIT" "$GAME_PATH" <<'PY'
           import hashlib
@@ -312,7 +313,7 @@ jobs:
           # HTML. Preserve the pinned files that the game requests at startup;
           # the Android test will prepend the same folder bootstrap as
           # MainActivity.FolderHandler before returning wml-core.js.
-          WML_SOURCE_ROOT="https://raw.githubusercontent.com/diethoon/3.36/$GAME_COMMIT/Wayward_MOD_v4.0_WML_%EA%B2%80%EC%88%98%EC%99%84%EB%A3%8C/wml"
+          WML_SOURCE_ROOT="https://raw.githubusercontent.com/diethoon/3.36/$WML_COMMIT/Wayward_MOD_v4.0_WML_%EA%B2%80%EC%88%98%EC%99%84%EB%A3%8C/wml"
           WML_TEST_ROOT="$TEST_ASSETS/wml-runtime/wml"
           mkdir -p "$WML_TEST_ROOT/i18n/ko" "$WML_TEST_ROOT/runtime" "$WML_TEST_ROOT/mods"
           while IFS=' ' read -r relative expected_bytes expected_blob; do
