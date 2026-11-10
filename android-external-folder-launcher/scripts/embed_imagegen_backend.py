@@ -171,12 +171,23 @@ def extract(archive: Path, output: Path) -> None:
             [
                 (
                     "      (body.comfyui === 'connected' ? 'ready' : '<b>not running</b>');",
-                    "      (body.imageProvider === 'nai' ? (body.novelai === 'configured' ? 'token saved · authentication not verified' : '<b>token missing</b>') : (body.comfyui === 'connected' ? 'ready' : '<b>ComfyUI not reachable</b>'));",
+                    "      (body.imageProvider === 'launcher' ? (body.comfyui === 'connected' ? 'ready' : '<b>launcher provider unavailable</b>') : body.imageProvider === 'nai' ? (body.novelai === 'configured' ? 'token saved · authentication not verified' : '<b>token missing</b>') : (body.comfyui === 'connected' ? 'ready' : '<b>ComfyUI not reachable</b>'));",
                     "show-novelai-token-state-not-server-state",
                 ),
             ],
         )
 
+
+        patch_backend_text(
+            "wayward-imagegen/ui/index.html",
+            [
+                (
+                    """        \`<b>\${(body.images ?? 0).toLocaleString()}</b> images · \${body.imageProvider === 'nai' ? 'NovelAI' : 'ComfyUI'} \` +""",
+                    """        \`<b>\${(body.images ?? 0).toLocaleString()}</b> images · \${body.imageProvider === 'launcher' ? 'Launcher provider' : body.imageProvider === 'nai' ? 'NovelAI' : 'ComfyUI'} \` +""",
+                    "show-launcher-provider-in-status-label",
+                ),
+            ],
+        )
 
         patch_backend_text(
             "wayward-imagegen/src/config.ts",
@@ -270,6 +281,17 @@ def extract(archive: Path, output: Path) -> None:
                     "...(workflow === 'nai' ? { steps: this.config.naiSteps, cfg: this.config.naiScale, checkpoint: this.config.naiModel,\n          width: this.config.naiWidth, height: this.config.naiHeight, sampler: this.config.naiSampler, noiseSchedule: this.config.naiNoiseSchedule } : {}),",
                     "...(workflow === 'nai' && this.config.imageProvider === 'nai' ? { steps: this.config.naiSteps, cfg: this.config.naiScale, checkpoint: this.config.naiModel,\n          width: this.config.naiWidth, height: this.config.naiHeight, sampler: this.config.naiSampler, noiseSchedule: this.config.naiNoiseSchedule } : {}),",
                     "do-not-override-launcher-provider-generation-options",
+                ),
+            ],
+        )
+
+        patch_backend_text(
+            "wayward-imagegen/src/batch/queue.ts",
+            [
+                (
+                    "        const limit = this.config.imageProvider === 'nai' ? 1 : Math.min(normalizePromptBatchSize(this.config.promptBatchSize), this.effectiveBatchLimit)",
+                    "        const limit = this.config.imageProvider === 'nai' || this.config.imageProvider === 'launcher' ? 1 : Math.min(normalizePromptBatchSize(this.config.promptBatchSize), this.effectiveBatchLimit)",
+                    "serialize-launcher-provider-image-requests",
                 ),
             ],
         )
