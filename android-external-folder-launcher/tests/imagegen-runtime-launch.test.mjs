@@ -130,6 +130,8 @@ assert.match(endpoint, /normalizeOptional/);
 
 assert.ok(instrumentation.includes('MainActivity.class.getDeclaredMethod("startNovelAiServer")'),
   "instrumentation must invoke the same launcher action used by the NovelAI server Start button");
+assert.ok(instrumentation.includes("import android.service.notification.StatusBarNotification;"),
+  "notification inventory must use the Android framework StatusBarNotification class");
 assert.ok(instrumentation.includes("imagegen/bun-version.log"),
   "instrumentation must verify the downloaded Android Bun version");
 assert.ok(instrumentation.includes('bunVersion.contains("1.4.4")'),
