@@ -47,6 +47,29 @@ final class ImageGenProxy {
                     deliver(web, requestId, errorResponse(413, "ImageGen 요청 본문이 너무 큽니다."));
                     return;
                 }
+                if ("PUT".equals(safeMethod) && "/api/generation/settings".equals(Uri.parse(safePath).getPath())
+                        && requestBody.length > 0) {
+                    try {
+                        JSONObject settings = new JSONObject(new String(requestBody, StandardCharsets.UTF_8));
+                        if (settings.optBoolean("naiTokenClear", false)) {
+                            ImageProviderStore.saveNovelAiToken(appContext, "");
+                            DiagnosticsLogger.event(appContext, "INFO", "imagegen_proxy",
+                                    "novelai_token_cleared_keystore", null);
+                        } else {
+                            String token = settings.optString("naiToken", "");
+                            if (!token.trim().isEmpty()) {
+                                ImageProviderStore.saveNovelAiToken(appContext, token);
+                                DiagnosticsLogger.event(appContext, "INFO", "imagegen_proxy",
+                                        "novelai_token_saved_keystore", null);
+                            }
+                        }
+                    } catch (Exception secureStoreError) {
+                        DiagnosticsLogger.error(appContext, "imagegen_proxy",
+                                "novelai_token_keystore_write_failed", secureStoreError);
+                        deliver(web, requestId, errorResponse(500, "NovelAI 인증 정보를 Android 보안 저장소에 저장하지 못했습니다."));
+                        return;
+                    }
+                }
 
                 URL url = new URL("http://127.0.0.1:8189" + safePath);
                 connection = (HttpURLConnection) url.openConnection();

@@ -208,6 +208,17 @@ final class ImageProviderStore {
         return snapshot.novelAiToken == null ? "" : snapshot.novelAiToken;
     }
 
+    static void saveNovelAiToken(Context context, String token) throws Exception {
+        String safeToken = token == null ? "" : token.trim();
+        if (safeToken.length() > 4096) {
+            throw new IllegalArgumentException("NovelAI 토큰은 4096자 이하여야 합니다.");
+        }
+        ImageProviderStore store = new ImageProviderStore(context);
+        Snapshot snapshot = store.load();
+        snapshot.novelAiToken = safeToken;
+        store.save(snapshot);
+    }
+
     static String publicJson(Context context, String profileId) {
         try {
             Snapshot snapshot = new ImageProviderStore(context).load();

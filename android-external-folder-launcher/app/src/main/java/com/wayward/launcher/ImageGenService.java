@@ -180,6 +180,48 @@ public final class ImageGenService extends Service {
         updateNotification(statusMessage);
     }
 
+    private void migrateLegacyNovelAiToken() throws Exception {
+        File legacyFile = new File(getFilesDir(), "imagegen/state/anima-settings.json");
+        if (!legacyFile.isFile() || legacyFile.length() <= 0 || legacyFile.length() > 2L * 1024L * 1024L) return;
+        byte[] bytes = new byte[(int) legacyFile.length()];
+        try (FileInputStream input = new FileInputStream(legacyFile)) {
+            int offset = 0;
+            while (offset < bytes.length) {
+                int count = input.read(bytes, offset, bytes.length - offset);
+                if (count < 0) throw new java.io.IOException("기존 NovelAI 설정 파일을 끝까지 읽지 못했습니다.");
+                offset += count;
+            }
+        }
+        JSONObject legacy = new JSONObject(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+        String token = legacy.optString("naiToken", "").trim();
+        if (token.isEmpty()) return;
+        ImageProviderStore.saveNovelAiToken(this, token);
+        legacy.put("naiToken", "");
+        File temporary = new File(legacyFile.getParentFile(), legacyFile.getName() + ".tmp");
+        try (FileOutputStream output = new FileOutputStream(temporary, false)) {
+            output.write((legacy.toString() + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            output.flush();
+            output.getFD().sync();
+        }
+        try {
+            java.nio.file.Files.move(temporary.toPath(), legacyFile.toPath(),
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.io.IOException atomicFailure) {
+            try {
+                java.nio.file.Files.move(temporary.toPath(), legacyFile.toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.io.IOException moveFailure) {
+                moveFailure.addSuppressed(atomicFailure);
+                throw moveFailure;
+            }
+        } finally {
+            if (temporary.exists()) temporary.delete();
+        }
+        DiagnosticsLogger.event(this, "INFO", "imagegen_service",
+                "legacy_novelai_token_migrated_to_keystore", null);
+    }
+
     private void appendDiagnostic(String message) {
         try {
             File log = new File(getFilesDir(), "imagegen/startup.log");

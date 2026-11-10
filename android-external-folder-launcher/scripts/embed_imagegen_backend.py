@@ -121,12 +121,69 @@ def extract(archive: Path, output: Path) -> None:
         if dependencies != {"sharp": "0.35.5"}:
             fail("unexpected backend dependency set: " + json.dumps(dependencies, sort_keys=True))
 
+        launcher_patches: list[str] = []
+
+        def patch_backend_text(relative: str, replacements: list[tuple[str, str, str]]) -> None:
+            nonlocal total
+            target = staging / relative
+            original = target.read_text(encoding="utf-8")
+            updated = original
+            for before, after, label in replacements:
+                count = updated.count(before)
+                if count != 1:
+                    fail(f"launcher patch '{label}' expected one match in {relative}, found {count}")
+                updated = updated.replace(before, after, 1)
+            if updated == original:
+                return
+            encoded = updated.encode("utf-8")
+            previous_size = target.stat().st_size
+            target.write_bytes(encoded)
+            total += len(encoded) - previous_size
+            if total > MAX_TOTAL_BYTES:
+                fail("patched backend exceeds total size limit")
+            files[relative] = hashlib.sha256(encoded).hexdigest()
+            launcher_patches.extend(label for _, _, label in replacements)
+
+        patch_backend_text(
+            "wayward-imagegen/src/routes/generationSettings.ts",
+            [
+                (
+                    "  config.characterDirs = settings.characters.map(character => character.id).filter(Boolean)",
+                    """  const discoveredCharacterDirs = settings.characters
+    .map(character => String(character.id || '').trim().toLowerCase())
+    .filter(id => /^[a-z0-9][a-z0-9_-]{0,99}$/.test(id))
+  config.characterDirs = [...new Set([...(config.characterDirs || []), ...discoveredCharacterDirs])]""",
+                    "persist-discovered-character-filter",
+                ),
+                (
+                    "  fs.writeFileSync(settingsFile(config), JSON.stringify(settings, null, 2) + '\\n')",
+                    """  // NovelAI credentials are supplied by the launcher from Android Keystore.
+  // Keep the active token in memory, but never persist it in this JSON file.
+  const persistedSettings = { ...settings, naiToken: '' }
+  fs.writeFileSync(settingsFile(config), JSON.stringify(persistedSettings, null, 2) + '\\n')""",
+                    "redact-persisted-novelai-token",
+                ),
+            ],
+        )
+
+        patch_backend_text(
+            "wayward-imagegen/ui/index.html",
+            [
+                (
+                    "    el('status').innerHTML =\n        \`<b>\${(body.images ?? 0).toLocaleString()}</b> images · \${body.imageProvider === 'nai' ? 'NovelAI' : 'ComfyUI'} \` +\n      (body.comfyui === 'connected' ? 'ready' : '<b>not running</b>');",
+                    "    const providerStatus = body.imageProvider === 'nai'\n      ? (body.novelai === 'configured' ? 'token saved · authentication not verified' : '<b>token missing</b>')\n      : (body.comfyui === 'connected' ? 'ready' : '<b>ComfyUI not reachable</b>');\n    el('status').innerHTML =\n      \`<b>\${(body.images ?? 0).toLocaleString()}</b> images · \${body.imageProvider === 'nai' ? 'NovelAI' : 'ComfyUI'} \${providerStatus}\`;",
+                    "show-novelai-token-state-not-server-state",
+                ),
+            ],
+        )
+
         manifest = {
             "schemaVersion": 1,
             "sourceCommit": SOURCE_COMMIT,
             "sourceArchiveSha256": ARCHIVE_SHA256,
             "archivePrefix": PREFIX,
             "backendVersion": EXPECTED_VERSION,
+            "launcherPatches": launcher_patches,
             "fileCount": len(files),
             "totalBytes": total,
             "files": dict(sorted(files.items())),
