@@ -108,7 +108,7 @@ final class SafImageCache {
         long started = System.nanoTime();
         InputStream stream = resolver.openInputStream(documentUri);
         long openMs = (System.nanoTime() - started) / 1_000_000L;
-        return new OpenResult(stream, state, openMs, 0L, 0L, 0L);
+        return new OpenResult(stream, state, openMs, 0L, 0L);
     }
 
     private OpenResult openCached(File target, long expectedSize) {
