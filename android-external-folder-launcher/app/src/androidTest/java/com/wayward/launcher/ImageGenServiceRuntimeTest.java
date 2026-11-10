@@ -831,7 +831,7 @@ public final class ImageGenServiceRuntimeTest {
                     imageState.optBoolean("visible", false));
             resultSummary = "state=loaded\nportraitHook=imageUsagePortraitPanel\ndisplayedInPortraitHook=true\nvisibleOnScreen=true\n"
                     + "gameHtmlBytes=" + gameHtml.length + "\n"
-                    + "gameHtmlSourceCommit=eca525d4fd5191ea7c887d9ea1b8cf19dd75aed5\n"
+                    + "gameHtmlSourceCommit=26d6c32e0b0abbb886e3029efd548b7ca6774401\n"
                     + "gameHtmlBlob=d198eacfc127c55dc44bd5d1b8e29ff2bb7d08e6\n"
                     + "cloudflareEndpoint=" + FLUX_ENDPOINT + "\n"
                     + "providerType=cloudflare-worker\n"
