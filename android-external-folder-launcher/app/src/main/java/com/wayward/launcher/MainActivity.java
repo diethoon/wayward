@@ -1734,4 +1734,3 @@ public final class MainActivity extends Activity {
         Node(String i,String n,boolean d,long s,long m){id=i;name=n;dir=d;size=s;lastModified=m;}
     }
 }
-

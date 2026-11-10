@@ -1305,4 +1305,3 @@ public final class ImageGenServiceRuntimeTest {
                 + "; bun-version.log=" + new File(context.getFilesDir(), "imagegen/bun-version.log").getAbsolutePath();
     }
 }
-

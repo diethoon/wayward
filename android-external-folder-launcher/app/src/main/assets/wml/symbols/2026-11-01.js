@@ -248,4 +248,3 @@ WML.symbols({
   "worldTick": {"name":"py","doc":"Image Studio 1.31.20 runtime binding (2026-11-01)"}
  }
 });
-
