@@ -217,6 +217,52 @@ public final class ImageGenServiceRuntimeTest {
 
         try {
             configureCloudflareProvider(context, GAME_PROFILE_ID);
+
+            // Install the exact pinned Image Studio 1.31.20 release ZIP into
+            // the launcher's app-private ZIP store. This exercises the real
+            // 320,679-byte WML entrypoint rather than a synthetic WML.define.
+            MainActivity launcher = (MainActivity) activity;
+            ZipModStore zipMods = (ZipModStore) getField(launcher, "zipMods");
+            assertNotNull("The launcher's app-private ZIP mod store was not initialized.", zipMods);
+            File stagedImageStudioZip = zipMods.temporaryFile("ci-imagestudio-1.31.20");
+            try (InputStream input = instrumentation.getContext().getAssets().open(
+                    "imagestudio-source/imagestudio-1.31.20-20261101.zip");
+                 OutputStream output = new FileOutputStream(stagedImageStudioZip)) {
+                byte[] buffer = new byte[8192];
+                int count;
+                while ((count = input.read(buffer)) >= 0) {
+                    if (count > 0) output.write(buffer, 0, count);
+                }
+                output.flush();
+            }
+            ZipModStore.ModInfo realModInfo = ZipModStore.inspect(stagedImageStudioZip);
+            assertEquals("The pinned Image Studio release ZIP resolved the wrong WML ID.",
+                    "imagestudio", realModInfo.id);
+            zipMods.install(stagedImageStudioZip);
+            assertTrue("The real Image Studio ZIP was not registered in the app-private mod list.",
+                    zipMods.listModIds().contains("imagestudio"));
+            ByteArrayOutputStream realModSource = new ByteArrayOutputStream();
+            try (InputStream input = zipMods.open("wml/mods/imagestudio/mod.js")) {
+                assertNotNull("The real Image Studio WML entrypoint was not served by ZipModStore.", input);
+                byte[] buffer = new byte[8192];
+                int count;
+                while ((count = input.read(buffer)) >= 0) {
+                    if (count > 0) realModSource.write(buffer, 0, count);
+                }
+            }
+            byte[] realModBytes = realModSource.toByteArray();
+            assertEquals("The installed release ZIP did not serve the full production mod.js.",
+                    320_679, realModBytes.length);
+            String realModText = new String(realModBytes, StandardCharsets.UTF_8);
+            assertTrue("The served production mod.js no longer declares Image Studio.",
+                    realModText.contains("id: \\"imagestudio\\"")
+                            && realModText.contains("version: \\"1.31.20\\""));
+            Method detectImageStudio = MainActivity.class.getDeclaredMethod(
+                    "imageStudioModId", Class.forName("com.wayward.launcher.SafTree"));
+            detectImageStudio.setAccessible(true);
+            assertEquals("The production launcher detector did not recognize the installed ZIP module.",
+                    "imagestudio", detectImageStudio.invoke(launcher, new Object[]{null}));
+
             byte[] gameHtml;
             try (InputStream input = instrumentation.getContext().getAssets().open("Wayward_WML_ko.html");
                  ByteArrayOutputStream output = new ByteArrayOutputStream()) {
