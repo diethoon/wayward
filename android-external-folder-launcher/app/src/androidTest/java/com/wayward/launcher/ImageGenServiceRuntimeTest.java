@@ -525,8 +525,8 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("The Image Studio settings bridge did not click the in-game settings button: "
                     + settingsResult, settingsResult.optBoolean("ok", false));
             String clicked = awaitJsString(instrumentation, gameWeb,
-                    "document.getElementById('wwis-generation-settings').dataset.clicked||''", 5_000L);
-            assertEquals("The Image Studio settings button was not clicked.", "yes", clicked);
+                    "String(window.__waywardCiSettingsClicks||0)", 5_000L);
+            assertEquals("The real Image Studio settings button did not receive a click.", "1", clicked);
 
             // The bridge automatically discovers the live WML roster and writes
             // it through the same discover-batch API as Image Studio's own button.
@@ -733,12 +733,11 @@ public final class ImageGenServiceRuntimeTest {
 
         WebView gameWeb = (WebView) getField(sessionActivity, "web");
         assertNotNull("The game WebView disappeared before cross-task routing.", gameWeb);
-        assertEquals("The test settings button fixture was not present in the game WebView.", "yes",
+        assertEquals("The actual WML settings button disappeared before cross-task routing.", "1",
                 awaitJsString(instrumentation, gameWeb,
-                        "document.getElementById('wwis-generation-settings').dataset.clicked||''", 5_000L));
+                        "String(window.__waywardCiSettingsClicks||0)", 5_000L));
         awaitJsString(instrumentation, gameWeb,
-                "(function(){document.getElementById('wwis-generation-settings').dataset.clicked='';return 'reset';})()",
-                5_000L);
+                "(function(){window.__waywardCiSettingsClicks=0;return 'reset';})()", 5_000L);
 
         Activity homeActivity = instrumentation.startActivitySync(
                 new Intent(context, MainActivity.class)
@@ -760,12 +759,12 @@ public final class ImageGenServiceRuntimeTest {
         String clicked = "";
         while (System.currentTimeMillis() < deadline) {
             clicked = awaitJsString(instrumentation, gameWeb,
-                    "document.getElementById('wwis-generation-settings').dataset.clicked||''", 5_000L);
-            if ("yes".equals(clicked)) break;
+                    "String(window.__waywardCiSettingsClicks||0)", 5_000L);
+            if ("1".equals(clicked)) break;
             Thread.sleep(100L);
         }
-        assertEquals("The settings button in the active game session was not opened from the separate launcher home task.",
-                "yes", clicked);
+        assertEquals("The actual WML Image Studio settings button in the active game session was not opened from the separate launcher home task.",
+                "1", clicked);
         return homeActivity;
     }
 
