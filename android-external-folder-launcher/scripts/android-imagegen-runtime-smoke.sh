@@ -33,7 +33,7 @@ adb shell getprop ro.enable.native.bridge.exec > "$OUT/native-bridge-exec.txt"
   echo "[device properties]"
   for property in ro.build.fingerprint ro.build.id ro.build.version.incremental ro.product.manufacturer ro.product.model ro.product.device ro.hardware ro.boot.qemu.avd_name ro.dalvik.vm.native.bridge ro.enable.native.bridge.exec; do
     printf '%s=' "$property"
-    adb shell getprop "$property" | tr -d '\r'
+    adb shell getprop "$property"
   done
   echo
   echo "[installed Android 35 Google APIs x86_64 image]"
