@@ -194,6 +194,13 @@ jobs:
       - name: Verify and build
         working-directory: android-external-folder-launcher
         run: bash ./verify.sh
+      - name: Upload verified Android launcher debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: WaywardLauncher-SAF-image-cache-debug-v0.3.12
+          path: android-external-folder-launcher/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
       - name: Enable KVM for Android launcher smoke test
         shell: bash
         run: |
@@ -242,9 +249,3 @@ jobs:
             ${{ runner.temp }}/flux-smoke/result.txt
           if-no-files-found: error
           retention-days: 7
-      - uses: actions/upload-artifact@v4
-        with:
-          name: WaywardLauncher-image-diagnostics-v0.3.12
-          path: android-external-folder-launcher/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
