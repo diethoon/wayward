@@ -71,6 +71,12 @@ assert.doesNotMatch(service, /new ProcessBuilder\(binary\.getAbsolutePath\(\), "
 assert.doesNotMatch(service, /new ProcessBuilder\(installed\.getAbsolutePath\(\), "--version"\)/);
 assert.doesNotMatch(service, /command\.add\(bun\.getAbsolutePath\(\)\)/,
   "the long-running server must also use the linker-backed builder");
+const startupBeforeBun = service.slice(
+  service.indexOf("private void startRuntime"),
+  service.indexOf("File bun = ensureBun")
+);
+assert.doesNotMatch(startupBeforeBun, /probeHealth\(\)/,
+  "do not adopt an unrelated loopback listener as the managed Bun server");
 assert.match(service, /long nextHealthNoticeAt = 0L/);
 assert.doesNotMatch(service, /long deadline = System\.currentTimeMillis\(\) \+ 60000L/);
 assert.doesNotMatch(service, /60초 안에 \/api\/image\/health 응답이 오지 않았습니다/);
