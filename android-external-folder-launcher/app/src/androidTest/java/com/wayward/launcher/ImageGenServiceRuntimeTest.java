@@ -1310,3 +1310,24 @@ public final class ImageGenServiceRuntimeTest {
             if (action.title != null && "중지".contentEquals(action.title)) return action;
         }
         return null;
+    }
+
+    private static String readText(File file) throws Exception {
+        if (!file.isFile()) return "";
+        try (InputStream input = new FileInputStream(file);
+             java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                if (read > 0) output.write(buffer, 0, read);
+            }
+            return output.toString("UTF-8");
+        }
+    }
+
+    private static String startupLogs(Context context) {
+        return "startup.log=" + new File(context.getFilesDir(), "imagegen/startup.log").getAbsolutePath()
+                + "; server.log=" + new File(context.getFilesDir(), "imagegen/server.log").getAbsolutePath()
+                + "; bun-version.log=" + new File(context.getFilesDir(), "imagegen/bun-version.log").getAbsolutePath();
+    }
+}
