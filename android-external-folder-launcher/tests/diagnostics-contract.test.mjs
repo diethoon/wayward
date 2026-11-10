@@ -46,6 +46,7 @@ assert.doesNotMatch(imagePipeline, /DiagnosticsUploader|uploadPending/);
 assert.match(imageDiagnosticsActivity, /새 진단 시작/);
 assert.match(imageDiagnosticsActivity, /server\.log/);
 assert.match(imageDiagnosticsActivity, /startup\.log/);
+assert.match(imageDiagnosticsActivity, /redactRuntimeLog/);
 assert.match(imageGenStatusStore, /boolean isAvailable\(\)/);
 assert.match(main, /if\(!state\.isAvailable\(\)\)/);
 assert.match(service, /HTTP 503\(공급자 설정\/인증 대기\)/);

@@ -195,10 +195,18 @@ public final class ImageDiagnosticsActivity extends Activity {
                 int newline = content.indexOf('\n');
                 if (newline >= 0) content = content.substring(newline + 1);
             }
+            content = redactRuntimeLog(content);
             out.append(content.trim()).append("\n\n");
         } catch (Exception error) {
             out.append("(읽기 실패: ").append(error.getClass().getSimpleName()).append(")\n\n");
         }
+    }
+
+    private String redactRuntimeLog(String value) {
+        if (value == null) return "";
+        String safe = value.replaceAll("(?i)(Bearer\\s+)[A-Za-z0-9._~+/-]+=*", "$1[REDACTED]");
+        safe = safe.replaceAll("(?i)((?:NAI_TOKEN|API[_-]?KEY|ACCESS[_-]?TOKEN|REFRESH[_-]?TOKEN|PASSWORD|SECRET)\\s*[=:]\\s*)[\\\"']?[^\\s,;\\\"']+", "$1[REDACTED]");
+        return safe;
     }
 
     private void copyLog() {

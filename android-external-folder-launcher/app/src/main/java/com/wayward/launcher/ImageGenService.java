@@ -353,6 +353,7 @@ public final class ImageGenService extends Service {
         }
         if (!stopping) {
             serverReady = false;
+            serverAvailable = false;
             starting = false;
             updateNotification("ImageGen 서버가 종료됐습니다. 로그: " + log.getAbsolutePath());
         }
