@@ -265,7 +265,7 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("The real Image Studio ZIP was not registered in the app-private mod list.",
                     zipMods.listModIds().contains("imagestudio"));
             ByteArrayOutputStream realModSource = new ByteArrayOutputStream();
-            try (InputStream input = zipMods.open("wml/mods/imagestudio/mod.js")) {
+            try (InputStream input = zipMods.openRaw("wml/mods/imagestudio/mod.js")) {
                 assertNotNull("The real Image Studio WML entrypoint was not served by ZipModStore.", input);
                 byte[] buffer = new byte[8192];
                 int count;
@@ -280,6 +280,28 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("The served production mod.js no longer declares Image Studio.",
                     realModText.contains("imagestudio")
                             && realModText.contains("1.31.20"));
+            assertTrue("The pinned module fixture no longer exposes the WML 0.9.5-only menu call.",
+                    realModText.contains("return base.ui.pauseSettings("));
+
+            // The raw ZIP remains byte-for-byte intact. ZipModStore adapts only
+            // the JavaScript response that the real game WebView receives.
+            ByteArrayOutputStream compatibleModSource = new ByteArrayOutputStream();
+            try (InputStream input = zipMods.open("wml/mods/imagestudio/mod.js")) {
+                assertNotNull("The compatible Image Studio entrypoint was not served.", input);
+                byte[] buffer = new byte[8192];
+                int count;
+                while ((count = input.read(buffer)) >= 0) {
+                    if (count > 0) compatibleModSource.write(buffer, 0, count);
+                }
+            }
+            String compatibleModText = new String(compatibleModSource.toByteArray(), StandardCharsets.UTF_8);
+            assertTrue("The served module does not guard the WML 0.9.5 pauseSettings API.",
+                    compatibleModText.contains("typeof base.ui.pauseSettings === 'function'"));
+            assertTrue("The served module does not provide the WML 0.7.x addButton fallback.",
+                    compatibleModText.contains("typeof base.ui.addButton === 'function'")
+                            && compatibleModText.contains("base.ui.addButton({ label, title: label, onClick })"));
+            assertTrue("The served module was not compatibility-adapted.",
+                    compatibleModText.length() > realModText.length());
             Method detectImageStudio = MainActivity.class.getDeclaredMethod(
                     "imageStudioModId", Class.forName("com.wayward.launcher.MainActivity$SafTree"));
             detectImageStudio.setAccessible(true);
