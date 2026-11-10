@@ -101,7 +101,7 @@ public final class ImageGenServiceRuntimeTest {
             StatusBarNotification serviceNotification = findImageGenNotification(notifications);
             assertNotNull("Foreground ImageGen notification was not retained after Activity finish. "
                     + startupLogs(context), serviceNotification);
-            Notification.Action stopAction = findStopAction(serviceNotification.notification);
+            Notification.Action stopAction = findStopAction(serviceNotification.getNotification());
             assertNotNull("Foreground notification has no explicit 중지 action. "
                     + startupLogs(context), stopAction);
             PendingIntent stopIntent = stopAction.actionIntent;
