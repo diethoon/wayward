@@ -62,7 +62,7 @@ assert.match(service, /\.addAction\(android\.R\.drawable\.ic_media_pause, "ì¤‘ì§
   "the foreground service must retain its explicit Stop action");
 assert.match(service, /ANDROID_LINKER_64 = "\/system\/bin\/linker64"/,
   "app-private Bun must be started through Android's system linker");
-assert.ok(service.includes('ANDROID_BRIDGE_ARM64_LINKER_64 = "/system/lib64/arm64/linker64"'),
+assert.ok(service.includes('ANDROID_BRIDGE_ARM64_LINKER_64 = "/system/bin/arm64/linker64"'),
   "x86_64 Google API emulators must select the ARM64 native-bridge linker");
 assert.match(service, /private File resolveAndroidArm64Linker\(\)/,
   "select the system linker for the device ABI before launching Bun");
