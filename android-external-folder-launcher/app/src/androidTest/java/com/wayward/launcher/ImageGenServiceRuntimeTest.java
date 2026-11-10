@@ -212,6 +212,8 @@ public final class ImageGenServiceRuntimeTest {
         WebView[] webHolder = new WebView[1];
         CountDownLatch pageFinished = new CountDownLatch(1);
         AtomicReference<String> pageError = new AtomicReference<>("");
+        AtomicBoolean imageStudioScriptServed = new AtomicBoolean(false);
+        AtomicBoolean imageSearchScriptServed = new AtomicBoolean(false);
         File artifactDirectory = new File(context.getFilesDir(), "ci-artifacts");
         if (!artifactDirectory.isDirectory() && !artifactDirectory.mkdirs()) {
             throw new IllegalStateException("Could not create private CI artifact directory.");
@@ -330,6 +332,37 @@ public final class ImageGenServiceRuntimeTest {
                     settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
                     gameWeb.setBackgroundColor(android.graphics.Color.WHITE);
                     gameWeb.setWebViewClient(new WebViewClient() {
+                        @Override public WebResourceResponse shouldInterceptRequest(
+                                WebView view, android.webkit.WebResourceRequest request) {
+                            Uri requestUri = request == null ? null : request.getUrl();
+                            String requestPath = requestUri == null ? null : requestUri.getPath();
+                            String zipPath = null;
+                            if (requestPath != null && requestPath.startsWith("/game/wml/mods/")) {
+                                zipPath = requestPath.substring("/game/".length());
+                            } else if (requestPath != null && requestPath.startsWith("/wml/mods/")) {
+                                zipPath = requestPath.substring(1);
+                            }
+                            if (zipPath != null) {
+                                try {
+                                    InputStream entry = zipMods.open(zipPath);
+                                    if (entry != null) {
+                                        if ("wml/mods/imagestudio/mod.js".equals(zipPath)) {
+                                            imageStudioScriptServed.set(true);
+                                        } else if ("wml/mods/image-search-customize/mod.js".equals(zipPath)) {
+                                            imageSearchScriptServed.set(true);
+                                        }
+                                        String mime = zipPath.endsWith(".js") ? "application/javascript"
+                                                : zipPath.endsWith(".json") ? "application/json"
+                                                : zipPath.endsWith(".css") ? "text/css" : "application/octet-stream";
+                                        return new WebResourceResponse(mime, "UTF-8", 200, "OK",
+                                                java.util.Collections.emptyMap(), entry);
+                                    }
+                                } catch (Exception error) {
+                                    pageError.set("ZIP WML module " + zipPath + ": " + error.getMessage());
+                                }
+                            }
+                            return super.shouldInterceptRequest(view, request);
+                        }
                         @Override public void onPageFinished(WebView view, String url) {
                             pageFinished.countDown();
                             super.onPageFinished(view, url);
@@ -385,6 +418,17 @@ public final class ImageGenServiceRuntimeTest {
             WebView gameWeb = webHolder[0];
             assertNotNull("The launcher WebView was not created: " + pageError.get(), gameWeb);
             dismissWaywardAgeConfirmation(instrumentation, gameWeb);
+            long moduleLoadDeadline = System.currentTimeMillis() + 30_000L;
+            while (System.currentTimeMillis() < moduleLoadDeadline
+                    && (!imageStudioScriptServed.get() || !imageSearchScriptServed.get())) {
+                Thread.sleep(150L);
+            }
+            assertTrue("The game WML loader did not request the real Image Studio module. "
+                    + "served=" + imageStudioScriptServed.get() + " page=" + pageError.get(),
+                    imageStudioScriptServed.get());
+            assertTrue("The game WML loader did not request the real image-search-customize portrait module. "
+                    + "served=" + imageSearchScriptServed.get() + " page=" + pageError.get(),
+                    imageSearchScriptServed.get());
 
             String bridgeType = awaitJsString(instrumentation, gameWeb,
                     "typeof window.WaywardImageProviders", 30_000L);
