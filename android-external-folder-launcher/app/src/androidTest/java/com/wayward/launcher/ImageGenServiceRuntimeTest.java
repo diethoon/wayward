@@ -602,6 +602,15 @@ public final class ImageGenServiceRuntimeTest {
             // Exercise the actual WW_ImageStudioBridge registered by the
             // pinned WML Image Studio module. No fake bridge or fake settings
             // button is installed into the game page.
+            String builderUiDiagnostics = awaitJsString(instrumentation, gameWeb,
+                    "(function(){"
+                            + "var visible=function(e){var r=e.getBoundingClientRect(),s=getComputedStyle(e);return e.getClientRects().length>0&&r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)>0;};"
+                            + "var scrollers=Array.from(document.querySelectorAll('body *')).filter(function(e){var s=getComputedStyle(e);return e.scrollHeight>e.clientHeight+80&&/(auto|scroll)/.test(s.overflowY);}).map(function(e){return {tag:e.tagName,id:e.id,cls:String(e.className||'').slice(0,80),top:e.scrollTop,height:e.clientHeight,total:e.scrollHeight};}).slice(0,30);"
+                            + "var buttons=Array.from(document.querySelectorAll('button,[role=button],input[type=button]')).map(function(e){var r=e.getBoundingClientRect();return {text:String(e.innerText||e.value||e.textContent||'').replace(/\\\\s+/g,' ').trim().slice(0,100),disabled:!!e.disabled,visible:visible(e),top:Math.round(r.top),bottom:Math.round(r.bottom)};}).filter(function(e){return e.text;});"
+                            + "return JSON.stringify({title:document.title,bodyText:String(document.body.innerText||'').slice(-2500),buttons:buttons,scrollers:scrollers});})()",
+                    10_000L);
+            resultSummary = "state=builder_ui_diagnostics\\n" + builderUiDiagnostics + "\\n";
+
             String wmlBridgeDiagnostics = awaitJsString(instrumentation, gameWeb,
                     "(function(){"
                             + "var bridge=window.WW_ImageStudioBridge;"
