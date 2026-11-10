@@ -22,6 +22,110 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Locate the exact WML release across game repository branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          import re
+          import subprocess
+          import tempfile
+
+          target_prefix = "d75797d4101f4a1312b3ae0571d77f68"
+          repositories = ("diethoon/3.36", "diethoon/wayward")
+          report = []
+          with tempfile.TemporaryDirectory(prefix="wayward-wml-branch-audit-") as temporary:
+              for repository in repositories:
+                  directory = Path(temporary) / repository.split("/")[-1]
+                  directory.mkdir()
+                  subprocess.run(["git", "init", "-q", str(directory)], check=True)
+                  subprocess.run(["git", "-C", str(directory), "remote", "add", "origin",
+                                  f"https://github.com/{repository}.git"], check=True)
+                  subprocess.run(["git", "-C", str(directory), "fetch", "--quiet", "--filter=blob:none",
+                                  "--depth=1", "origin",
+                                  "+refs/heads/*:refs/remotes/origin/*"], check=True)
+                  refs = subprocess.check_output([
+                      "git", "-C", str(directory), "for-each-ref",
+                      "--format=%(refname)", "refs/remotes/origin"
+                  ], text=True).splitlines()
+                  html_blobs = {}
+                  core_blobs = {}
+                  for ref in refs:
+                      listing = subprocess.check_output([
+                          "git", "-C", str(directory), "ls-tree", "-rl", "--full-tree", ref
+                      ], text=True, errors="replace")
+                      for line in listing.splitlines():
+                          if "\t" not in line:
+                              continue
+                          metadata, file_path = line.split("\t", 1)
+                          fields = metadata.split()
+                          if len(fields) < 4:
+                              continue
+                          mode, object_type, blob_sha, size_text = fields[:4]
+                          if object_type != "blob":
+                              continue
+                          try:
+                              size = int(size_text)
+                          except ValueError:
+                              continue
+                          lower_path = file_path.lower()
+                          if lower_path.endswith((".html", ".htm")) and 3_500_000 <= size <= 9_000_000:
+                              key = (blob_sha, file_path, size)
+                              html_blobs.setdefault(key, set()).add(ref)
+                          if lower_path.endswith("wml-core.js") or "/wml/runtime/" in lower_path:
+                              if size <= 4_000_000:
+                                  key = (blob_sha, file_path, size)
+                                  core_blobs.setdefault(key, set()).add(ref)
+
+                  report.append(f"REPOSITORY {repository} branch_count={len(refs)}")
+                  for (blob_sha, file_path, size), refs_for_blob in sorted(html_blobs.items()):
+                      data = subprocess.check_output(["git", "-C", str(directory), "cat-file", "blob", blob_sha])
+                      digest = hashlib.sha256(data).hexdigest()
+                      if digest.startswith(target_prefix) or "Wayward_WML_ko.html" in file_path:
+                          report.append(
+                              "HTML " + json.dumps({
+                                  "path": file_path, "bytes": size, "git_blob": blob_sha,
+                                  "sha256": digest, "target_hash_match": digest.startswith(target_prefix),
+                                  "branches": sorted(refs_for_blob)
+                              }, ensure_ascii=False)
+                          )
+                  for (blob_sha, file_path, size), refs_for_blob in sorted(core_blobs.items()):
+                      data = subprocess.check_output(["git", "-C", str(directory), "cat-file", "blob", blob_sha])
+                      patterns = (
+                          rb"\b(?:const|let|var)\s+VERSION\s*=\s*['\"]([^'\"]+)['\"]",
+                          rb"\bversion\s*:\s*['\"]([^'\"]+)['\"]",
+                      )
+                      versions = []
+                      for pattern in patterns:
+                          versions.extend(x.decode("ascii", "replace") for x in re.findall(pattern, data))
+                      versions = sorted(set(versions))
+                      if "0.9.5" in versions or "wml-core.js" in file_path.lower():
+                          report.append(
+                              "WML_RUNTIME " + json.dumps({
+                                  "path": file_path, "bytes": size, "git_blob": blob_sha,
+                                  "sha256": hashlib.sha256(data).hexdigest(), "versions": versions,
+                                  "branches": sorted(refs_for_blob)
+                              }, ensure_ascii=False)
+                          )
+                  if not html_blobs:
+                      report.append("HTML no candidate files in 3.5-9MB range")
+                  if not core_blobs:
+                      report.append("WML_RUNTIME no candidate files")
+          output = Path("wml-release-branch-audit.txt")
+          output.write_text("\n".join(report) + "\n", encoding="utf-8")
+          print(output.read_text(encoding="utf-8"))
+          PY
+      - name: Upload WML release branch audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wayward-WML-release-branch-audit
+          path: wml-release-branch-audit.txt
+          if-no-files-found: warn
+          retention-days: 14
       - name: Embed pinned Wayward Image Studio backend
         shell: bash
         run: |
