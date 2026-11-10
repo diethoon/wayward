@@ -23,6 +23,7 @@ import android.view.View;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebResourceResponse;
 import android.widget.FrameLayout;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -45,6 +46,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 @RunWith(AndroidJUnit4.class)
@@ -262,6 +264,34 @@ public final class ImageGenServiceRuntimeTest {
             detectImageStudio.setAccessible(true);
             assertEquals("The production launcher detector did not recognize the installed ZIP module.",
                     "imagestudio", detectImageStudio.invoke(launcher, new Object[]{null}));
+
+            // Image Studio 1.31.20 intentionally delegates portrait lookup and
+            // display to image-search-customize. Install that exact module plus
+            // its pinned WML prerequisites from the same source archive.
+            String[][] runtimeModules = new String[][]{
+                    {"addon-compat", "imagestudio-source/wml-mods/addon-compat.zip"},
+                    {"attention-image-prompt", "imagestudio-source/wml-mods/attention-image-prompt.zip"},
+                    {"image-look", "imagestudio-source/wml-mods/image-look.zip"},
+                    {"image-search-customize", "imagestudio-source/wml-mods/image-search-customize.zip"}
+            };
+            for (String[] module : runtimeModules) {
+                File staged = zipMods.temporaryFile("ci-" + module[0]);
+                try (InputStream input = instrumentation.getContext().getAssets().open(module[1]);
+                     OutputStream output = new FileOutputStream(staged)) {
+                    byte[] buffer = new byte[8192];
+                    int count;
+                    while ((count = input.read(buffer)) >= 0) {
+                        if (count > 0) output.write(buffer, 0, count);
+                    }
+                    output.flush();
+                }
+                ZipModStore.ModInfo moduleInfo = ZipModStore.inspect(staged);
+                assertEquals("Pinned WML runtime module resolved the wrong ID: " + module[0],
+                        module[0], moduleInfo.id);
+                zipMods.install(staged);
+                assertTrue("Pinned WML runtime module was not registered: " + module[0],
+                        zipMods.listModIds().contains(module[0]));
+            }
 
             byte[] gameHtml;
             try (InputStream input = instrumentation.getContext().getAssets().open("Wayward_WML_ko.html");
