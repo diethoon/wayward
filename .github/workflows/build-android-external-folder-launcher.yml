@@ -463,18 +463,48 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/flux-smoke"
-          curl --fail --silent --show-error --max-time 240 \
+          set +e
+          HTTP_STATUS="$(curl --silent --show-error --max-time 240 \
             -H 'content-type: application/json' \
             --data '{"prompt":"An original cozy fantasy shopkeeper in a small woodland general store, polished anime illustration, warm afternoon sunlight, full body, detailed but clean composition, no text"}' \
             'https://wayward-image-worker.trpgengine.workers.dev' \
-            -o "$RUNNER_TEMP/flux-smoke/response.json"
+            -w '%{http_code}' -o "$RUNNER_TEMP/flux-smoke/response.json")"
+          CURL_EXIT=$?
+          set -e
+          printf '%s\n' "$HTTP_STATUS" > "$RUNNER_TEMP/flux-smoke/http-status.txt"
+          printf '%s\n' "$CURL_EXIT" > "$RUNNER_TEMP/flux-smoke/curl-exit.txt"
           node --input-type=module <<'JS'
           import fs from 'node:fs';
           import crypto from 'node:crypto';
           const root = process.env.RUNNER_TEMP + '/flux-smoke';
-          const response = JSON.parse(fs.readFileSync(root + '/response.json', 'utf8'));
+          const httpStatus = (fs.readFileSync(root + '/http-status.txt', 'utf8') || '').trim();
+          const curlExit = Number((fs.readFileSync(root + '/curl-exit.txt', 'utf8') || '').trim());
+          const raw = fs.existsSync(root + '/response.json') ? fs.readFileSync(root + '/response.json', 'utf8') : '';
+          const safeBody = raw
+            .replace(/(authorization|token|api[_-]?key|bearer)(\s*[:=]\s*)[^\s,"}]+/gi, '$1$2[redacted]')
+            .slice(0, 1200);
+          if (curlExit !== 0 || !/^2[0-9]{2}$/.test(httpStatus)) {
+            const report = 'provider=Cloudflare FLUX Worker\nhttp=' + (httpStatus || 'no-response') +
+              '\ncurlExit=' + curlExit + '\nbody=' + safeBody + '\n';
+            fs.writeFileSync(root + '/result.txt', report);
+            console.error(report);
+            process.exit(1);
+          }
+          let response;
+          try { response = JSON.parse(raw); }
+          catch {
+            const report = 'provider=Cloudflare FLUX Worker\nhttp=' + httpStatus +
+              '\nerror=invalid-json\nbody=' + safeBody + '\n';
+            fs.writeFileSync(root + '/result.txt', report);
+            console.error(report);
+            process.exit(1);
+          }
           if (response.success !== true || typeof response.image !== 'string' || !response.image.length) {
-            throw new Error('Cloudflare Worker did not return success=true and a base64 image.');
+            const report = 'provider=Cloudflare FLUX Worker\nhttp=' + httpStatus +
+              '\nerror=missing-success-image\nbody=' + safeBody + '\n';
+            fs.writeFileSync(root + '/result.txt', report);
+            console.error(report);
+            process.exit(1);
           }
           const bytes = Buffer.from(response.image, 'base64');
           const mime = String(response.mimeType || 'image/jpeg').toLowerCase();
@@ -566,6 +596,14 @@ jobs:
           path: |
             ${{ runner.temp }}/imagegen-runtime-smoke/result.txt
             ${{ runner.temp }}/imagegen-runtime-smoke/server.log
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload Cloudflare FLUX failure diagnostics
+        if: steps.flux_smoke.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wayward-Cloudflare-FLUX-failure
+          path: ${{ runner.temp }}/flux-smoke/result.txt
           if-no-files-found: warn
           retention-days: 7
       - name: Upload real FLUX smoke image
