@@ -93,7 +93,12 @@ assert.match(imagePipeline, /srcAttrKind/);
 assert.match(imageProviderJs, /elementClass/);
 assert.match(imageProviderJs, /repeatCount/);
 assert.match(runtimeSmokeTest, /Wayward_WML_ko\.html/);
-assert.match(runtimeSmokeTest, /WaywardImageProviders\.generate/);
+assert.match(runtimeSmokeTest, /api\/batch\/enqueue/,
+  "Android runtime smoke must use the Image Studio batch enqueue endpoint");
+assert.match(runtimeSmokeTest, /api\/pack/,
+  "Android runtime smoke must verify the generated image in the Image Studio pack cache");
+assert.match(runtimeSmokeTest, /ImageGenLocalProviderServer/,
+  "Android runtime smoke must start the native provider adapter");
 assert.match(runtimeSmokeTest, /wayward-image-worker\.trpgengine\.workers\.dev/);
 assert.match(runtimeSmokeTest, /UiAutomation\(\)\.takeScreenshot/);
 assert.match(runtimeSmokeTest, /ImagePipelineDiagnostics\.readRecent/);
