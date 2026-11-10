@@ -13,6 +13,54 @@ adb shell getprop ro.build.version.sdk > "$OUT/android-sdk.txt"
 adb shell getprop ro.product.cpu.abilist > "$OUT/android-abilist.txt"
 adb shell getprop ro.dalvik.vm.native.bridge > "$OUT/native-bridge.txt"
 adb shell getprop ro.enable.native.bridge.exec > "$OUT/native-bridge-exec.txt"
+
+# Preserve the exact emulator profile and installed system-image revision with
+# each run. The hosted AVD is disposable; this manifest makes its runtime
+# environment reproducible and lets later failures be compared byte-for-byte.
+{
+  echo "profile=pixel_7"
+  echo "api_level=35"
+  echo "target=google_apis"
+  echo "arch=x86_64"
+  echo "emulator_options=-no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none"
+  echo
+  echo "[emulator]"
+  emulator -version 2>&1 | head -n 6 || true
+  echo
+  echo "[adb]"
+  adb version 2>&1 | head -n 4 || true
+  echo
+  echo "[device properties]"
+  for property in ro.build.fingerprint ro.build.id ro.build.version.incremental \\
+    ro.product.manufacturer ro.product.model ro.product.device ro.hardware \\
+    ro.boot.qemu.avd_name ro.dalvik.vm.native.bridge ro.enable.native.bridge.exec; do
+    printf '%s=' "$property"
+    adb shell getprop "$property" | tr -d '\\r'
+  done
+  echo
+  echo "[installed Android 35 Google APIs x86_64 image]"
+  SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+  IMAGE_ROOT="$SDK_ROOT/system-images/android-35/google_apis/x86_64"
+  for metadata in "$IMAGE_ROOT/source.properties" "$IMAGE_ROOT/package.xml"; do
+    if [ -f "$metadata" ]; then
+      echo "--- $metadata"
+      if [[ "$metadata" == *.xml ]]; then
+        sed -n '1,180p' "$metadata"
+      else
+        cat "$metadata"
+      fi
+    fi
+  done
+  echo
+  echo "[AVD configuration]"
+  AVD_ROOT="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
+  if [ -d "$AVD_ROOT" ]; then
+    find "$AVD_ROOT" -maxdepth 3 -type f \\( -name config.ini -o -name '*.ini' \\) -print \\
+      -exec sed -n '1,180p' {} \\;
+  else
+    echo "AVD directory not exposed: $AVD_ROOT"
+  fi
+} > "$OUT/emulator-manifest.txt" 2>&1
 adb shell ls -l /system/bin/arm64/linker64 > "$OUT/arm64-linker.txt" 2>&1 || true
 adb shell ls -l /system/bin/ndk_translation_program_runner_binfmt_misc_arm64 > "$OUT/arm64-runner.txt" 2>&1 || true
 adb shell cat /proc/sys/fs/binfmt_misc/arm64_exe > "$OUT/arm64-binfmt.txt" 2>&1 || true
