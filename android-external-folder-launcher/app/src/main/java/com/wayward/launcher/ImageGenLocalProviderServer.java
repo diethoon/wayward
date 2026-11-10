@@ -15,6 +15,9 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -38,6 +41,8 @@ final class ImageGenLocalProviderServer implements AutoCloseable {
     private final Context context;
     private final String profileId;
     private final String expectedProviderId;
+    private final String bearerToken;
+    private final Set<Socket> activeSockets = ConcurrentHashMap.newKeySet();
     private final ExecutorService handlers = Executors.newFixedThreadPool(2, runnable -> {
         Thread thread = new Thread(runnable, "wayward-provider-http");
         thread.setDaemon(true);
@@ -47,15 +52,19 @@ final class ImageGenLocalProviderServer implements AutoCloseable {
     private ServerSocket server;
     private Thread acceptThread;
 
-    ImageGenLocalProviderServer(Context context, String profileId, String expectedProviderId) {
+    ImageGenLocalProviderServer(Context context, String profileId, String expectedProviderId, String bearerToken) {
         this.context = context.getApplicationContext();
         this.profileId = profileId == null ? "" : profileId.trim();
         this.expectedProviderId = expectedProviderId == null ? "" : expectedProviderId.trim();
+        this.bearerToken = bearerToken == null ? "" : bearerToken.trim();
         if (!this.profileId.matches("[a-f0-9]{32}")) {
             throw new IllegalArgumentException("이미지 서비스 프로필 ID가 올바르지 않습니다.");
         }
         if (!this.expectedProviderId.matches("[a-f0-9]{32}")) {
             throw new IllegalArgumentException("기본 이미지 서비스 ID가 올바르지 않습니다.");
+        }
+        if (this.bearerToken.length() < 40 || this.bearerToken.length() > 128) {
+            throw new IllegalArgumentException("로컬 이미지 서비스 인증 토큰이 올바르지 않습니다.");
         }
     }
 
@@ -76,6 +85,7 @@ final class ImageGenLocalProviderServer implements AutoCloseable {
         while (!closed) {
             try {
                 Socket client = server.accept();
+                activeSockets.add(client);
                 client.setSoTimeout(SOCKET_TIMEOUT_MS);
                 client.setTcpNoDelay(true);
                 try {
@@ -84,6 +94,7 @@ final class ImageGenLocalProviderServer implements AutoCloseable {
                     respondQuietly(client, 503, "application/json; charset=utf-8",
                             "{\"error\":\"이미지 서비스 요청이 너무 많습니다.\"}".getBytes(StandardCharsets.UTF_8));
                     closeQuietly(client);
+                    activeSockets.remove(client);
                 }
             } catch (IOException error) {
                 if (!closed) Log.w(TAG, "provider adapter accept failed", error);
@@ -143,6 +154,11 @@ final class ImageGenLocalProviderServer implements AutoCloseable {
                 return;
             }
 
+            if (!authorized(headers.get("authorization"))) {
+                writeResponse(output, 403, "application/json; charset=utf-8",
+                        "{\"error\":\"로컬 이미지 서비스 인증에 실패했습니다.\"}".getBytes(StandardCharsets.UTF_8));
+                return;
+            }
             if (headers.containsKey("transfer-encoding")) {
                 writeResponse(output, 400, "application/json; charset=utf-8",
                         "{\"error\":\"Transfer-Encoding 요청은 지원하지 않습니다.\"}".getBytes(StandardCharsets.UTF_8));
@@ -193,6 +209,7 @@ final class ImageGenLocalProviderServer implements AutoCloseable {
                     jsonError(message).getBytes(StandardCharsets.UTF_8));
         } finally {
             closeQuietly(socket);
+            activeSockets.remove(socket);
         }
     }
 
@@ -245,6 +262,13 @@ final class ImageGenLocalProviderServer implements AutoCloseable {
             } catch (Exception ignored) {}
         }
         return result;
+    }
+
+    private boolean authorized(String header) {
+        if (header == null) return false;
+        byte[] actual = header.getBytes(StandardCharsets.UTF_8);
+        byte[] expected = ("Bearer " + bearerToken).getBytes(StandardCharsets.UTF_8);
+        return MessageDigest.isEqual(actual, expected);
     }
 
     private static String safeMime(String raw) {
@@ -318,6 +342,8 @@ final class ImageGenLocalProviderServer implements AutoCloseable {
             try { server.close(); } catch (Exception ignored) {}
             server = null;
         }
+        for (Socket socket : activeSockets) closeQuietly(socket);
+        activeSockets.clear();
         handlers.shutdownNow();
         try { handlers.awaitTermination(2, TimeUnit.SECONDS); }
         catch (InterruptedException error) { Thread.currentThread().interrupt(); }
