@@ -1030,6 +1030,7 @@ public final class MainActivity extends Activity {
         config.put("launcherProfileId",launcherProfileId==null?"":launcherProfileId);
         config.put("launcherProviderId",launcherProviderId==null?"":launcherProviderId);
         config.put("launcherProviderSignature","launcher".equals(mode)?launcherProfileId+":"+launcherProviderId:"");
+        config.put("launcherProviderToken","");
         config.put("naiModel","nai-diffusion-4-5-full");
         // Android has no bundled sharp binary; PNG is the supported no-dependency path.
         config.put("webp",false);
@@ -1038,6 +1039,7 @@ public final class MainActivity extends Activity {
         File state=new File(getFilesDir(),"imagegen/state");
         if(!images.isDirectory()&&!images.mkdirs()&&!images.isDirectory())throw new IllegalStateException("이미지 저장 폴더를 만들지 못했습니다.");
         if(!state.isDirectory()&&!state.mkdirs()&&!state.isDirectory())throw new IllegalStateException("이미지 상태 폴더를 만들지 못했습니다.");
+        synchronizeImageGenProviderSetting(state,mode);
         File output=new File(project,"wayward-imagegen.config.json");
         File temporary=new File(project,"wayward-imagegen.config.json.tmp");
         try(FileOutputStream stream=new FileOutputStream(temporary)){
@@ -1052,6 +1054,34 @@ public final class MainActivity extends Activity {
         }catch(java.nio.file.AtomicMoveNotSupportedException error){
             java.nio.file.Files.move(temporary.toPath(),output.toPath(),
                     java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private void synchronizeImageGenProviderSetting(File stateDirectory,String mode)throws Exception{
+        File settingsFile=new File(stateDirectory,"anima-settings.json");
+        if(!settingsFile.isFile())return;
+        if(settingsFile.length()<=0||settingsFile.length()>2*1024*1024)throw new IllegalStateException("기존 Image Studio 설정 파일 크기가 올바르지 않습니다.");
+        byte[] bytes=java.nio.file.Files.readAllBytes(settingsFile.toPath());
+        org.json.JSONObject settings=new org.json.JSONObject(new String(bytes,StandardCharsets.UTF_8));
+        String provider="launcher".equals(mode)?"launcher":"novelai".equals(mode)?"nai":"sdxl";
+        settings.put("imageProvider",provider);
+        // Credentials are supplied by Android Keystore, never persisted here.
+        settings.put("naiToken","");
+        File temporary=new File(stateDirectory,"anima-settings.json.tmp");
+        try(FileOutputStream output=new FileOutputStream(temporary,false)){
+            output.write((settings.toString()+"\n").getBytes(StandardCharsets.UTF_8));
+            output.flush();
+            output.getFD().sync();
+        }
+        try{
+            java.nio.file.Files.move(temporary.toPath(),settingsFile.toPath(),
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }catch(java.nio.file.AtomicMoveNotSupportedException error){
+            java.nio.file.Files.move(temporary.toPath(),settingsFile.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }finally{
+            if(temporary.exists())temporary.delete();
         }
     }
 
