@@ -83,7 +83,7 @@ assert.match(imageProviderStore, /static void saveNovelAiToken/);
 assert.match(proxy, /novelai_token_saved_keystore/);
 assert.match(service, /migrateLegacyNovelAiToken/);
 assert.match(service, /legacy_novelai_token_migrated_to_keystore/);
-assert.match(runtimeSmokeTest, /save the test-only NovelAI token/);
+assert.match(runtimeSmokeTest, /Save the test-only NovelAI token/);
 assert.match(runtimeSmokeTest, /ImageProviderStore\.readNovelAiToken/);
 assert.match(runtimeSmokeTest, /restartImageGenServerWithKeystoreToken/);
 assert.match(runtimeSmokeTest, /anima-settings\.json/);
