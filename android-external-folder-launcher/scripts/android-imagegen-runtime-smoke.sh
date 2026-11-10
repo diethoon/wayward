@@ -89,6 +89,9 @@ if [ -d "$RUNNER_TEMP/wayward-game-fixture" ]; then
   cp "$RUNNER_TEMP/wayward-game-fixture/game-html-forensics.txt" "$OUT/" 2>/dev/null || true
   cp "$RUNNER_TEMP/wayward-game-fixture/game-html-chunks.sha256.jsonl" "$OUT/" 2>/dev/null || true
 fi
+if [ -s "$RUNNER_TEMP/imagestudio-archive-index.txt" ]; then
+  cp "$RUNNER_TEMP/imagestudio-archive-index.txt" "$OUT/"
+fi
 adb logcat -d -t 12000 > "$OUT/logcat.txt"
 
 {
