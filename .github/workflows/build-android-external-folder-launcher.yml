@@ -108,6 +108,17 @@ jobs:
               report.write("TOTAL" + chr(9) + "files=" + str(count) + chr(9) + "bytes=" + str(total) + chr(10))
           PY
           python3 android-external-folder-launcher/scripts/embed_imagegen_backend.py "$RUNNER_TEMP/wayward-mods.zip"
+      - name: Preserve pinned Image Studio module source for runtime forensics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wayward-ImageStudio-WML-source-inspection
+          path: |
+            ${{ runner.temp }}/imagestudio-archive-index.txt
+            ${{ runner.temp }}/imagestudio-source-index.txt
+            android-external-folder-launcher/app/src/androidTest/assets/imagestudio-source
+          if-no-files-found: warn
+          retention-days: 14
       - name: Fetch and byte-scan pinned Wayward WML game page
         shell: bash
         run: |
