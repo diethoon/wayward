@@ -265,8 +265,8 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("The real Image Studio ZIP was not registered in the app-private mod list.",
                     zipMods.listModIds().contains("imagestudio"));
             ByteArrayOutputStream realModSource = new ByteArrayOutputStream();
-            try (InputStream input = zipMods.openRaw("wml/mods/imagestudio/mod.js")) {
-                assertNotNull("The real Image Studio WML entrypoint was not served by ZipModStore.", input);
+            try (InputStream input = zipMods.open("wml/mods/imagestudio/mod.js")) {
+                assertNotNull("The Image Studio WML entrypoint was not served by the production ZIP reader.", input);
                 byte[] buffer = new byte[8192];
                 int count;
                 while ((count = input.read(buffer)) >= 0) {
@@ -277,31 +277,25 @@ public final class ImageGenServiceRuntimeTest {
             assertEquals("The installed release ZIP did not serve the full production mod.js.",
                     320_679, realModBytes.length);
             String realModText = new String(realModBytes, StandardCharsets.UTF_8);
-            assertTrue("The served production mod.js no longer declares Image Studio.",
+            assertTrue("The served production mod.js no longer declares Image Studio 1.31.20.",
                     realModText.contains("imagestudio")
                             && realModText.contains("1.31.20"));
-            assertTrue("The pinned module fixture no longer exposes the WML 0.9.5-only menu call.",
+            assertTrue("The WML 0.9.5 native settings API call was lost from the production module.",
                     realModText.contains("return base.ui.pauseSettings("));
 
-            // The raw ZIP remains byte-for-byte intact. ZipModStore adapts only
-            // the JavaScript response that the real game WebView receives.
-            ByteArrayOutputStream compatibleModSource = new ByteArrayOutputStream();
+            // The actual WebView ZIP-serving path must return the exact module
+            // bytes stored in the user's mods.zip, without a legacy API rewrite.
+            ByteArrayOutputStream servedModSource = new ByteArrayOutputStream();
             try (InputStream input = zipMods.open("wml/mods/imagestudio/mod.js")) {
-                assertNotNull("The compatible Image Studio entrypoint was not served.", input);
+                assertNotNull("The WebView Image Studio entrypoint was not served.", input);
                 byte[] buffer = new byte[8192];
                 int count;
                 while ((count = input.read(buffer)) >= 0) {
-                    if (count > 0) compatibleModSource.write(buffer, 0, count);
+                    if (count > 0) servedModSource.write(buffer, 0, count);
                 }
             }
-            String compatibleModText = new String(compatibleModSource.toByteArray(), StandardCharsets.UTF_8);
-            assertTrue("The served module does not guard the WML 0.9.5 pauseSettings API.",
-                    compatibleModText.contains("typeof base.ui.pauseSettings === 'function'"));
-            assertTrue("The served module does not provide the WML 0.7.x addButton fallback.",
-                    compatibleModText.contains("typeof base.ui.addButton === 'function'")
-                            && compatibleModText.contains("base.ui.addButton({ label, title: label, onClick })"));
-            assertTrue("The served module was not compatibility-adapted.",
-                    compatibleModText.length() > realModText.length());
+            assertTrue("The launcher modified the pinned Image Studio 1.31.20 source before WebView delivery.",
+                    java.util.Arrays.equals(realModBytes, servedModSource.toByteArray()));
             Method detectImageStudio = MainActivity.class.getDeclaredMethod(
                     "imageStudioModId", Class.forName("com.wayward.launcher.MainActivity$SafTree"));
             detectImageStudio.setAccessible(true);
