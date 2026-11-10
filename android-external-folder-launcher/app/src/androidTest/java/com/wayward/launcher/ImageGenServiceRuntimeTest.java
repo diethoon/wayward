@@ -276,6 +276,14 @@ public final class ImageGenServiceRuntimeTest {
             byte[] realModBytes = realModSource.toByteArray();
             assertEquals("The installed release ZIP did not serve the full production mod.js.",
                     320_679, realModBytes.length);
+            byte[] moduleDigest = java.security.MessageDigest.getInstance("SHA-256").digest(realModBytes);
+            StringBuilder moduleSha256 = new StringBuilder();
+            for (byte value : moduleDigest) {
+                moduleSha256.append(String.format(java.util.Locale.ROOT, "%02x", value & 0xff));
+            }
+            assertEquals("The Image Studio 1.31.20 source differs from the exact pinned mods.zip entry.",
+                    "18e6851a03b27c4ccedb53e86465e6abcd6c09254cb881c9fa7abb16574890ef",
+                    moduleSha256.toString());
             String realModText = new String(realModBytes, StandardCharsets.UTF_8);
             assertTrue("The served production mod.js no longer declares Image Studio 1.31.20.",
                     realModText.contains("imagestudio")
