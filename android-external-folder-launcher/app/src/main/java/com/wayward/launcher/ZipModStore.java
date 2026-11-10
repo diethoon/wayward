@@ -30,7 +30,7 @@ final class ZipModStore {
     private static final long MAX_ENTRY_BYTES = 256L * 1024L * 1024L;
     // Image Studio 1.31.20's real WML mod.js is 320,679 bytes.
     // Keep parsing bounded, but do not reject valid larger production mods.
-    private static final int MAX_MOD_JS_BYTES = 1024 * 1024;
+    private static final int MAX_MOD_JS_BYTES = 2 * 1024 * 1024;
     private static final int MAX_OPEN_ARCHIVES = 4;
     private static final Pattern ID = Pattern.compile("^[a-z0-9][a-z0-9._-]*$");
     private static final Pattern MOD_ID = Pattern.compile(
@@ -348,7 +348,7 @@ final class ZipModStore {
 
         ZipEntry modJs = zip.getEntry(selected);
         if (modJs == null || modJs.getSize() > MAX_MOD_JS_BYTES) {
-            throw new IOException("mod.js가 없거나 1MB를 초과합니다.");
+            throw new IOException("mod.js가 없거나 2MB를 초과합니다.");
         }
         byte[] bytes;
         try (InputStream in = zip.getInputStream(modJs)) {
@@ -375,7 +375,7 @@ final class ZipModStore {
             if (n == 0) continue;
             used += n;
         }
-        if (used > limit) throw new IOException("mod.js가 1MB를 초과합니다.");
+        if (used > limit) throw new IOException("mod.js가 2MB를 초과합니다.");
         byte[] result = new byte[used];
         System.arraycopy(data, 0, result, 0, used);
         return result;
