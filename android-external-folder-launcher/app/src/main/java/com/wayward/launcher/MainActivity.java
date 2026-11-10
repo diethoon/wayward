@@ -1361,6 +1361,8 @@ public final class MainActivity extends Activity {
             try{
                 String p=normal(raw);
                 if(p==null)return response(404,"Not Found","text/plain","Not found");
+                if(tree==null&&!BUNDLED_SYMBOL_TABLE.equals(p))
+                    return response(404,"Not Found","text/plain","Not found");
                 InputStream in=tree==null?null:(isImageAssetPath(p)?tree.openImage(p):tree.open(p));
                 if(in==null&&zipMods!=null)in=zipMods.open(p);
                 if(in==null&&BUNDLED_SYMBOL_TABLE.equals(p))in=assets.open(BUNDLED_SYMBOL_TABLE);
