@@ -49,6 +49,8 @@ public final class ImageGenService extends Service {
     // Android blocks direct execve() of app-private binaries on modern releases.
     // Launch the verified Bun ELF through the system dynamic linker instead.
     private static final String ANDROID_LINKER_64 = "/system/bin/linker64";
+    // Google API emulator x86_64 images may expose an ARM64 native-bridge linker here.
+    private static final String ANDROID_BRIDGE_ARM64_LINKER_64 = "/system/lib64/arm64/linker64";
     private static final long MAX_BUN_ZIP = 60L * 1024L * 1024L;
     private static final long MAX_BUN_UNPACKED = 180L * 1024L * 1024L;
     public static volatile boolean serverReady = false;
@@ -57,6 +59,7 @@ public final class ImageGenService extends Service {
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService heartbeat = Executors.newSingleThreadScheduledExecutor();
+    private final Object processLock = new Object();
     private volatile Process serverProcess;
     private volatile boolean stopping = false;
     private volatile String backendVersion = "";
@@ -113,7 +116,7 @@ public final class ImageGenService extends Service {
                 try {
                     startRuntime(new File(backendPath), launchMode == null ? "default" : launchMode, comfyUrl == null ? "" : comfyUrl);
                 } catch (Throwable error) {
-                    recordFailure(error);
+                    if (!stopping) recordFailure(error);
                 }
             });
         } catch (Throwable error) {
@@ -194,6 +197,7 @@ public final class ImageGenService extends Service {
     }
 
     private void startRuntime(File backendRoot,String launchMode,String requestedComfyUrl) throws Exception {
+        if (stopping) return;
         if (!backendRoot.isDirectory()) throw new IllegalStateException("런처 내장 ImageGen 백엔드 폴더가 없습니다.");
         if (!"default".equals(launchMode) && !"novelai".equals(launchMode) && !"comfy".equals(launchMode)) {
             throw new IllegalArgumentException("지원하지 않는 이미지 서버 실행 모드입니다.");
@@ -205,6 +209,7 @@ public final class ImageGenService extends Service {
         }
 
         File bun = ensureBun();
+        if (stopping) return;
         File log = new File(getFilesDir(), "imagegen/server.log");
         File logParent = log.getParentFile();
         if (logParent != null && !logParent.exists()) logParent.mkdirs();
@@ -245,7 +250,22 @@ public final class ImageGenService extends Service {
                         "novelai_credential_not_set_at_start", null);
             }
         }
-        serverProcess = startProcess(builder);
+        Process launched = startProcess(builder);
+        synchronized (processLock) {
+            // Stop can arrive while Bun is being downloaded or validated. Do not
+            // leave a late child process running after the user pressed Stop.
+            if (stopping) {
+                launched.destroy();
+                try {
+                    if (!launched.waitFor(2, TimeUnit.SECONDS)) launched.destroyForcibly();
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    launched.destroyForcibly();
+                }
+                return;
+            }
+            serverProcess = launched;
+        }
         DiagnosticsLogger.event(this,"INFO","imagegen_service","bun_server_process_started",null);
 
         // A slow first boot must not be reported as a failure while Bun is alive.
@@ -425,13 +445,24 @@ public final class ImageGenService extends Service {
         }
     }
 
-    private ProcessBuilder bunProcess(File executable, String... arguments) throws java.io.IOException {
-        File linker = new File(ANDROID_LINKER_64);
-        if (!linker.isFile() || !linker.canExecute()) {
-            throw new java.io.IOException("Android 64비트 동적 링커를 사용할 수 없습니다: " + ANDROID_LINKER_64);
+    private File resolveAndroidArm64Linker() throws java.io.IOException {
+        String[] abis = Build.SUPPORTED_ABIS == null ? new String[0] : Build.SUPPORTED_ABIS;
+        boolean nativeArm64 = abis.length > 0 && "arm64-v8a".equals(abis[0]);
+        File linker = nativeArm64
+                ? new File(ANDROID_LINKER_64)
+                : new File(ANDROID_BRIDGE_ARM64_LINKER_64);
+        if (!linker.isFile() || !linker.canRead() || !linker.canExecute()) {
+            throw new java.io.IOException("Android ARM64 동적 링커를 사용할 수 없습니다: "
+                    + linker.getAbsolutePath() + "; abis="
+                    + java.util.Arrays.toString(abis));
         }
+        return linker;
+    }
+
+    private ProcessBuilder bunProcess(File executable, String... arguments) throws java.io.IOException {
+        File linker = resolveAndroidArm64Linker();
         java.util.List<String> command = new java.util.ArrayList<>();
-        command.add(ANDROID_LINKER_64);
+        command.add(linker.getAbsolutePath());
         command.add(executable.getAbsolutePath());
         if (arguments != null) {
             for (String argument : arguments) command.add(argument);
@@ -515,17 +546,19 @@ public final class ImageGenService extends Service {
     }
 
     private void stopRuntime() {
-        serverReady = false;
-        starting = false;
-        Process p = serverProcess;
-        serverProcess = null;
-        if (p != null && p.isAlive()) {
-            p.destroy();
-            try {
-                if (!p.waitFor(2, TimeUnit.SECONDS)) p.destroyForcibly();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                p.destroyForcibly();
+        synchronized (processLock) {
+            serverReady = false;
+            starting = false;
+            Process p = serverProcess;
+            serverProcess = null;
+            if (p != null && p.isAlive()) {
+                p.destroy();
+                try {
+                    if (!p.waitFor(2, TimeUnit.SECONDS)) p.destroyForcibly();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    p.destroyForcibly();
+                }
             }
         }
     }
