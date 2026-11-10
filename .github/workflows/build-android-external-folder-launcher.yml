@@ -139,6 +139,24 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: '1.4.0'
+      - name: Prepare pinned Android Bun runtime for emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUN_ZIP="$RUNNER_TEMP/bun-android-1.4.4.zip"
+          BUN_SHA256="d72e42c60e895ccbc16144bb1e0e0ad7ee384841c35b5501a7ec28b4d6d759c9"
+          BUN_ASSET="$GITHUB_WORKSPACE/android-external-folder-launcher/app/src/androidTest/assets/bun-android-aarch64"
+          curl --fail --silent --show-error --location \
+            "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-linux-aarch64-android.zip" \
+            -o "$BUN_ZIP"
+          echo "$BUN_SHA256  $BUN_ZIP" | sha256sum --check
+          mkdir -p "$(dirname "$BUN_ASSET")"
+          BUN_ENTRY="$(unzip -Z1 "$BUN_ZIP" | awk 'BEGIN{FS="/"} $NF=="bun" {print; exit}')"
+          test -n "$BUN_ENTRY"
+          unzip -p "$BUN_ZIP" "$BUN_ENTRY" > "$BUN_ASSET"
+          chmod 500 "$BUN_ASSET"
+          test "$(wc -c < "$BUN_ASSET" | tr -d ' ')" -gt 10485760
+          echo "Pinned Bun Android fixture prepared: $BUN_ASSET"
       - name: Run the bundled ImageGen server without provider credentials
         id: imagegen_runtime
         shell: bash
@@ -322,7 +340,7 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_7
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -dns-server 8.8.8.8,1.1.1.1
           disable-animations: true
           script: bash android-external-folder-launcher/scripts/android-imagegen-runtime-smoke.sh
       - name: Upload Android ImageGen runtime instrumentation logs
