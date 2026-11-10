@@ -12,6 +12,7 @@ python3 -c "compile(open('scripts/embed_imagegen_backend.py', encoding='utf-8').
 test -s app/src/main/assets/imagegen-backend/launcher-bundle.json
 test -s app/src/main/assets/imagegen-backend/wayward-imagegen/src/cli.ts
 test -s app/src/main/assets/imagegen-backend/wayward-imagegen/src/nai/client.ts
+test -s app/src/main/java/com/wayward/launcher/ImageGenLocalProviderServer.java
 node --check app/src/main/assets/wml-folder-bootstrap.js
 node --check app/src/main/assets/imagegen-proxy.js
 node --check app/src/main/assets/image-provider-bridge.js
@@ -109,10 +110,6 @@ with zipfile.ZipFile(apk) as bundle:
     assert "launcherProviderToken" in config_source
     assert "launcher-provider-v1" in catalogue_source
     assert "token missing" in ui_source
-    assert "ImageGenLocalProviderServer.java" in open(
-        "app/src/main/java/com/wayward/launcher/ImageGenLocalProviderServer.java",
-        encoding="utf-8"
-    ).read() or "ImageGenLocalProviderServer.java"
 print("APK embedded ImageGen and native-provider pipeline assets verified.")
 PY
 "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
