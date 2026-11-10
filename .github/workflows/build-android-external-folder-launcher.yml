@@ -342,11 +342,11 @@ jobs:
           EXPECTED_BLOB="5c563bdc7c0d19bd40f44c5c61c91d450dbfc4ff"
           ARCHIVE="$RUNNER_TEMP/wayward-11.2.zip"
           ASSETS="$GITHUB_WORKSPACE/android-external-folder-launcher/app/src/androidTest/assets"
-          mkdir -p "$ASSETS/wml-runtime/wml"
+          mkdir -p "$ASSETS/wml-runtime"
           git fetch --no-tags origin main
           git cat-file -e "${SOURCE_COMMIT}:wayward 11.2.zip"
           git show "${SOURCE_COMMIT}:wayward 11.2.zip" > "$ARCHIVE"
-          python3 - "$ARCHIVE" "$EXPECTED_BYTES" "$EXPECTED_BLOB" "$ASSETS/wml-runtime/wml" "$RUNNER_TEMP/wayward-11.2-wml-index.json" "$RUNNER_TEMP/wayward-11.2-wml-report.txt" "$GITHUB_WORKSPACE/android-external-folder-launcher/app/src/main/assets/wml/symbols/2026-11-01.js" <<'PY'
+          python3 - "$ARCHIVE" "$EXPECTED_BYTES" "$EXPECTED_BLOB" "$ASSETS/wml-runtime" "$RUNNER_TEMP/wayward-11.2-wml-index.json" "$RUNNER_TEMP/wayward-11.2-wml-report.txt" "$GITHUB_WORKSPACE/android-external-folder-launcher/app/src/main/assets/wml/symbols/2026-11-01.js" <<'PY'
           import hashlib
           import io
           import json
