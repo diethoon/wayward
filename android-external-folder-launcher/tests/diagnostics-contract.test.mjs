@@ -73,7 +73,7 @@ assert.match(imageProviderJs, /elementClass/);
 assert.match(imageProviderJs, /repeatCount/);
 assert.match(runtimeSmokeTest, /Wayward_WML_ko\.html/);
 assert.match(runtimeSmokeTest, /WaywardImageProviders\.generate/);
-assert.match(runtimeSmokeTest, /wayward-image-worker\.workers\.dev/);
+assert.match(runtimeSmokeTest, /wayward-image-worker\.trpgengine\.workers\.dev/);
 assert.match(runtimeSmokeTest, /UiAutomation\(\)\.takeScreenshot/);
 assert.match(runtimeSmokeTest, /ImagePipelineDiagnostics\.readRecent/);
 assert.match(main, /folder_picker_opened/);
