@@ -528,6 +528,87 @@ public final class ImageGenServiceRuntimeTest {
         }
     }
 
+    private static void dismissWaywardAgeConfirmation(Instrumentation instrumentation, WebView gameWeb)
+            throws Exception {
+        String dispatch = "(function(){"
+                + "var nodes=Array.from(document.querySelectorAll('button,[role=button],input[type=button],a,div,span'));"
+                + "var yes=nodes.find(function(e){var t=String(e.innerText||e.value||e.getAttribute('aria-label')||'').replace(/\\s+/g,' ').trim();"
+                + "return (t==='예'||/^yes$/i.test(t))&&e.getClientRects().length>0;});"
+                + "if(!yes)return 'age_confirmation_yes_button_not_found';"
+                + "var target=yes.closest('button,[role=button],a')||yes;target.click();return 'age_confirmation_accepted';"
+                + "})()";
+        String result = awaitJsString(instrumentation, gameWeb, dispatch, 10_000L);
+        assertEquals("The Android test did not dismiss Wayward's age confirmation gate.",
+                "age_confirmation_accepted", result);
+        Thread.sleep(700L);
+        String visibleGate = awaitJsString(instrumentation, gameWeb,
+                "(function(){return Array.from(document.querySelectorAll('body *')).some(function(e){"
+                        + "if(e.children.length>0||String(e.textContent||'').trim()!=='연령 확인')return false;"
+                        + "var s=getComputedStyle(e),r=e.getBoundingClientRect();"
+                        + "return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0;});})()",
+                5_000L);
+        assertEquals("The Wayward age confirmation gate remained visible after acceptance.", "false", visibleGate);
+    }
+
+    private static Activity verifyCrossTaskImageStudioSettingsRouting(
+            Instrumentation instrumentation, Context context, Activity sessionActivity) throws Exception {
+        // The game WebView is in a document task. This test-only SAF handle is
+        // intentionally never dereferenced: Image Studio detection was covered
+        // in the game/session setup path and the shared ImageGen service is ready.
+        Class<?> treeClass = Class.forName("com.wayward.launcher.MainActivity$SafTree");
+        java.lang.reflect.Constructor<?> treeConstructor =
+                treeClass.getDeclaredConstructor(MainActivity.class, Uri.class);
+        treeConstructor.setAccessible(true);
+        Object testTree = treeConstructor.newInstance(sessionActivity,
+                Uri.parse("content://com.android.externalstorage.documents/tree/primary%3ADownload"));
+        setField(sessionActivity, "tree", testTree);
+        setField(sessionActivity, "imageStudioSessionDetected", true);
+
+        Method register = MainActivity.class.getDeclaredMethod("registerSessionActivity");
+        register.setAccessible(true);
+        instrumentation.runOnMainSync(() -> {
+            try { register.invoke(sessionActivity); }
+            catch (Exception error) { throw new RuntimeException("Could not register the active game session", error); }
+        });
+
+        WebView gameWeb = (WebView) getField(sessionActivity, "web");
+        assertNotNull("The game WebView disappeared before cross-task routing.", gameWeb);
+        assertEquals("The test settings button fixture was not present in the game WebView.", "yes",
+                awaitJsString(instrumentation, gameWeb,
+                        "document.getElementById('wwis-generation-settings').dataset.clicked||''", 5_000L));
+        awaitJsString(instrumentation, gameWeb,
+                "(function(){document.getElementById('wwis-generation-settings').dataset.clicked='';return 'reset';})()",
+                5_000L);
+
+        Activity homeActivity = instrumentation.startActivitySync(
+                new Intent(context, MainActivity.class)
+                        .setData(Uri.parse("wayward://home/image-studio-router-test"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT
+                                | Intent.FLAG_ACTIVITY_MULTIPLE_TASK));
+        assertNotNull("The second launcher home Activity did not start.", homeActivity);
+        assertTrue("The second launcher Activity unexpectedly owns a game WebView.",
+                getField(homeActivity, "web") == null);
+
+        Method openPanel = MainActivity.class.getDeclaredMethod("openImageGenPanel");
+        openPanel.setAccessible(true);
+        instrumentation.runOnMainSync(() -> {
+            try { openPanel.invoke(homeActivity); }
+            catch (Exception error) { throw new RuntimeException("Home Activity could not route Image Studio settings", error); }
+        });
+
+        long deadline = System.currentTimeMillis() + 15_000L;
+        String clicked = "";
+        while (System.currentTimeMillis() < deadline) {
+            clicked = awaitJsString(instrumentation, gameWeb,
+                    "document.getElementById('wwis-generation-settings').dataset.clicked||''", 5_000L);
+            if ("yes".equals(clicked)) break;
+            Thread.sleep(100L);
+        }
+        assertEquals("The settings button in the active game session was not opened from the separate launcher home task.",
+                "yes", clicked);
+        return homeActivity;
+    }
+
     private static void restartImageGenServerWithKeystoreToken(
             Instrumentation instrumentation, Context context, Activity activity) throws Exception {
         Method stopAction = MainActivity.class.getDeclaredMethod("stopImageGenServer");
