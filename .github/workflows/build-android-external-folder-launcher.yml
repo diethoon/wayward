@@ -51,8 +51,8 @@ jobs:
                           digest.update(chunk)
                   count += 1
                   total += entry.file_size
-                  report.write(f"{entry.file_size}\\t{digest.hexdigest()}\\t{name}\\n")
-              report.write(f"TOTAL\\tfiles={count}\\tbytes={total}\\n")
+                  report.write(str(entry.file_size) + chr(9) + digest.hexdigest() + chr(9) + name + chr(10))
+              report.write("TOTAL" + chr(9) + "files=" + str(count) + chr(9) + "bytes=" + str(total) + chr(10))
           PY
           python3 android-external-folder-launcher/scripts/embed_imagegen_backend.py "$RUNNER_TEMP/wayward-mods.zip"
       - name: Fetch and byte-scan pinned Wayward WML game page
