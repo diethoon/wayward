@@ -459,26 +459,62 @@ public final class ImageGenServiceRuntimeTest {
 
     private static void copyPrivateArtifact(Instrumentation instrumentation, Context context,
                                             String privatePath, String sharedPath) throws Exception {
-        ParcelFileDescriptor mkdir = instrumentation.getUiAutomation()
-                .executeShellCommand("mkdir -p /sdcard/Download/Wayward-CI");
-        if (mkdir != null) {
-            try (InputStream input = new FileInputStream(mkdir.getFileDescriptor())) {
-                byte[] buffer = new byte[512];
-                while (input.read(buffer) >= 0) { /* drain shell output */ }
-            } finally {
-                mkdir.close();
-            }
+        if (Build.VERSION.SDK_INT < 29) {
+            throw new IllegalStateException("MediaStore Downloads export requires Android 10 or newer.");
         }
-        String command = "run-as " + context.getPackageName() + " cat " + privatePath
-                + " > " + sharedPath;
-        ParcelFileDescriptor descriptor = instrumentation.getUiAutomation().executeShellCommand(command);
-        if (descriptor != null) {
-            try (InputStream input = new FileInputStream(descriptor.getFileDescriptor())) {
-                byte[] buffer = new byte[1024];
-                while (input.read(buffer) >= 0) { /* drain shell output */ }
-            } finally {
-                descriptor.close();
+        String relativeFile = privatePath.startsWith("files/")
+                ? privatePath.substring("files/".length()) : privatePath;
+        File source = new File(context.getFilesDir(), relativeFile);
+        if (!source.isFile() || source.length() <= 0) {
+            throw new IllegalStateException("CI artifact is missing or empty: " + source.getAbsolutePath());
+        }
+
+        String displayName = new File(sharedPath).getName();
+        String mimeType = displayName.toLowerCase(java.util.Locale.ROOT).endsWith(".png")
+                ? "image/png" : "text/plain";
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.MediaColumns.DISPLAY_NAME, displayName);
+        values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
+        values.put(MediaStore.MediaColumns.RELATIVE_PATH, "Download/Wayward-CI/");
+        values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+
+        android.content.ContentResolver resolver = context.getContentResolver();
+        Uri collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+        resolver.delete(collection,
+                MediaStore.MediaColumns.DISPLAY_NAME + "=? AND "
+                        + MediaStore.MediaColumns.RELATIVE_PATH + "=?",
+                new String[] {displayName, "Download/Wayward-CI/"});
+        Uri destination = resolver.insert(collection, values);
+        if (destination == null) {
+            throw new IllegalStateException("MediaStore refused to create CI artifact: " + displayName);
+        }
+        boolean completed = false;
+        try (InputStream input = new FileInputStream(source);
+             OutputStream output = resolver.openOutputStream(destination, "w")) {
+            if (output == null) throw new IllegalStateException("MediaStore output stream is unavailable.");
+            byte[] buffer = new byte[8192];
+            int count;
+            long copied = 0;
+            while ((count = input.read(buffer)) >= 0) {
+                if (count == 0) continue;
+                output.write(buffer, 0, count);
+                copied += count;
             }
+            output.flush();
+            if (copied != source.length()) {
+                throw new IllegalStateException("CI artifact export was truncated: "
+                        + copied + " of " + source.length() + " bytes.");
+            }
+            ContentValues published = new ContentValues();
+            published.put(MediaStore.MediaColumns.IS_PENDING, 0);
+            if (resolver.update(destination, published, null, null) != 1) {
+                throw new IllegalStateException("Could not publish CI artifact in Downloads.");
+            }
+            completed = true;
+            System.out.println("WAYWARD_CI_ARTIFACT_EXPORTED name=" + displayName
+                    + " bytes=" + copied + " uri=" + destination);
+        } finally {
+            if (!completed) resolver.delete(destination, null, null);
         }
     }
 
