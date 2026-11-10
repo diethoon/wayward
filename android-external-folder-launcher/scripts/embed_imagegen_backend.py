@@ -170,8 +170,8 @@ def extract(archive: Path, output: Path) -> None:
             "wayward-imagegen/ui/index.html",
             [
                 (
-                    "    el('status').innerHTML =\n        \`<b>\${(body.images ?? 0).toLocaleString()}</b> images · \${body.imageProvider === 'nai' ? 'NovelAI' : 'ComfyUI'} \` +\n      (body.comfyui === 'connected' ? 'ready' : '<b>not running</b>');",
-                    "    const providerStatus = body.imageProvider === 'nai'\n      ? (body.novelai === 'configured' ? 'token saved · authentication not verified' : '<b>token missing</b>')\n      : (body.comfyui === 'connected' ? 'ready' : '<b>ComfyUI not reachable</b>');\n    el('status').innerHTML =\n      \`<b>\${(body.images ?? 0).toLocaleString()}</b> images · \${body.imageProvider === 'nai' ? 'NovelAI' : 'ComfyUI'} \${providerStatus}\`;",
+                    "    el('status').innerHTML =\n        \x60<b>\${(body.images ?? 0).toLocaleString()}</b> images · \${body.imageProvider === 'nai' ? 'NovelAI' : 'ComfyUI'} \x60 +\n      (body.comfyui === 'connected' ? 'ready' : '<b>not running</b>');",
+                    "    const providerStatus = body.imageProvider === 'nai'\n      ? (body.novelai === 'configured' ? 'token saved · authentication not verified' : '<b>token missing</b>')\n      : (body.comfyui === 'connected' ? 'ready' : '<b>ComfyUI not reachable</b>');\n    el('status').innerHTML =\n      \x60<b>\${(body.images ?? 0).toLocaleString()}</b> images · \${body.imageProvider === 'nai' ? 'NovelAI' : 'ComfyUI'} \${providerStatus}\x60;",
                     "show-novelai-token-state-not-server-state",
                 ),
             ],
