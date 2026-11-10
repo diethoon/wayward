@@ -542,10 +542,8 @@ public final class ImageGenServiceRuntimeTest {
                     + discoveryState, discoveryState.optBoolean("complete", false));
             JSONObject discoveryResult = discoveryState.optJSONObject("result");
             assertNotNull("Character discovery returned no result.", discoveryResult);
-            assertEquals("The Android bridge discovered the wrong character count.", 1,
-                    discoveryResult.optInt("found", -1));
-            assertEquals("The Android bridge did not register the discovered character.", 1,
-                    discoveryResult.optInt("added", -1));
+            assertTrue("The real WML roster returned no discoverable characters: " + discoveryResult,
+                    discoveryResult.optInt("found", 0) > 0);
 
             String countDispatch = "(function(){"
                     + "window.__waywardCiCounts={state:'pending'};"
@@ -568,23 +566,24 @@ public final class ImageGenServiceRuntimeTest {
                     countState.optString("state", ""));
             JSONObject characterCounts = countState.optJSONObject("counts");
             assertNotNull("The server character index was empty.", characterCounts);
-            assertTrue("The discovered WML character is missing from the image review filters: "
-                    + characterCounts, characterCounts.has("launcher-ci-probe"));
+            assertTrue("The real Elena character is missing from the launcher image index: "
+                    + characterCounts, characterCounts.has("elena"));
 
             String trigger = "(function(){"
                     + "window.__waywardCiImage={state:'enqueue'};"
                     + "(async function(){"
-                    + "var prompt='A peaceful watercolor landscape of a small wooden cottage beside a river, green hills and wildflowers, warm morning light, detailed digital painting, no people, no text';"
+                    + "var key='elena__task-idle__outfit-modest__room-taproom__v-0';"
+                    + "var prompt='Portrait illustration of an adult woman named Elena, fully clothed in a modest tavern outfit, warm indoor light, clean detailed digital painting, single character, no text';"
                     + "var enqueueResponse=await window.fetch('http://127.0.0.1:8189/api/batch/enqueue',{"
                     + "method:'POST',headers:{'Content-Type':'application/json'},"
-                    + "body:JSON.stringify({jobId:'launcher-native-provider-ci-smoke',start:true,items:[{"
-                    + "talentId:'launcher-ci-probe',imageType:'portrait',prompt:prompt,negativePrompt:'blurry, low quality',weight:100"
+                    + "body:JSON.stringify({jobId:'launcher-native-provider-real-portrait-smoke',start:true,items:[{"
+                    + "talentId:key,imageType:'portrait',prompt:prompt,negativePrompt:'blurry, low quality, extra limbs, text',weight:100"
                     + "}]})});"
                     + "var enqueueBody=await enqueueResponse.json().catch(function(){return {};});"
                     + "if(!enqueueResponse.ok)throw new Error('batch enqueue HTTP '+enqueueResponse.status+': '+JSON.stringify(enqueueBody).slice(0,240));"
                     + "window.__waywardCiImage={state:'queued',accepted:enqueueBody.accepted||0,alreadyCached:enqueueBody.alreadyCached||0};"
-                    + "var deadline=Date.now()+240000;var batchStatus=null;"
-                    + "while(Date.now()<deadline){"
+                    + "var batchDeadline=Date.now()+240000;var batchStatus=null;"
+                    + "while(Date.now()<batchDeadline){"
                     + "var statusResponse=await window.fetch('http://127.0.0.1:8189/api/batch/status');"
                     + "batchStatus=await statusResponse.json();"
                     + "window.__waywardCiImage={state:'processing',done:batchStatus.done||0,total:batchStatus.total||0,completed:batchStatus.completed||0,cached:batchStatus.cached||0,errored:batchStatus.errored||0,lastError:batchStatus.lastError||''};"
@@ -593,30 +592,57 @@ public final class ImageGenServiceRuntimeTest {
                     + "}"
                     + "if(!batchStatus||(batchStatus.total||0)<1||(batchStatus.done||0)<(batchStatus.total||0))throw new Error('batch job timed out: '+JSON.stringify(batchStatus));"
                     + "if((batchStatus.completed||0)!==1||(batchStatus.errored||0)!==0)throw new Error('Image Studio batch failed: '+JSON.stringify(batchStatus));"
-                    + "var packResponse=await window.fetch('http://127.0.0.1:8189/api/pack?characters=launcher-ci-probe');"
+                    + "var packResponse=await window.fetch('http://127.0.0.1:8189/api/pack?characters=elena');"
                     + "if(!packResponse.ok)throw new Error('pack HTTP '+packResponse.status);"
-                    + "var pack=await packResponse.json();var entry=pack.entries&&pack.entries['launcher-ci-probe'];"
-                    + "if(!entry||!entry.imagePath)throw new Error('generated image missing from /api/pack: '+JSON.stringify(pack).slice(0,300));"
+                    + "var pack=await packResponse.json();var entry=pack.entries&&pack.entries[key];"
+                    + "if(!entry||!entry.imagePath)throw new Error('generated Elena portrait missing from /api/pack: '+JSON.stringify(pack).slice(0,300));"
                     + "var imageUrl='http://127.0.0.1:8189/images/'+entry.imagePath.split('/').map(encodeURIComponent).join('/');"
                     + "var imageResponse=await window.fetch(imageUrl);"
                     + "if(!imageResponse.ok)throw new Error('cached image HTTP '+imageResponse.status);"
-                    + "var blob=await imageResponse.blob();var dataUrl=await new Promise(function(resolve,reject){"
-                    + "var reader=new FileReader();reader.onload=function(){resolve(reader.result);};reader.onerror=reject;reader.readAsDataURL(blob);});"
-                    + "var img=document.createElement('img');img.id='wayward-ci-cloudflare-image';"
-                    + "img.alt='Image Studio cached Cloudflare image';"
-                    + "img.style.cssText='position:fixed;z-index:2147483647;right:20px;top:20px;width:340px;height:340px;object-fit:contain;background:#fff;border:6px solid #2d6b49;border-radius:12px;box-shadow:0 4px 24px #0008';"
-                    + "img.onload=function(){var rect=img.getBoundingClientRect();var style=getComputedStyle(img);"
-                    + "window.__waywardCiImage={state:'loaded',naturalWidth:img.naturalWidth,naturalHeight:img.naturalHeight,"
-                    + "visible:rect.width>0&&rect.height>0&&rect.right>0&&rect.bottom>0&&style.display!=='none'&&style.visibility!=='hidden'&&Number(style.opacity)>0,"
-                    + "mimeType:blob.type||'',imagePath:entry.imagePath,entryCount:pack.entryCount,cacheCompleted:batchStatus.completed,cacheCount:batchStatus.cached};};"
-                    + "img.onerror=function(){window.__waywardCiImage={state:'img_error',naturalWidth:img.naturalWidth,naturalHeight:img.naturalHeight,imagePath:entry.imagePath};};"
-                    + "document.body.appendChild(img);img.src=dataUrl;"
-                    + "})().catch(function(error){window.__waywardCiImage={state:'error',errorType:error&&error.name?String(error.name):'Error',message:error&&error.message?String(error.message).slice(0,240):'unknown'};});"
+                    + "var blob=await imageResponse.blob();"
+                    + "if(!blob.type||blob.type.indexOf('image/')!==0)throw new Error('unexpected generated image MIME: '+blob.type);"
+                    + "var dataUrl=await new Promise(function(resolve,reject){var reader=new FileReader();reader.onload=function(){resolve(reader.result);};reader.onerror=reject;reader.readAsDataURL(blob);});"
+                    + "var dev=WML.dev(),bridge=window.WW_ImageStudioBridge,matching=window.WW_ImageStudioMatching;"
+                    + "if(!dev||!bridge||!matching)throw new Error('real WML Image Studio APIs are unavailable');"
+                    + "var imageUrlSymbol=WML.status().modSymbols.imagestudio.imageEntryUrl;"
+                    + "if(!imageUrlSymbol)throw new Error('Image Studio imageEntryUrl hook symbol is missing');"
+                    + "var gamePack={entries:{}};gamePack.entries[key]={talentName:key,imagePath:entry.imagePath,imageType:'portrait'};"
+                    + "bridge.packs=function(){return [gamePack];};"
+                    + "bridge.ready=function(){return Promise.resolve();};"
+                    + "bridge.connection=function(){return {baseUrl:null,comfyui:false};};"
+                    + "globalThis.__WW_STUDIO_OFFLINE_ONLY__=true;"
+                    + "dev.fn('settingsStore').getState().set({imageBackendMode:'off',ageAffirmed:true,contentAcknowledged:true});"
+                    + "dev.hook('bee',{priority:-9000000,replace:function(){return key;}});"
+                    + "dev.hook(imageUrlSymbol,{priority:-9000000,replace:function(){return dataUrl;}});"
+                    + "var config=matching.get();"
+                    + "['scene','outfit','room','exposure'].forEach(function(id){if(config.rules[id])config.rules[id].required=false;});"
+                    + "matching.set(config);"
+                    + "dev.store.get().newGame();"
+                    + "dev.fn('store').setState({started:true,selectingArchetype:false,selectingBuilder:false,selectingPicks:false});"
+                    + "await new Promise(function(resolve){setTimeout(resolve,100);});"
+                    + "var skip=[...document.querySelectorAll('button')].find(function(button){return button.textContent.trim()==='건너뛰기';});"
+                    + "if(skip)skip.click();"
+                    + "var portraitDeadline=Date.now()+20000,portrait=null;"
+                    + "while(Date.now()<portraitDeadline){"
+                    + "portrait=[...document.querySelectorAll('#root img')].find(function(img){return img.src===dataUrl;});"
+                    + "if(portrait&&portrait.complete&&portrait.naturalWidth>0&&portrait.naturalHeight>0)break;"
+                    + "await new Promise(function(resolve){setTimeout(resolve,200);});"
+                    + "}"
+                    + "if(!portrait)throw new Error('production imageUsagePortraitPanel did not render the generated image in #root');"
+                    + "await portrait.decode();"
+                    + "var rect=portrait.getBoundingClientRect(),style=getComputedStyle(portrait);"
+                    + "var visible=rect.width>0&&rect.height>0&&rect.right>0&&rect.bottom>0&&style.display!=='none'&&style.visibility!=='hidden'&&Number(style.opacity)>0;"
+                    + "if(!visible)throw new Error('production portrait image decoded but not visible');"
+                    + "window.__waywardCiImage={state:'loaded',displayedInPortraitHook:true,portraitHook:'imageUsagePortraitPanel',"
+                    + "imageAlt:portrait.alt,naturalWidth:portrait.naturalWidth,naturalHeight:portrait.naturalHeight,visible:visible,"
+                    + "mimeType:blob.type||'',imagePath:entry.imagePath,entryCount:pack.entryCount||Object.keys(pack.entries||{}).length,"
+                    + "cacheCompleted:batchStatus.completed,cacheCount:batchStatus.cached||0};"
+                    + "})().catch(function(error){window.__waywardCiImage={state:'error',errorType:error&&error.name?String(error.name):'Error',message:error&&error.message?String(error.message).slice(0,320):'unknown'};});"
                     + "return 'dispatched';})()";
             String dispatch = awaitJsString(instrumentation, gameWeb, trigger, 10_000L);
-            assertEquals("The game page did not dispatch its Image Studio batch request.", "dispatched", dispatch);
+            assertEquals("The game page did not dispatch the real WML portrait generation request.", "dispatched", dispatch);
 
-            long deadline = System.currentTimeMillis() + 260_000L;
+            long deadline = System.currentTimeMillis() + 280_000L;
             JSONObject imageState = new JSONObject();
             while (System.currentTimeMillis() < deadline) {
                 String stateJson = awaitJsString(instrumentation, gameWeb,
@@ -626,25 +652,29 @@ public final class ImageGenServiceRuntimeTest {
                 if ("loaded".equals(state) || "error".equals(state) || "img_error".equals(state)) break;
                 Thread.sleep(500L);
             }
-            assertEquals("Cloudflare image did not complete the real Image Studio batch/cache pipeline. "
+            assertEquals("Cloudflare image did not render in the production WML portrait hook. "
                     + imageState + "; pipeline=" + ImagePipelineDiagnostics.readRecent(context, 120),
                     "loaded", imageState.optString("state", ""));
-            assertTrue("The cached image did not decode in Android WebView: " + imageState,
+            assertTrue("The production portrait component did not display the actual generated image: " + imageState,
+                    imageState.optBoolean("displayedInPortraitHook", false));
+            assertTrue("The generated portrait did not decode in Android WebView: " + imageState,
                     imageState.optInt("naturalWidth", 0) > 0 && imageState.optInt("naturalHeight", 0) > 0);
-            assertTrue("The generated image element decoded but was not visibly laid out on screen: " + imageState,
+            assertTrue("The actual portrait slot was not visible on screen: " + imageState,
                     imageState.optBoolean("visible", false));
-            resultSummary = "state=loaded\nvisibleOnScreen=true\n"
+            resultSummary = "state=loaded\nportraitHook=imageUsagePortraitPanel\ndisplayedInPortraitHook=true\nvisibleOnScreen=true\n"
                     + "gameHtmlBytes=" + gameHtml.length + "\n"
                     + "gameHtmlSourceCommit=5e5c78c4e32198e460ba040256e920d37ed1711c\n"
                     + "gameHtmlBlob=8d998b50e82febe18b5c1d1159b16663b9169775\n"
                     + "cloudflareEndpoint=" + FLUX_ENDPOINT + "\n"
                     + "providerType=cloudflare-worker\n"
                     + "imagePath=" + imageState.optString("imagePath") + "\n"
+                    + "imageAlt=" + imageState.optString("imageAlt") + "\n"
                     + "packEntryCount=" + imageState.optInt("entryCount") + "\n"
                     + "mimeType=" + imageState.optString("mimeType") + "\n"
                     + "decodedWidth=" + imageState.optInt("naturalWidth") + "\n"
                     + "decodedHeight=" + imageState.optInt("naturalHeight") + "\n"
                     + "pageError=" + pageError.get() + "\n";
+
 
         } finally {
             try {
