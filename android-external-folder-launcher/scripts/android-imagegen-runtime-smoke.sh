@@ -18,17 +18,30 @@ adb shell ls -l /system/bin/ndk_translation_program_runner_binfmt_misc_arm64 > "
 adb shell cat /proc/sys/fs/binfmt_misc/arm64_exe > "$OUT/arm64-binfmt.txt" 2>&1 || true
 adb install -r "$APK" | tee "$OUT/install.txt"
 adb shell pm grant "$PACKAGE" android.permission.POST_NOTIFICATIONS
+adb shell mkdir -p /sdcard/Download/Wayward-CI
 
 set +e
 gradle -p android-external-folder-launcher --no-daemon --stacktrace :app:connectedDebugAndroidTest > "$OUT/instrumentation.txt" 2>&1
 TEST_EXIT=$?
 set -e
 
-adb shell run-as "$PACKAGE" cat files/imagegen/bun-version.log > "$OUT/bun-version.txt" 2>&1 || true
-adb shell run-as "$PACKAGE" cat files/imagegen/startup.log > "$OUT/startup.log" 2>&1 || true
-adb shell run-as "$PACKAGE" cat files/imagegen/server.log > "$OUT/server.log" 2>&1 || true
-adb shell run-as "$PACKAGE" cat files/imagegen-status.properties > "$OUT/imagegen-status.properties" 2>&1 || true
-adb logcat -d -t 6000 > "$OUT/logcat.txt"
+# connectedDebugAndroidTest uninstalls the target APK after instrumentation.
+# The test exports its app-private logs/screenshot to shared Download storage
+# before teardown, so collect those durable files instead of run-as afterwards.
+for artifact in \
+  Wayward-Android15-Cloudflare-Game-Logs.txt \
+  Wayward-Android15-Cloudflare-Game-Screen.png; do
+  if adb shell test -s "/sdcard/Download/Wayward-CI/$artifact"; then
+    adb pull "/sdcard/Download/Wayward-CI/$artifact" "$OUT/$artifact"
+  else
+    echo "MISSING_ANDROID_GAME_ARTIFACT: $artifact" | tee -a "$OUT/artifact-export.txt"
+  fi
+done
+if [ -d "$RUNNER_TEMP/wayward-game-fixture" ]; then
+  cp "$RUNNER_TEMP/wayward-game-fixture/game-html-forensics.txt" "$OUT/" 2>/dev/null || true
+  cp "$RUNNER_TEMP/wayward-game-fixture/game-html-chunks.sha256.jsonl" "$OUT/" 2>/dev/null || true
+fi
+adb logcat -d -t 12000 > "$OUT/logcat.txt"
 
 {
   echo "device=Android 15 API 35 Google APIs x86_64 emulator"

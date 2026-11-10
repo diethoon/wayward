@@ -20,7 +20,15 @@ public final class ImageGenStatusStoreTest {
             ImageGenStatusStore.write(root, true, false, "연결됨", "0.8.4");
             ImageGenStatusStore.State ready = ImageGenStatusStore.read(root);
             check(ready.isReady(), "ready state persisted and fresh");
+            check(ready.isAvailable(), "ready state is also available");
             check(!ready.isStarting(), "ready is not starting");
+
+            ImageGenStatusStore.write(root, false, false, true,
+                    "서버 응답 확인 · HTTP 503(공급자 설정/인증 대기)", "0.8.4");
+            ImageGenStatusStore.State needsProviderSetup = ImageGenStatusStore.read(root);
+            check(needsProviderSetup.isAvailable(), "HTTP 503 endpoint remains available for settings");
+            check(!needsProviderSetup.isReady(), "HTTP 503 is not falsely marked generation-ready");
+            check(!needsProviderSetup.isStarting(), "HTTP 503 is not misreported as server startup");
 
             java.util.Properties stale = new java.util.Properties();
             File statusFile = new File(root, "imagegen-status.properties");
@@ -29,11 +37,13 @@ public final class ImageGenStatusStoreTest {
             }
             stale.setProperty("ready", "false");
             stale.setProperty("starting", "true");
+            stale.setProperty("available", "true");
             stale.setProperty("updatedAt", Long.toString(System.currentTimeMillis() - 60_000L));
             try (java.io.FileOutputStream out = new java.io.FileOutputStream(statusFile)) {
                 stale.store(out, "stale test");
             }
             check(!ImageGenStatusStore.read(root).isStarting(), "dead service heartbeat expires startup state");
+            check(!ImageGenStatusStore.read(root).isAvailable(), "dead service heartbeat expires availability state");
 
             ImageGenStatusStore.write(root, false, false, "설치 실패", "0.8.4");
             ImageGenStatusStore.State failed = ImageGenStatusStore.read(root);

@@ -54,6 +54,7 @@ public final class ImageGenService extends Service {
     private static final long MAX_BUN_ZIP = 60L * 1024L * 1024L;
     private static final long MAX_BUN_UNPACKED = 180L * 1024L * 1024L;
     public static volatile boolean serverReady = false;
+    public static volatile boolean serverAvailable = false;
     public static volatile boolean starting = false;
     public static volatile String statusMessage = "서버가 실행되지 않았습니다.";
 
@@ -81,6 +82,7 @@ public final class ImageGenService extends Service {
             DiagnosticsLogger.event(this,"INFO","imagegen_service","stop_command_received",null);
             stopping = true;
             serverReady = false;
+            serverAvailable = false;
             starting = false;
             statusMessage = "이미지 생성 서버가 중지되었습니다.";
             stopRuntime();
@@ -95,6 +97,7 @@ public final class ImageGenService extends Service {
             statusMessage = "ImageGen 백엔드 경로가 전달되지 않았습니다.";
             starting = false;
             serverReady = false;
+            serverAvailable = false;
             updateNotification(statusMessage);
             stopSelf(startId);
             return START_NOT_STICKY;
@@ -107,6 +110,7 @@ public final class ImageGenService extends Service {
         stopping = false;
         starting = true;
         serverReady = false;
+        serverAvailable = false;
         backendVersion = intent.getStringExtra(EXTRA_BACKEND_VERSION);
         if (backendVersion == null) backendVersion = "";
         try {
@@ -159,7 +163,7 @@ public final class ImageGenService extends Service {
 
     private void persistState() {
         try {
-            ImageGenStatusStore.write(getFilesDir(), serverReady, starting, statusMessage, backendVersion);
+            ImageGenStatusStore.write(getFilesDir(), serverReady, starting, serverAvailable, statusMessage, backendVersion);
         } catch (Exception error) {
             appendDiagnostic("상태 저장 실패: " + shortMessage(error));
         }
@@ -168,6 +172,7 @@ public final class ImageGenService extends Service {
     private void recordFailure(Throwable error) {
         DiagnosticsLogger.error(this,"imagegen_service","runtime_start_failed",error);
         serverReady = false;
+        serverAvailable = false;
         starting = false;
         String message = shortMessage(error);
         statusMessage = "서버 시작 실패: " + message;
@@ -268,9 +273,9 @@ public final class ImageGenService extends Service {
         }
         DiagnosticsLogger.event(this,"INFO","imagegen_service","bun_server_process_started",null);
 
-        // A slow first boot must not be reported as a failure while Bun is alive.
-        // Wait for health indefinitely; terminate only when the child exits or the
-        // user presses Stop in the foreground notification.
+        // A reachable HTTP endpoint is enough to open EasyGen configuration.
+        // Health HTTP 503 is expected before a provider credential is configured;
+        // it must not deadlock the settings panel behind the readiness check.
         long nextHealthNoticeAt = 0L;
         while (!stopping) {
             Process running = serverProcess;
@@ -280,19 +285,33 @@ public final class ImageGenService extends Service {
                 throw new IllegalStateException("ImageGen 프로세스가 시작 직후 종료됐습니다(exitCode="
                         + exitCode + "). 로그: " + log.getAbsolutePath());
             }
-            if (probeHealth()) {
+            HealthProbeResult probe = probeHealth();
+            if (probe.ready) {
+                serverAvailable = true;
                 serverReady = true;
                 starting = false;
                 updateNotification("comfy".equals(launchMode) && comfyUrl.isEmpty()
                         ? "ComfyUI 주소 미설정 · 로컬 서버 대기 중 · 127.0.0.1:8189"
                         : "연결됨 · 127.0.0.1:8189");
+                appendDiagnostic("health_ready HTTP " + probe.statusCode);
+                break;
+            }
+            if (probe.reachable) {
+                serverAvailable = true;
+                serverReady = false;
+                starting = false;
+                updateNotification(healthStatusMessage(probe));
+                appendDiagnostic("health_endpoint_reachable HTTP " + probe.statusCode);
                 break;
             }
             serverReady = false;
+            serverAvailable = false;
             starting = true;
             long now = System.currentTimeMillis();
             if (now >= nextHealthNoticeAt) {
-                updateNotification("서버 실행 중 · 초기화/헬스 응답 대기 · 127.0.0.1:8189");
+                updateNotification("서버 프로세스 실행 중 · 헬스 응답 없음 (" + probe.detail
+                        + ") · 127.0.0.1:8189");
+                appendDiagnostic("health_probe_wait " + probe.detail);
                 nextHealthNoticeAt = now + 30000L;
             }
             Thread.sleep(1000);
@@ -301,19 +320,40 @@ public final class ImageGenService extends Service {
 
         Process running = serverProcess;
         while (!stopping && running != null && running.isAlive()) {
-            if (!probeHealth()) {
-                serverReady = false;
-                starting = true;
-                updateNotification("서버 응답 대기 중 · 연결 상태 확인 필요");
-            } else if (!serverReady) {
+            HealthProbeResult probe = probeHealth();
+            if (probe.ready) {
+                serverAvailable = true;
                 serverReady = true;
                 starting = false;
-                updateNotification("연결됨 · 127.0.0.1:8189");
+                if (!statusMessage.startsWith("연결됨")
+                        && !statusMessage.startsWith("ComfyUI 주소 미설정")) {
+                    updateNotification("연결됨 · 127.0.0.1:8189");
+                    appendDiagnostic("health_ready HTTP " + probe.statusCode);
+                }
+            } else if (probe.reachable) {
+                serverAvailable = true;
+                serverReady = false;
+                starting = false;
+                String message = healthStatusMessage(probe);
+                if (!message.equals(statusMessage)) {
+                    updateNotification(message);
+                    appendDiagnostic("health_not_ready HTTP " + probe.statusCode);
+                }
+            } else {
+                serverAvailable = false;
+                serverReady = false;
+                starting = false;
+                String message = "서버 프로세스는 실행 중이나 헬스 연결이 끊겼습니다 (" + probe.detail + ")";
+                if (!message.equals(statusMessage)) {
+                    updateNotification(message);
+                    appendDiagnostic("health_connection_lost " + probe.detail);
+                }
             }
             Thread.sleep(5000);
         }
         if (!stopping) {
             serverReady = false;
+            serverAvailable = false;
             starting = false;
             updateNotification("ImageGen 서버가 종료됐습니다. 로그: " + log.getAbsolutePath());
         }
@@ -528,7 +568,21 @@ public final class ImageGenService extends Service {
         return process.exitValue();
     }
 
-    private boolean probeHealth() {
+    private static final class HealthProbeResult {
+        final boolean reachable;
+        final boolean ready;
+        final int statusCode;
+        final String detail;
+
+        HealthProbeResult(boolean reachable, boolean ready, int statusCode, String detail) {
+            this.reachable = reachable;
+            this.ready = ready;
+            this.statusCode = statusCode;
+            this.detail = detail == null ? "" : detail;
+        }
+    }
+
+    private HealthProbeResult probeHealth() {
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) new URL("http://127.0.0.1:8189/api/image/health").openConnection();
@@ -537,17 +591,25 @@ public final class ImageGenService extends Service {
             connection.setUseCaches(false);
             connection.setRequestMethod("GET");
             int code = connection.getResponseCode();
-            return code >= 200 && code < 300;
-        } catch (Exception ignored) {
-            return false;
+            return new HealthProbeResult(true, code >= 200 && code < 300, code, "HTTP " + code);
+        } catch (Exception error) {
+            return new HealthProbeResult(false, false, -1, error.getClass().getSimpleName());
         } finally {
             if (connection != null) connection.disconnect();
         }
     }
 
+    private static String healthStatusMessage(HealthProbeResult probe) {
+        if (probe.statusCode == 503) {
+            return "서버 응답 확인 · HTTP 503(공급자 설정/인증 대기) · 127.0.0.1:8189";
+        }
+        return "서버 HTTP 응답 확인 · " + probe.detail + " (API 점검 필요) · 127.0.0.1:8189";
+    }
+
     private void stopRuntime() {
         synchronized (processLock) {
             serverReady = false;
+            serverAvailable = false;
             starting = false;
             Process p = serverProcess;
             serverProcess = null;
@@ -592,6 +654,7 @@ public final class ImageGenService extends Service {
         if (unexpected) {
             DiagnosticsLogger.event(this,"ERROR","imagegen_service","service_destroyed_unexpectedly",null);
             serverReady = false;
+            serverAvailable = false;
             statusMessage = "이미지 생성 서비스가 예기치 않게 종료되었습니다. 시작 로그를 확인하세요.";
         }
         persistState();
