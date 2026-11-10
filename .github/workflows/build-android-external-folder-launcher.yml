@@ -34,7 +34,7 @@ jobs:
           import subprocess
           import tempfile
 
-          target_prefix = "d75797d4101f4a1312b3ae0571d77f68"
+          target_md5 = "d75797d4101f4a1312b3ae0571d77f68"
           repositories = ("diethoon/3.36", "diethoon/wayward")
           report = []
           with tempfile.TemporaryDirectory(prefix="wayward-wml-branch-audit-") as temporary:
@@ -84,11 +84,12 @@ jobs:
                   for (blob_sha, file_path, size), refs_for_blob in sorted(html_blobs.items()):
                       data = subprocess.check_output(["git", "-C", str(directory), "cat-file", "blob", blob_sha])
                       digest = hashlib.sha256(data).hexdigest()
-                      if digest.startswith(target_prefix) or "Wayward_WML_ko.html" in file_path:
+                      md5 = hashlib.md5(data).hexdigest()
+                      if md5 == target_md5 or "Wayward_WML_ko.html" in file_path:
                           report.append(
                               "HTML " + json.dumps({
                                   "path": file_path, "bytes": size, "git_blob": blob_sha,
-                                  "sha256": digest, "target_hash_match": digest.startswith(target_prefix),
+                                  "sha256": digest, "md5": md5, "target_md5_match": md5 == target_md5,
                                   "branches": sorted(refs_for_blob)
                               }, ensure_ascii=False)
                           )
