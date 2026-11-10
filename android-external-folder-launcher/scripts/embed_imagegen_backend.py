@@ -188,6 +188,7 @@ def extract(archive: Path, output: Path) -> None:
   launcherProfileId: string
   launcherProviderId: string
   launcherProviderSignature: string
+  launcherProviderToken: string
   naiToken: string""",
                     "add-launcher-provider-config",
                 ),
@@ -198,6 +199,7 @@ def extract(archive: Path, output: Path) -> None:
     launcherProfileId: pick('launcher-profile-id', 'LAUNCHER_PROFILE_ID', 'launcherProfileId', ''),
     launcherProviderId: pick('launcher-provider-id', 'LAUNCHER_PROVIDER_ID', 'launcherProviderId', ''),
     launcherProviderSignature: pick('launcher-provider-signature', 'LAUNCHER_PROVIDER_SIGNATURE', 'launcherProviderSignature', ''),
+    launcherProviderToken: pick('launcher-provider-token', 'LAUNCHER_PROVIDER_TOKEN', 'launcherProviderToken', ''),
     naiToken:""",
                     "load-launcher-provider-config",
                 ),
@@ -290,12 +292,13 @@ async function launcherGenerate(
     || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
     throw new Error('런처 이미지 서비스 주소가 안전한 로컬 어댑터 주소가 아닙니다.')
   }
-  if (!/^[a-f0-9]{32}$/.test(config.launcherProfileId) || !/^[a-f0-9]{32}$/.test(config.launcherProviderId)) {
+  if (!/^[a-f0-9]{32}$/.test(config.launcherProfileId) || !/^[a-f0-9]{32}$/.test(config.launcherProviderId)
+    || typeof config.launcherProviderToken !== 'string' || config.launcherProviderToken.length < 40) {
     throw new Error('런처 이미지 서비스 프로필 또는 공급자 ID가 올바르지 않습니다.')
   }
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', accept: 'image/*' },
+    headers: { 'content-type': 'application/json', accept: 'image/*', authorization: 'Bearer ' + config.launcherProviderToken },
     body: JSON.stringify({
       profileId: config.launcherProfileId,
       requestId,
