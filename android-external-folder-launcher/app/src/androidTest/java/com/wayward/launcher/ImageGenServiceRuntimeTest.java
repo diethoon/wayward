@@ -444,6 +444,46 @@ public final class ImageGenServiceRuntimeTest {
                     5_000L);
             System.out.println("WAYWARD_TITLE_START " + newGameAction + " " + skipIntro);
 
+            String selectedCharacter = awaitJsString(instrumentation, gameWeb,
+                    "(function(){"
+                            + "var visible=function(e){var r=e.getBoundingClientRect(),s=getComputedStyle(e);return e.getClientRects().length>0&&r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';};"
+                            + "var radios=Array.from(document.querySelectorAll('input[type=radio]'));"
+                            + "var radio=radios.find(function(e){var root=e.closest('label')||e.parentElement&&e.parentElement.parentElement;return root&&String(root.innerText||root.textContent||'').includes('엘레나')&&visible(e);});"
+                            + "if(radio){radio.click();return 'elena_radio_clicked';}"
+                            + "var nodes=Array.from(document.querySelectorAll('button,[role=button],label,[role=radio],input,div'));"
+                            + "var card=nodes.find(function(e){return visible(e)&&String(e.innerText||e.textContent||'').replace(/\\\\s+/g,' ').trim().startsWith('엘레나')&&(e.matches('button,label,[role=button],[role=radio]')||e.querySelector('input[type=radio]'));});"
+                            + "if(!card)return 'elena_card_missing radios='+radios.length+' labels='+Array.from(document.querySelectorAll('label')).map(function(e){return String(e.innerText||e.textContent||'').trim().slice(0,100);}).join('|');"
+                            + "var nested=card.querySelector('input[type=radio]');if(nested)nested.click();else card.click();return 'elena_card_clicked';"
+                            + "})()",
+                    10_000L);
+            assertTrue("Could not select Elena on the actual new-game character screen: " + selectedCharacter,
+                    selectedCharacter.endsWith("_clicked"));
+            String continueCharacter = "";
+            long continueDeadline = System.currentTimeMillis() + 15_000L;
+            while (System.currentTimeMillis() < continueDeadline) {
+                continueCharacter = awaitJsString(instrumentation, gameWeb,
+                        "(function(){var button=Array.from(document.querySelectorAll('button,[role=button]')).find(function(e){"
+                                + "var t=String(e.innerText||e.textContent||'').replace(/\\\\s+/g,' ').trim();"
+                                + "return t.includes('계속할 캐릭터')||t.includes('계속하기')||t==='계속';});"
+                                + "if(!button)return 'continue_button_missing';"
+                                + "return button.disabled||button.getAttribute('aria-disabled')==='true'?'continue_disabled':'continue_ready';})()",
+                        5_000L);
+                if ("continue_ready".equals(continueCharacter)) break;
+                Thread.sleep(200L);
+            }
+            assertEquals("Selecting Elena did not enable the new-game continue action.",
+                    "continue_ready", continueCharacter);
+            String continueClicked = awaitJsString(instrumentation, gameWeb,
+                    "(function(){var button=Array.from(document.querySelectorAll('button,[role=button]')).find(function(e){"
+                            + "var t=String(e.innerText||e.textContent||'').replace(/\\\\s+/g,' ').trim();"
+                            + "return (t.includes('계속할 캐릭터')||t.includes('계속하기')||t==='계속')&&!e.disabled;});"
+                            + "if(!button)return 'continue_button_missing';button.click();return 'continue_clicked';})()",
+                    10_000L);
+            assertEquals("The launcher could not advance from Elena's character selection.",
+                    "continue_clicked", continueClicked);
+            System.out.println("WAYWARD_CHARACTER_START " + selectedCharacter + " "
+                    + continueCharacter + " " + continueClicked);
+
             long moduleLoadDeadline = System.currentTimeMillis() + 45_000L;
             while (System.currentTimeMillis() < moduleLoadDeadline
                     && (!imageStudioScriptServed.get() || !imageSearchScriptServed.get())) {
