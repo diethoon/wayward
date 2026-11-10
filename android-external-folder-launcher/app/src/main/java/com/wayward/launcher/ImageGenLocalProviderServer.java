@@ -93,9 +93,9 @@ final class ImageGenLocalProviderServer implements AutoCloseable {
     }
 
     private void handle(Socket socket) {
-        try (Socket client = socket;
-             InputStream raw = new BufferedInputStream(client.getInputStream());
-             OutputStream output = client.getOutputStream()) {
+        try {
+            InputStream raw = new BufferedInputStream(socket.getInputStream());
+            OutputStream output = socket.getOutputStream();
             String requestLine = readLine(raw, 4096);
             if (requestLine == null || requestLine.isEmpty()) {
                 writeResponse(output, 400, "application/json; charset=utf-8",
@@ -191,6 +191,8 @@ final class ImageGenLocalProviderServer implements AutoCloseable {
             Log.w(TAG, "provider request failed: " + error.getClass().getSimpleName() + ": " + message);
             respondQuietly(socket, 502, "application/json; charset=utf-8",
                     jsonError(message).getBytes(StandardCharsets.UTF_8));
+        } finally {
+            closeQuietly(socket);
         }
     }
 
