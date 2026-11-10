@@ -97,8 +97,10 @@ assert.match(runtimeSmokeTest, /api\/batch\/enqueue/,
   "Android runtime smoke must use the Image Studio batch enqueue endpoint");
 assert.match(runtimeSmokeTest, /api\/pack/,
   "Android runtime smoke must verify the generated image in the Image Studio pack cache");
-assert.match(runtimeSmokeTest, /ImageGenLocalProviderServer/,
-  "Android runtime smoke must start the native provider adapter");
+assert.match(service, /new ImageGenLocalProviderServer\(/,
+  "the isolated ImageGen service must start the native provider adapter");
+assert.match(runtimeSmokeTest, /startLauncherProviderServer/,
+  "Android runtime smoke must select the configured native provider mode");
 assert.match(runtimeSmokeTest, /wayward-image-worker\.trpgengine\.workers\.dev/);
 assert.match(runtimeSmokeTest, /UiAutomation\(\)\.takeScreenshot/);
 assert.match(runtimeSmokeTest, /ImagePipelineDiagnostics\.readRecent/);
