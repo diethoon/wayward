@@ -710,7 +710,7 @@ public final class MainActivity extends Activity {
             providerProfileId = selectedProfile;
             providerId = selectedProvider;
             version = "launcher-imagegen:" + ImageGenBackendInstaller.VERSION + ":" + providerMode
-                    + ("launcher".equals(providerMode) ? ":" + providerId : "");
+                    + ("launcher".equals(providerMode) ? ":" + providerProfileId + ":" + providerId : "");
         } catch (Exception e) {
             imageGenSessionMessage = "현재 세션의 Image Studio / 이미지 서비스 확인 실패: " + msg(e);
             refreshImageGenStatus();
@@ -1011,7 +1011,7 @@ public final class MainActivity extends Activity {
                     return;
                 }
                 String launchVersion="launcher-imagegen:"+ImageGenBackendInstaller.VERSION+":"+mode
-                        +("launcher".equals(mode)?":"+launcherProviderId:"");
+                        +("launcher".equals(mode)?":"+launcherProfileId+":"+launcherProviderId:"");
                 try {
                     ImageGenStatusStore.write(getFilesDir(),false,true,"런처 내장 ImageGen 서버 시작 중…",launchVersion);
                 } catch (Exception error) {
