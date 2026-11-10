@@ -681,6 +681,9 @@ public final class MainActivity extends Activity {
             return;
         }
 
+        final String providerMode;
+        final String providerProfileId;
+        final String providerId;
         final String version;
         try {
             String detected = imageStudioModId(sessionTree);
@@ -690,11 +693,26 @@ public final class MainActivity extends Activity {
                 finishImageGenCallbacks();
                 return;
             }
-            // Start the local EasyGen/NovelAI-compatible server independently
-            // of credentials. The provider is configured after the panel opens.
-            version = "launcher-imagegen:" + ImageGenBackendInstaller.VERSION + ":novelai";
+            String selectedMode = "novelai";
+            String selectedProfile = "";
+            String selectedProvider = "";
+            if (activeProfileId != null && activeProfileId.matches("[a-f0-9]{32}")) {
+                ImageProviderStore.Snapshot providers = new ImageProviderStore(this).load();
+                String defaultId = providers.defaults.get(activeProfileId);
+                ImageProviderStore.Provider selected = ImageProviderStore.find(providers, defaultId);
+                if (selected != null && selected.enabled && selected.allowInGame) {
+                    selectedMode = "launcher";
+                    selectedProfile = activeProfileId;
+                    selectedProvider = selected.id;
+                }
+            }
+            providerMode = selectedMode;
+            providerProfileId = selectedProfile;
+            providerId = selectedProvider;
+            version = "launcher-imagegen:" + ImageGenBackendInstaller.VERSION + ":" + providerMode
+                    + ("launcher".equals(providerMode) ? ":" + providerId : "");
         } catch (Exception e) {
-            imageGenSessionMessage = "현재 세션의 Image Studio 모드 검사 실패: " + msg(e);
+            imageGenSessionMessage = "현재 세션의 Image Studio / 이미지 서비스 확인 실패: " + msg(e);
             refreshImageGenStatus();
             finishImageGenCallbacks();
             return;
@@ -744,7 +762,7 @@ public final class MainActivity extends Activity {
                         throw new IllegalStateException("현재 런처 APK에 포함된 ImageGen 서버 자산을 찾지 못했습니다.");
                     }
                 }
-                writeImageGenRuntimeConfig(backend, "novelai", "");
+                writeImageGenRuntimeConfig(backend, providerMode, "", providerProfileId, providerId);
             } catch (Throwable error) {
                 problem = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
             }
@@ -757,7 +775,7 @@ public final class MainActivity extends Activity {
                     finishImageGenCallbacks();
                     return;
                 }
-                startImageGenService(backend, version, "novelai", "");
+                startImageGenService(backend, version, providerMode, "", providerProfileId, providerId);
                 waitForImageGenReady();
             });
         }, "wayward-imagegen-session-prepare").start();
@@ -765,8 +783,8 @@ public final class MainActivity extends Activity {
 
     private static boolean sameImageGenVersion(String running, String requested) {
         if(running==null||requested==null||running.isEmpty()||requested.isEmpty())return false;
-        // The engine mode is part of the version identity: NovelAI and ComfyUI
-        // share code but have different active provider configuration.
+        // The engine mode and, for native providers, profile provider ID are
+        // part of the identity so sessions cannot silently share another profile's service.
         return running.equals(requested);
     }
 
