@@ -262,7 +262,7 @@ public final class ImageGenServiceRuntimeTest {
                     realModText.contains("imagestudio")
                             && realModText.contains("1.31.20"));
             Method detectImageStudio = MainActivity.class.getDeclaredMethod(
-                    "imageStudioModId", Class.forName("com.wayward.launcher.SafTree"));
+                    "imageStudioModId", Class.forName("com.wayward.launcher.MainActivity$SafTree"));
             detectImageStudio.setAccessible(true);
             assertEquals("The production launcher detector did not recognize the installed ZIP module.",
                     "imagestudio", detectImageStudio.invoke(launcher, new Object[]{null}));
