@@ -1,5 +1,7 @@
 package com.wayward.launcher;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FilterInputStream;
 import java.io.IOException;
@@ -31,6 +33,24 @@ final class ZipModStore {
     // Image Studio 1.31.20's real WML mod.js is 320,679 bytes.
     // Keep parsing bounded, but do not reject valid larger production mods.
     private static final int MAX_MOD_JS_BYTES = 2 * 1024 * 1024;
+    private static final String IMAGE_STUDIO_ENTRY = MOD_ROOT + "imagestudio/mod.js";
+    // Exact WML 0.7.x compatibility patch for Image Studio 1.31.20's 0.9.5-only
+    // pause-menu adapter. The installed ZIP remains untouched; only the served JS is adapted.
+    private static final String IMAGE_STUDIO_LEGACY_MENU_ADAPTER =
+            "const registerMenu = options => { entries.set(owner, options); return base.ui.pauseSettings({ ...options, attributes: { ...options.attributes, 'data-wayward-native-settings': owner }, onClick: () => { options.onClick?.(); queueMicrotask(() => options.windowSelector && document.querySelectorAll(options.windowSelector).forEach(ModNativeUI_앞으로올리기)); } }); };";
+    private static final String IMAGE_STUDIO_COMPAT_MENU_ADAPTER =
+            "const registerMenu = options => {"
+                    + " entries.set(owner, options);"
+                    + " const onClick = () => { options.onClick?.(); queueMicrotask(() => options.windowSelector && document.querySelectorAll(options.windowSelector).forEach(ModNativeUI_앞으로올리기)); };"
+                    + " const attributes = { ...options.attributes, 'data-wayward-native-settings': owner };"
+                    + " if (typeof base.ui.pauseSettings === 'function') return base.ui.pauseSettings({ ...options, attributes, onClick });"
+                    + " if (typeof base.ui.addButton === 'function') {"
+                    + " const rawLabel = options.label;"
+                    + " const label = typeof rawLabel === 'string' ? rawLabel : rawLabel && (rawLabel.ko || rawLabel.en) || owner;"
+                    + " return base.ui.addButton({ label, title: label, onClick });"
+                    + " }"
+                    + " return null;"
+                    + " };";
     private static final int MAX_OPEN_ARCHIVES = 4;
     private static final Pattern ID = Pattern.compile("^[a-z0-9][a-z0-9._-]*$");
     private static final Pattern MOD_ID = Pattern.compile(
@@ -117,6 +137,31 @@ final class ZipModStore {
     }
 
     InputStream open(String requestPath) throws IOException {
+        InputStream original = openRaw(requestPath);
+        if (original == null || !IMAGE_STUDIO_ENTRY.equals(requestPath)) return original;
+
+        try (InputStream input = original) {
+            byte[] sourceBytes = readLimited(input, MAX_MOD_JS_BYTES);
+            String source = new String(sourceBytes, StandardCharsets.UTF_8);
+            int adapterAt = source.indexOf(IMAGE_STUDIO_LEGACY_MENU_ADAPTER);
+            if (adapterAt < 0) {
+                if (source.contains("base.ui.pauseSettings(")) {
+                    throw new IOException("지원하지 않는 Image Studio 메뉴 어댑터 형식입니다.");
+                }
+                return new ByteArrayInputStream(sourceBytes);
+            }
+            if (source.indexOf(IMAGE_STUDIO_LEGACY_MENU_ADAPTER,
+                    adapterAt + IMAGE_STUDIO_LEGACY_MENU_ADAPTER.length()) >= 0) {
+                throw new IOException("Image Studio 메뉴 어댑터가 중복되어 있습니다.");
+            }
+            String compatible = source.substring(0, adapterAt)
+                    + IMAGE_STUDIO_COMPAT_MENU_ADAPTER
+                    + source.substring(adapterAt + IMAGE_STUDIO_LEGACY_MENU_ADAPTER.length());
+            return new ByteArrayInputStream(compatible.getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    InputStream openRaw(String requestPath) throws IOException {
         if (requestPath == null || !requestPath.startsWith(MOD_ROOT)) return null;
         String relative = requestPath.substring(MOD_ROOT.length());
         int slash = relative.indexOf('/');
