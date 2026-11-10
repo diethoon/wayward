@@ -270,6 +270,14 @@ public final class ImageGenServiceRuntimeTest {
 
                     setField(main, "activeProfileId", GAME_PROFILE_ID);
                     setField(main, "web", gameWeb);
+                    // openProfileSession() normally records the current ZIP revision
+                    // before the session WebView is shown. This test builds the
+                    // WebView directly, so mirror that production invariant; otherwise
+                    // onResume() reloads the fixture page when the second document
+                    // task starts and silently removes the injected settings button.
+                    long zipRevision = main.getSharedPreferences(
+                            "wayward_launcher", Context.MODE_PRIVATE).getLong("zip_mod_revision", 0L);
+                    setField(main, "loadedZipRevision", zipRevision);
                     Class<?> bridgeClass = Class.forName("com.wayward.launcher.MainActivity$HostBridge");
                     java.lang.reflect.Constructor<?> bridgeConstructor =
                             bridgeClass.getDeclaredConstructor(MainActivity.class);
