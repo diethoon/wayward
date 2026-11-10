@@ -177,6 +177,218 @@ def extract(archive: Path, output: Path) -> None:
             ],
         )
 
+
+        patch_backend_text(
+            "wayward-imagegen/src/config.ts",
+            [
+                (
+                    "  imageProvider: 'sdxl' | 'anima' | 'nai'\n  naiToken: string",
+                    """  imageProvider: 'sdxl' | 'anima' | 'nai' | 'launcher'
+  launcherProviderUrl: string
+  launcherProfileId: string
+  launcherProviderId: string
+  launcherProviderSignature: string
+  naiToken: string""",
+                    "add-launcher-provider-config",
+                ),
+                (
+                    "    imageProvider: file.imageProvider === 'nai' ? 'nai' : file.imageProvider === 'anima' ? 'anima' : 'sdxl',\n    naiToken:",
+                    """    imageProvider: file.imageProvider === 'launcher' ? 'launcher' : file.imageProvider === 'nai' ? 'nai' : file.imageProvider === 'anima' ? 'anima' : 'sdxl',
+    launcherProviderUrl: pick('launcher-provider-url', 'LAUNCHER_PROVIDER_URL', 'launcherProviderUrl', ''),
+    launcherProfileId: pick('launcher-profile-id', 'LAUNCHER_PROFILE_ID', 'launcherProfileId', ''),
+    launcherProviderId: pick('launcher-provider-id', 'LAUNCHER_PROVIDER_ID', 'launcherProviderId', ''),
+    launcherProviderSignature: pick('launcher-provider-signature', 'LAUNCHER_PROVIDER_SIGNATURE', 'launcherProviderSignature', ''),
+    naiToken:""",
+                    "load-launcher-provider-config",
+                ),
+            ],
+        )
+
+        patch_backend_text(
+            "wayward-imagegen/src/routes/generationSettings.ts",
+            [
+                (
+                    "  imageProvider: 'sdxl' | 'anima' | 'nai'\n  naiToken: string",
+                    """  imageProvider: 'sdxl' | 'anima' | 'nai' | 'launcher'
+  naiToken: string""",
+                    "generation-settings-launcher-provider-type",
+                ),
+                (
+                    "    imageProvider: raw.imageProvider === 'nai' ? 'nai' : raw.imageProvider === 'anima' ? 'anima' : 'sdxl',",
+                    """    imageProvider: base.imageProvider === 'launcher' ? 'launcher' : raw.imageProvider === 'nai' ? 'nai' : raw.imageProvider === 'anima' ? 'anima' : 'sdxl',""",
+                    "preserve-launcher-provider-selection",
+                ),
+            ],
+        )
+
+        patch_backend_text(
+            "wayward-imagegen/src/batch/queue.ts",
+            [
+                (
+                    "    return this.config.imageProvider === 'nai' ? 'nai' : this.config.imageProvider === 'anima' ? 'anima' : 'illustrious'",
+                    """    return this.config.imageProvider === 'nai' || this.config.imageProvider === 'launcher' ? 'nai' : this.config.imageProvider === 'anima' ? 'anima' : 'illustrious'""",
+                    "route-launcher-provider-through-serialized-nai-job-queue",
+                ),
+                (
+                    "    if (workflow === 'nai') return NovelAI_프롬프트만들기(this.config, item.prompt, item.negativePrompt)",
+                    """    if (workflow === 'nai') return this.config.imageProvider === 'launcher'
+      ? { prompt: item.prompt, negativePrompt: item.negativePrompt?.trim() ?? '' }
+      : NovelAI_프롬프트만들기(this.config, item.prompt, item.negativePrompt)""",
+                    "preserve-game-prompts-for-launcher-provider",
+                ),
+                (
+                    """  private generationParams(item: BatchItem, workflow: WorkflowType): BatchItem {
+    return workflow === 'anima'
+      ? { ...item, steps: this.config.animaSteps, cfg: this.config.animaCfg, width: this.config.animaWidth, height: this.config.animaHeight }
+      : workflow === 'illustrious' && (this.config.sdxlWidth !== 1024 || this.config.sdxlHeight !== 1024 || item.width !== undefined || item.height !== undefined)
+        ? { ...item, width: this.config.sdxlWidth, height: this.config.sdxlHeight }
+        : item
+  }""",
+                    """  private generationParams(item: BatchItem, workflow: WorkflowType): BatchItem {
+    if (this.config.imageProvider === 'launcher') {
+      return { ...item, width: item.width ?? this.config.sdxlWidth, height: item.height ?? this.config.sdxlHeight }
+    }
+    return workflow === 'anima'
+      ? { ...item, steps: this.config.animaSteps, cfg: this.config.animaCfg, width: this.config.animaWidth, height: this.config.animaHeight }
+      : workflow === 'illustrious' && (this.config.sdxlWidth !== 1024 || this.config.sdxlHeight !== 1024 || item.width !== undefined || item.height !== undefined)
+        ? { ...item, width: this.config.sdxlWidth, height: this.config.sdxlHeight }
+        : item
+  }""",
+                    "use-game-dimensions-for-launcher-provider",
+                ),
+                (
+                    "    const baseHash = workflow === 'nai' ? NovelAI_생성해시만들기(this.config, prompts.prompt, prompts.negativePrompt)\n      : derivePromptHash(prompts.prompt, prompts.negativePrompt, { ...generationParams, loras })",
+                    """    const baseHash = workflow === 'nai' && this.config.imageProvider === 'launcher'
+      ? derivePromptHash(prompts.prompt, prompts.negativePrompt, { ...generationParams, launcherProviderSignature: this.config.launcherProviderSignature })
+      : workflow === 'nai' ? NovelAI_생성해시만들기(this.config, prompts.prompt, prompts.negativePrompt)
+        : derivePromptHash(prompts.prompt, prompts.negativePrompt, { ...generationParams, loras })""",
+                    "include-launcher-provider-in-cache-key",
+                ),
+                (
+                    "...(workflow === 'nai' ? { steps: this.config.naiSteps, cfg: this.config.naiScale, checkpoint: this.config.naiModel,\n          width: this.config.naiWidth, height: this.config.naiHeight, sampler: this.config.naiSampler, noiseSchedule: this.config.naiNoiseSchedule } : {}),",
+                    "...(workflow === 'nai' && this.config.imageProvider === 'nai' ? { steps: this.config.naiSteps, cfg: this.config.naiScale, checkpoint: this.config.naiModel,\n          width: this.config.naiWidth, height: this.config.naiHeight, sampler: this.config.naiSampler, noiseSchedule: this.config.naiNoiseSchedule } : {}),",
+                    "do-not-override-launcher-provider-generation-options",
+                ),
+            ],
+        )
+
+        patch_backend_text(
+            "wayward-imagegen/src/comfy/jobRunner.ts",
+            [
+                (
+                    "const JOB_TTL_MS = 60_000\n",
+                    """const JOB_TTL_MS = 60_000
+
+async function launcherGenerate(
+  config: Config,
+  args: SubmitArgs,
+  requestId: string,
+): Promise<{ bytes: Buffer; filename: string }> {
+  const endpoint = new URL(config.launcherProviderUrl)
+  if (endpoint.protocol !== 'http:' || endpoint.hostname !== '127.0.0.1'
+    || endpoint.port !== '8190' || endpoint.pathname !== '/generate'
+    || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
+    throw new Error('런처 이미지 서비스 주소가 안전한 로컬 어댑터 주소가 아닙니다.')
+  }
+  if (!/^[a-f0-9]{32}$/.test(config.launcherProfileId) || !/^[a-f0-9]{32}$/.test(config.launcherProviderId)) {
+    throw new Error('런처 이미지 서비스 프로필 또는 공급자 ID가 올바르지 않습니다.')
+  }
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'image/*' },
+    body: JSON.stringify({
+      profileId: config.launcherProfileId,
+      requestId,
+      prompt: args.prompt,
+      negativePrompt: args.negativePrompt || '',
+      width: args.overrides?.width ?? config.sdxlWidth,
+      height: args.overrides?.height ?? config.sdxlHeight,
+    }),
+    signal: AbortSignal.timeout(185_000),
+  })
+  if (!response.ok) {
+    let detail = '런처 이미지 서비스 요청 실패(HTTP ' + response.status + ').'
+    try {
+      const body = await response.json() as { error?: unknown }
+      if (typeof body.error === 'string' && body.error.trim()) detail = body.error.trim().slice(0, 240)
+    } catch { /* keep the status-based diagnostic */ }
+    throw new Error(detail)
+  }
+  const mime = (response.headers.get('content-type') || '').split(';')[0]!.trim().toLowerCase()
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(mime)) {
+    throw new Error('런처 이미지 서비스가 지원하지 않는 이미지 MIME 형식을 반환했습니다.')
+  }
+  const declaredLength = Number(response.headers.get('content-length') || 0)
+  if (declaredLength > 25 * 1024 * 1024) throw new Error('생성 이미지가 25MB 제한을 초과했습니다.')
+  const bytes = Buffer.from(await response.arrayBuffer())
+  if (!bytes.length || bytes.length > 25 * 1024 * 1024) {
+    throw new Error('생성 이미지가 비어 있거나 25MB 제한을 초과했습니다.')
+  }
+  const extension = mime === 'image/jpeg' ? 'jpg' : mime === 'image/webp' ? 'webp' : 'png'
+  return { bytes, filename: 'launcher.' + extension }
+}
+""",
+                    "add-guarded-loopback-provider-job-adapter",
+                ),
+                (
+                    "        if (!this.config.naiToken.trim()) throw new Error('NovelAI API 토큰을 이미지 생성 방식 설정에서 저장하세요.')",
+                    "        if (this.config.imageProvider === 'nai' && !this.config.naiToken.trim()) throw new Error('NovelAI API 토큰을 이미지 생성 방식 설정에서 저장하세요.')",
+                    "require-novelai-token-only-for-novelai-provider",
+                ),
+                (
+                    """            const result = await NovelAI_이미지생성하기(config, job.prompt, job.negativePrompt || '', args.seed)
+            job.genParams = { ...job.genParams, seed: result.seed }
+            await this.finalize(job, [{ filename: 'novelai.png', subfolder: '', type: 'output' }], [], undefined, result.bytes)""",
+                    """            if (config.imageProvider === 'launcher') {
+              const rendered = await launcherGenerate(config, args, job.promptId)
+              await this.finalize(job, [{ filename: rendered.filename, subfolder: '', type: 'output' }], [], undefined, rendered.bytes)
+            } else {
+              const result = await NovelAI_이미지생성하기(config, job.prompt, job.negativePrompt || '', args.seed)
+              job.genParams = { ...job.genParams, seed: result.seed }
+              await this.finalize(job, [{ filename: 'novelai.png', subfolder: '', type: 'output' }], [], undefined, result.bytes)
+            }""",
+                    "save-launcher-provider-image-through-normal-finalize-cache-path",
+                ),
+            ],
+        )
+
+        patch_backend_text(
+            "wayward-imagegen/src/routes/catalogue.ts",
+            [
+                (
+                    """    const nai = config.imageProvider === 'nai'
+    const comfyUp = nai ? false : await comfy.isReachable()
+    const ready = nai ? Boolean(config.naiToken.trim()) : comfyUp""",
+                    """    const nai = config.imageProvider === 'nai'
+    const launcher = config.imageProvider === 'launcher'
+    let launcherUp = false
+    if (launcher && config.launcherProviderUrl) {
+      try {
+        const healthUrl = new URL('/health', config.launcherProviderUrl)
+        const response = await fetch(healthUrl, { signal: AbortSignal.timeout(1500) })
+        if (response.ok) {
+          const health = await response.json() as { ready?: boolean }
+          launcherUp = health.ready === true
+        }
+      } catch { /* unavailable native adapter */ }
+    }
+    const comfyUp = nai || launcher ? false : await comfy.isReachable()
+    const ready = nai ? Boolean(config.naiToken.trim()) : launcher ? launcherUp : comfyUp""",
+                    "probe-native-provider-adapter-for-imagegen-health",
+                ),
+                (
+                    "      comfyuiRequired: !nai,",
+                    "      comfyuiRequired: !nai && !launcher,",
+                    "mark-comfyui-optional-for-native-provider",
+                ),
+                (
+                    "      capabilities: ['h-status-character-keys', 'shared-core-v1', 'img2img-reference-v1', 'novelai-v1'],",
+                    "      capabilities: ['h-status-character-keys', 'shared-core-v1', 'img2img-reference-v1', 'novelai-v1', ...(launcher ? ['launcher-provider-v1'] : [])],",
+                    "advertise-native-provider-capability",
+                ),
+            ],
+        )
+
         manifest = {
             "schemaVersion": 1,
             "sourceCommit": SOURCE_COMMIT,
