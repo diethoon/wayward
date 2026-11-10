@@ -50,7 +50,7 @@ public final class ImageGenService extends Service {
     // Launch the verified Bun ELF through the system dynamic linker instead.
     private static final String ANDROID_LINKER_64 = "/system/bin/linker64";
     // Google API emulator x86_64 images may expose an ARM64 native-bridge linker here.
-    private static final String ANDROID_BRIDGE_ARM64_LINKER_64 = "/system/lib64/arm64/linker64";
+    private static final String ANDROID_BRIDGE_ARM64_LINKER_64 = "/system/bin/arm64/linker64";
     private static final long MAX_BUN_ZIP = 60L * 1024L * 1024L;
     private static final long MAX_BUN_UNPACKED = 180L * 1024L * 1024L;
     public static volatile boolean serverReady = false;
