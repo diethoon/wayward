@@ -884,12 +884,13 @@ public final class ImageGenServiceRuntimeTest {
                     + "if(!packResponse.ok)throw new Error('pack HTTP '+packResponse.status);"
                     + "var pack=await packResponse.json();var entry=pack.entries&&pack.entries[key];"
                     + "if(!entry||!entry.imagePath)throw new Error('generated Elena portrait missing from /api/pack: '+JSON.stringify(pack).slice(0,300));"
-                    + "var imageUrl='http://127.0.0.1:8189/images/'+entry.imagePath.split('/').map(encodeURIComponent).join('/');"
-                    + "var imageResponse=await window.fetch(imageUrl);"
-                    + "if(!imageResponse.ok)throw new Error('cached image HTTP '+imageResponse.status);"
+                    + "var imageUrl=new URL('/images/__wayward_generated__/'+entry.imagePath.split('/').map(encodeURIComponent).join('/'),window.location.origin).toString();"
+                    + "if(new URL(imageUrl).origin!==window.location.origin)throw new Error('generated image URL is not same-origin: '+imageUrl);"
+                    + "var imageResponse=await window.fetch(imageUrl,{credentials:'omit'});"
+                    + "if(!imageResponse.ok)throw new Error('same-origin cached image HTTP '+imageResponse.status);"
                     + "var blob=await imageResponse.blob();"
                     + "if(!blob.type||blob.type.indexOf('image/')!==0)throw new Error('unexpected generated image MIME: '+blob.type);"
-                    + "var dataUrl=await new Promise(function(resolve,reject){var reader=new FileReader();reader.onload=function(){resolve(reader.result);};reader.onerror=reject;reader.readAsDataURL(blob);});"
+                    + "if(blob.size<8)throw new Error('same-origin image route returned an empty image body');"
                     + "localStorage.setItem('wml.dev','true');"
                     + "var dev=WML.dev(),bridge=window.WW_ImageStudioBridge,matching=window.WW_ImageStudioMatching;"
                     + "if(!dev||!bridge||!matching)throw new Error('real WML Image Studio APIs are unavailable');"
@@ -902,7 +903,7 @@ public final class ImageGenServiceRuntimeTest {
                     + "globalThis.__WW_STUDIO_OFFLINE_ONLY__=true;"
                     + "dev.fn('settingsStore').getState().set({imageBackendMode:'off',ageAffirmed:true,contentAcknowledged:true});"
                     + "dev.hook('bee',{priority:-9000000,replace:function(){return key;}});"
-                    + "dev.hook(imageUrlSymbol,{priority:-9000000,replace:function(){return dataUrl;}});"
+                    + "dev.hook(imageUrlSymbol,{priority:-9000000,replace:function(){return imageUrl;}});"
                     + "var config=matching.get();"
                     + "['scene','outfit','room','exposure'].forEach(function(id){if(config.rules[id])config.rules[id].required=false;});"
                     + "matching.set(config);"
@@ -912,7 +913,7 @@ public final class ImageGenServiceRuntimeTest {
                     + "if(skip)skip.click();"
                     + "var portraitDeadline=Date.now()+20000,portrait=null;"
                     + "while(Date.now()<portraitDeadline){"
-                    + "portrait=[...document.querySelectorAll('#root img')].find(function(img){return img.src===dataUrl;});"
+                    + "portrait=[...document.querySelectorAll('#root img')].find(function(img){return img.src===imageUrl;});"
                     + "if(portrait&&portrait.complete&&portrait.naturalWidth>0&&portrait.naturalHeight>0)break;"
                     + "await new Promise(function(resolve){setTimeout(resolve,200);});"
                     + "}"
@@ -923,7 +924,7 @@ public final class ImageGenServiceRuntimeTest {
                     + "if(!visible)throw new Error('production portrait image decoded but not visible');"
                     + "window.__waywardCiImage={state:'loaded',displayedInPortraitHook:true,portraitHook:'imageUsagePortraitPanel',"
                     + "imageAlt:portrait.alt,naturalWidth:portrait.naturalWidth,naturalHeight:portrait.naturalHeight,visible:visible,"
-                    + "mimeType:blob.type||'',imagePath:entry.imagePath,entryCount:pack.entryCount||Object.keys(pack.entries||{}).length,"
+                    + "mimeType:blob.type||'',imagePath:entry.imagePath,imageUrl:imageUrl,imageOrigin:new URL(imageUrl).origin,gameOrigin:window.location.origin,sameOriginResource:new URL(imageUrl).origin===window.location.origin,entryCount:pack.entryCount||Object.keys(pack.entries||{}).length,"
                     + "cacheCompleted:batchStatus.completed,cacheCount:batchStatus.cached||0};"
                     + "})().catch(function(error){window.__waywardCiImage={state:'error',errorType:error&&error.name?String(error.name):'Error',message:error&&error.message?String(error.message).slice(0,320):'unknown'};});"
                     + "return 'dispatched';})()";
@@ -949,7 +950,11 @@ public final class ImageGenServiceRuntimeTest {
                     imageState.optInt("naturalWidth", 0) > 0 && imageState.optInt("naturalHeight", 0) > 0);
             assertTrue("The actual portrait slot was not visible on screen: " + imageState,
                     imageState.optBoolean("visible", false));
-            resultSummary = "state=loaded\nportraitHook=imageUsagePortraitPanel\ndisplayedInPortraitHook=true\nvisibleOnScreen=true\n"
+            assertTrue("Generated image was not served from the registered game's HTTPS origin: " + imageState,
+                    imageState.optBoolean("sameOriginResource", false));
+            assertEquals("Generated image route did not use the active game origin: " + imageState,
+                    GAME_ORIGIN, imageState.optString("imageOrigin", ""));
+            resultSummary = "state=loaded\nportraitHook=imageUsagePortraitPanel\ndisplayedInPortraitHook=true\nvisibleOnScreen=true\nsameOriginImageRoute=true\nimageOrigin=" + imageState.optString("imageOrigin") + "\n"
                     + "gameHtmlBytes=" + gameHtml.length + "\n"
                     + "gameHtmlSourceCommit=26d6c32e0b0abbb886e3029efd548b7ca6774401\n"
                     + "gameHtmlBlob=d198eacfc127c55dc44bd5d1b8e29ff2bb7d08e6\n"
