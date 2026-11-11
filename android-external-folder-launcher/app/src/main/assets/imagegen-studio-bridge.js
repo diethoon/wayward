@@ -57,13 +57,40 @@
 
   function localEndpoint(path) {
     if (!prefersLauncherLocal()) return null;
-    const value = String(path || "");
-    if (!value.startsWith("/api/") || value.indexOf("\\") >= 0) return null;
+    const value = String(path || "").trim();
+    if (!value || value.indexOf("\\") >= 0 || value.indexOf("\0") >= 0) return null;
     const state = runtimeStatus();
     if (!state.available && !state.starting) return null;
-    return LOCAL_ORIGIN + value;
-  }
 
+    let url;
+    try { url = new URL(value, LOCAL_ORIGIN + "/"); }
+    catch (_) { return null; }
+    if (url.username || url.password ||
+        (url.origin !== LOCAL_ORIGIN && url.origin !== "http://localhost:8189")) return null;
+
+    if (url.pathname.startsWith("/api/")) return LOCAL_ORIGIN + url.pathname + url.search;
+    if (!url.pathname.startsWith("/images/")) return null;
+
+    const encodedSegments = url.pathname.slice("/images/".length).split("/");
+    if (!encodedSegments.length) return null;
+    const segments = [];
+    try {
+      for (const encoded of encodedSegments) {
+        const segment = decodeURIComponent(encoded);
+        if (!segment || segment === "." || segment === ".." ||
+            segment.indexOf("/") >= 0 || segment.indexOf("\\") >= 0 ||
+            segment.indexOf("\0") >= 0) return null;
+        segments.push(encodeURIComponent(segment));
+      }
+    } catch (_) { return null; }
+
+    const gameOrigin = String(window.location && window.location.origin || "");
+    try {
+      const parsedGameOrigin = new URL(gameOrigin);
+      if (parsedGameOrigin.protocol !== "https:" || parsedGameOrigin.origin !== gameOrigin) return null;
+    } catch (_) { return null; }
+    return gameOrigin + "/images/__wayward_generated__/" + segments.join("/") + url.search;
+  }
   function refreshBackendProbe(reason) {
     if (!backendProbe || !prefersLauncherLocal()) return Promise.resolve({ ok: false, reason: "probe_unavailable" });
     const state = runtimeStatus();
