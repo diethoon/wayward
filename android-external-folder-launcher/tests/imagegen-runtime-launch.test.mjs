@@ -21,10 +21,16 @@ assert.match(main, /startOrSwitchManagedImageGenServer/);
 assert.match(main, /waitForImageGenStopThenStart/);
 assert.match(main, /ImageGenBackendInstaller\.install\(this,backend\)/);
 assert.match(main, /writeImageGenRuntimeConfig\(backend,mode,requestedUrl\)/);
-assert.match(main, /zipMods\.open\("wml\/mods\/imagestudio\/mod\.js"\)/,
-  "auto-start must detect an Image Studio adapter installed as a WML ZIP mod");
-assert.match(main, /launcher-imagegen:" \+ ImageGenBackendInstaller\.VERSION \+ ":novelai"/,
-  "auto-start must launch the NovelAI-compatible EasyGen panel, not hardcode ComfyUI");
+assert.match(main, /"imagegen-studio-bridge\.js"/,
+  "the launcher must install its Image Studio routing bridge before WML modules run");
+const sessionEntry = between(main, "private void ensureImageGenServer", "private void waitForImageGenReady()");
+assert.ok(sessionEntry.length > 0, "passive session entry status check must exist");
+assert.doesNotMatch(sessionEntry, /startImageGenService\s*\(/,
+  "opening a game must not silently start NovelAI or ComfyUI");
+assert.doesNotMatch(sessionEntry, /writeImageGenRuntimeConfig\s*\(/,
+  "opening a game must not overwrite the manually selected engine");
+assert.match(sessionEntry, /이미지팩/,
+  "when no launcher server is running, the existing image-pack path must remain active");
 assert.match(main, /PC 주소 미설정 · 연결 대기 중/);
 assert.match(main, /런처 내장 ImageGen /);
 
