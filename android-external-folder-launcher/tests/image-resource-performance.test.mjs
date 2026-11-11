@@ -10,8 +10,16 @@ contains("FolderHandler.isGameRequestPath(path)");
 contains("WebResourceResponse handle(String p){return serveGamePath(p);}");
 contains("folderHandler.serveGamePath(path.substring(6))");
 contains("web.loadUrl(gameUrl);");
-contains("Image Studio is optional: its startup must never gate the game page.");
-assert.equal(source.includes("web.loadUrl(gameUrl);\n            ensureImageGenServer"), false);
+const gameLoadAt = source.indexOf("web.loadUrl(gameUrl);");
+const attachAt = source.indexOf("ensureImageGenServer(sessionTree,");
+assert.ok(gameLoadAt >= 0 && attachAt > gameLoadAt,
+  "the game page must load before attaching an already-running ImageGen server");
+const attachMethodStart = source.indexOf("private void ensureImageGenServer");
+const attachMethodEnd = source.indexOf("private void waitForImageGenReady()", attachMethodStart);
+assert.ok(attachMethodStart >= 0 && attachMethodEnd > attachMethodStart,
+  "passive ImageGen server attachment must exist");
+assert.doesNotMatch(source.slice(attachMethodStart, attachMethodEnd), /startImageGenService\\s*\\(/,
+  "opening a game must not auto-start an ImageGen server");
 assert.equal(source.includes("WebSettings.LOAD_NO_CACHE"), false);
 contains('h.put("Cache-Control","private, max-age=86400")');
 contains("static boolean cacheableMedia(String path)");
