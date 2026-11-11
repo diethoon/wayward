@@ -9,6 +9,16 @@ const probes = [];
 let settingsClicked = 0;
 let runtime = { available: true, starting: false, ready: false, backendVersion: "0.8.4" };
 let backendState = { baseUrl: null, comfyui: false };
+class FakeImageElement {
+  constructor() { this._src = ""; this.attributes = {}; }
+  get src() { return this._src; }
+  set src(value) { this._src = String(value); }
+  setAttribute(name, value) {
+    this.attributes[String(name)] = String(value);
+    if (String(name).toLowerCase() === "src") this._src = String(value);
+  }
+}
+
 
 const document = {
   querySelector(selector) {
@@ -21,6 +31,7 @@ const document = {
 
 const window = {
   __WAYWARD_IMAGE_STUDIO_TEST__: true,
+  HTMLImageElement: FakeImageElement,
   setTimeout,
   location: { href: "https://localhost:42000/game/Wayward_WML_ko.html", origin: "https://localhost:42000" },
   localStorage: {
@@ -102,6 +113,16 @@ assert.equal(probes.at(-1).options.mode, "auto");
 assert.equal(api.fn("imageServerUrl")("/api/batch/enqueue"), "http://127.0.0.1:8189/api/batch/enqueue");
 assert.equal(api.fn("imageServerUrl")("/images/nai/characters/elena/portrait.png"), "https://localhost:42000/images/__wayward_generated__/nai/characters/elena/portrait.png");
 assert.equal(api.fn("imageServerUrl")("http://127.0.0.1:8189/images/nai/characters/elena/portrait.png"), "https://localhost:42000/images/__wayward_generated__/nai/characters/elena/portrait.png");
+const generatedImg = new FakeImageElement();
+generatedImg.src = "http://127.0.0.1:8189/images/nai/characters/elena/portrait.png";
+assert.equal(generatedImg.src, "https://localhost:42000/images/__wayward_generated__/nai/characters/elena/portrait.png");
+const generatedViaAttribute = new FakeImageElement();
+generatedViaAttribute.setAttribute("src", "/images/nai/characters/elena/portrait.png");
+assert.equal(generatedViaAttribute.src, "https://localhost:42000/images/__wayward_generated__/nai/characters/elena/portrait.png");
+const remoteImg = new FakeImageElement();
+remoteImg.src = "https://cdn.example/images/portrait.png";
+assert.equal(remoteImg.src, "https://cdn.example/images/portrait.png");
+assert.equal(events.some(item => item.name === "generated_image_dom_rewrite_installed"), true);
 assert.equal(api.fn("imageBackend")().comfyui, false);
 assert.equal(legacyImageBackend().baseUrl, "http://127.0.0.1:8189");
 assert.equal(legacyImageBackend().comfyui, false);
