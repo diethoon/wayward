@@ -15,7 +15,10 @@ test -s app/src/main/assets/imagegen-backend/wayward-imagegen/src/nai/client.ts
 node --check app/src/main/assets/wml-folder-bootstrap.js
 node --check app/src/main/assets/imagegen-proxy.js
 node --check app/src/main/assets/image-provider-bridge.js
+node --check app/src/main/assets/imagegen-studio-bridge.js
 node tests/imagegen-proxy.test.mjs
+node tests/imagegen-studio-routing.test.mjs
+node tests/imagegen-server-routing-contract.test.mjs
 node tests/image-provider-bridge.test.mjs
 node tests/wml-folder-bootstrap.test.mjs
 node tests/launcher-companions-removal.test.mjs
