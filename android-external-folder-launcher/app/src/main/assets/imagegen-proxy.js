@@ -7,6 +7,19 @@
   const nativeFetch = window.fetch.bind(window);
   const pending = new Map();
 
+  function report(event, details) {
+    try {
+      if (typeof window.WMLHost.logImageProviderDiagnostic === "function") {
+        window.WMLHost.logImageProviderDiagnostic(event, JSON.stringify(details || {}));
+      }
+    } catch (_) {}
+  }
+
+  function activeEngine() {
+    const runtime = window.__WAYWARD_LAUNCHER_IMAGE_RUNTIME__;
+    return runtime && typeof runtime.engine === "string" ? runtime.engine : "unknown";
+  }
+
   function bytesToBase64(buffer) {
     const bytes = new Uint8Array(buffer);
     let binary = "";
@@ -68,6 +81,13 @@
       const id = (window.crypto && typeof window.crypto.randomUUID === "function")
         ? window.crypto.randomUUID()
         : "wimg-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+      const diagnostic = {
+        requestId: id,
+        method: request.method.toUpperCase(),
+        path: url.pathname,
+        engine: activeEngine()
+      };
+      report("launcher_imagegen_request_intercepted", diagnostic);
       const headers = {};
       request.headers.forEach((value, key) => { headers[key] = value; });
       const timer = setTimeout(() => {
@@ -83,9 +103,17 @@
           JSON.stringify(headers),
           bytesToBase64(bodyBuffer)
         );
+        report("launcher_imagegen_request_dispatched", diagnostic);
       } catch (error) {
         clearTimeout(timer);
         pending.delete(id);
+        report("launcher_imagegen_request_dispatch_failed", {
+          requestId: id,
+          method: request.method.toUpperCase(),
+          path: url.pathname,
+          engine: activeEngine(),
+          errorType: error && error.name ? String(error.name) : "Error"
+        });
         reject(error);
       }
     }));
