@@ -651,7 +651,7 @@ public final class MainActivity extends Activity {
             java.util.HashMap<String, String> headers = new java.util.HashMap<>();
             headers.put("Cache-Control", "no-store");
             headers.put("X-Content-Type-Options", "nosniff");
-            return new WebResourceResponse(mime, null, 200, "OK", headers, new FileInputStream(image));
+            return new WebResourceResponse(mime, null, 200, "OK", headers, new java.io.FileInputStream(image));
         } catch (java.io.FileNotFoundException error) {
             return generatedImageError(404, "Not Found", requestPath);
         } catch (Exception error) {
