@@ -342,7 +342,7 @@ public final class MainActivity extends Activity {
             web.setVisibility(View.VISIBLE);
             DiagnosticsLogger.event(this,"INFO","launcher","game_webview_load_requested",null);
             web.loadUrl(gameUrl);
-            // Image Studio is optional: its startup must never gate the game page.
+            // Image Studio is optional: attach an already-running launcher server; never auto-start on session entry.
             ensureImageGenServer(sessionTree,()->{
                 if(web==null||!activeProfileId.equals(id))return;
                 refreshImageGenStatus();
@@ -640,7 +640,7 @@ public final class MainActivity extends Activity {
             waitForImageGenReady();
             return;
         }
-        if (state.isAvailable()) {
+        if (state.isReady()) {
             imageGenSessionMessage = "런처에서 선택한 " + imageGenModeLabel(state.backendVersion)
                     + " 서버를 게임 이미지 생성에 사용합니다.";
             finishImageGenCallbacks();
@@ -925,7 +925,7 @@ public final class MainActivity extends Activity {
         }
         else if (state.isStarting()) imageGenStatus.setText(state.message.isEmpty() ? "이미지 생성 서버 시작 중…" : state.message);
         else if (manualImageGenPreparing) imageGenStatus.setText("이미지 생성 백엔드 준비 중…");
-        else if (state.ready && !state.isFresh()) imageGenStatus.setText("이미지 생성 서비스 heartbeat가 끊겼습니다. 현재 세션을 다시 열면 서버를 재시작합니다.");
+        else if (state.ready && !state.isFresh()) imageGenStatus.setText("이미지 생성 서비스 heartbeat가 끊겼습니다. 런처에서 서버를 다시 시작해 주세요.");
         else if (!state.message.isEmpty()) imageGenStatus.setText(state.message);
         else if (imageGenSessionMessage != null && !imageGenSessionMessage.isEmpty()) imageGenStatus.setText(imageGenSessionMessage);
         else imageGenStatus.setText("서버가 실행되지 않았습니다.");
