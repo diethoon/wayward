@@ -32,4 +32,7 @@ assert.match(service, /if \("comfy"\.equals\(launchMode\) && !comfyUrl\.isEmpty\
   "ComfyUI mode must pass the selected Comfy endpoint into the embedded server");
 assert.match(service, /builder\.command\(\)\.add\("--comfy-url"\)/,
   "ComfyUI mode must use the server's ComfyUI route");
+assert.match(mainActivity, /if\(running\.isStarting\(\)\)\{[\s\S]*?if\(!sameMode\|\|endpointChanged\)[\s\S]*?stopImageGenServer\(\)/,
+  "changing the selected engine while startup is pending must stop the old engine before starting the new one");
+
 console.log("Launcher server selection, manual start, and image-pack fallback contracts passed.");
