@@ -960,6 +960,21 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public void generateImageWithProvider(String requestId,String providerId,String prompt,int width,int height){
             ImageProviderBridge.generate(MainActivity.this,web,activeProfileId,requestId,providerId,prompt,width,height);
         }
+        @JavascriptInterface public String imageGenRuntimeStatus(){
+            ImageGenStatusStore.State state=ImageGenStatusStore.read(getFilesDir());
+            try{
+                JSONObject result=new JSONObject();
+                boolean ready=state.isReady();
+                boolean starting=state.isStarting();
+                result.put("available",ready||starting);
+                result.put("ready",ready);
+                result.put("starting",starting);
+                result.put("backendVersion",state.backendVersion);
+                return result.toString();
+            }catch(Exception ignored){
+                return "{\"available\":false,\"ready\":false,\"starting\":false}";
+            }
+        }
         @JavascriptInterface public void logImageProviderDiagnostic(String eventName,String detailsJson){
             if(eventName==null||!eventName.matches("[a-z0-9_]{1,64}"))return;
             ImagePipelineDiagnostics.recordJson(MainActivity.this,eventName,detailsJson);
