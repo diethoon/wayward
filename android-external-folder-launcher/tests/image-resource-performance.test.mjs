@@ -18,7 +18,7 @@ const attachMethodStart = source.indexOf("private void ensureImageGenServer");
 const attachMethodEnd = source.indexOf("private void waitForImageGenReady()", attachMethodStart);
 assert.ok(attachMethodStart >= 0 && attachMethodEnd > attachMethodStart,
   "passive ImageGen server attachment must exist");
-assert.doesNotMatch(source.slice(attachMethodStart, attachMethodEnd), /startImageGenService\\s*\\(/,
+assert.doesNotMatch(source.slice(attachMethodStart, attachMethodEnd), /startImageGenService\s*\(/,
   "opening a game must not auto-start an ImageGen server");
 assert.equal(source.includes("WebSettings.LOAD_NO_CACHE"), false);
 contains('h.put("Cache-Control","private, max-age=86400")');
