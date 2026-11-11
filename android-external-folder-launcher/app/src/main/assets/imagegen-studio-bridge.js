@@ -6,12 +6,9 @@
 
   window.__waywardLauncherImageStudioRoutingInstalled = true;
   const LOCAL_ORIGIN = "http://127.0.0.1:8189";
-  const OFFLINE_KEY = "ww-image-studio-offline-only-v1";
   const wrappedFactories = new WeakSet();
-  let userOfflineOnly = false;
   let lastPolicy = "";
 
-  try { userOfflineOnly = window.localStorage.getItem(OFFLINE_KEY) === "true"; } catch (_) {}
 
   function report(event, details) {
     try {
@@ -68,11 +65,11 @@
 
   function applyRuntimePolicy() {
     const status = runtimeStatus();
-    const offlineOnly = userOfflineOnly || !status.ready;
+    const offlineOnly = !status.ready;
     window.__WW_STUDIO_OFFLINE_ONLY__ = offlineOnly;
     const signature = [
       status.available, status.starting, status.ready,
-      engineName(status), userOfflineOnly, offlineOnly
+      engineName(status), offlineOnly
     ].join(":");
     window.__WAYWARD_LAUNCHER_IMAGE_RUNTIME__ = Object.freeze({
       available: status.available,
@@ -192,9 +189,8 @@
         configurable: true,
         enumerable: true,
         writable: true,
-        value: value => {
-          userOfflineOnly = Boolean(value);
-          const result = originalSetOfflineOnly(Boolean(value));
+        value: _value => {
+          const result = originalSetOfflineOnly(!runtimeStatus().ready);
           applyRuntimePolicy();
           return result;
         }
