@@ -563,6 +563,22 @@ public final class ImageProviderActivity extends Activity {
         });
         updateCustomVisibility.run();
 
+        TextView vercelPreset = action("Vercel AI Gateway 프리셋 적용", false, () -> {
+            type.setSelection(1);
+            name.setText("Vercel AI Gateway");
+            endpoint.setText("https://ai-gateway.vercel.sh/v1");
+            model.setText("bfl/flux-2-pro");
+            authHeader.setText("Authorization");
+            authPrefix.setText("Bearer ");
+            gameAccess.setChecked(true);
+            key.requestFocus();
+        });
+        fields.addView(vercelPreset, new LinearLayout.LayoutParams(-1, -2));
+        addGap(fields, 5);
+        fields.addView(label(
+                "Vercel 대시보드에서 AI Gateway API 키를 만든 뒤 입력하세요. 이 API 호출은 새 Vercel 배포 없이 실행되며, 저장한 키는 Android Keystore로 암호화됩니다. 기본 생성 모델: bfl/flux-2-pro.",
+                11, MUTED, false));
+
         addGap(page, 10);
         LinearLayout actions = row();
         TextView test = action("실제 생성 테스트", false, () -> {
