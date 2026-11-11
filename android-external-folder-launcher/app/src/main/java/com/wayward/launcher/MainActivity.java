@@ -181,8 +181,12 @@ public final class MainActivity extends Activity {
         LinearLayout top=new LinearLayout(this);top.setGravity(android.view.Gravity.CENTER_VERTICAL);
         TextView title=uiText("WAYWARD",24,Color.rgb(24,27,31),true);title.setLetterSpacing(0.035f);
         top.addView(title,new LinearLayout.LayoutParams(0,-2,1f));
+        Button addFolder=compactButton("＋ 폴더",true,this::chooseFolder);
+        LinearLayout.LayoutParams addFolderParams=new LinearLayout.LayoutParams(dp(82),dp(38));
+        addFolderParams.leftMargin=dp(6);top.addView(addFolder,addFolderParams);
         Button info=compactButton("안내",false,this::showLauncherInfoDialog);
-        top.addView(info,new LinearLayout.LayoutParams(dp(56),dp(38)));
+        LinearLayout.LayoutParams infoParams=new LinearLayout.LayoutParams(dp(56),dp(38));
+        infoParams.leftMargin=dp(5);top.addView(info,infoParams);
         LinearLayout.LayoutParams topParams=new LinearLayout.LayoutParams(-1,-2);topParams.bottomMargin=dp(3);
         page.addView(top,topParams);
         TextView subtitle=uiText("GAME LAUNCHER  ·  게임과 모드를 한곳에서",11,Color.rgb(111,118,125),false);
