@@ -1,0 +1,76 @@
+name: PR48 Image Studio source forensic
+on:
+  push:
+    branches:
+      - forensic/pr48-image-studio-source-20261112
+    paths:
+      - .github/workflows/pr48-image-studio-source-forensic.yml
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Inspect pinned mod archive and extract only Image Studio sources
+        env:
+          SOURCE_COMMIT: 26d6c32e0b0abbb886e3029efd548b7ca6774401
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, io, os, re, subprocess, zipfile
+          from pathlib import Path
+          commit = os.environ["SOURCE_COMMIT"]
+          archive = subprocess.check_output(["git", "show", f"{commit}:mods.zip"])
+          print("source_commit=" + commit)
+          print("mods_zip_bytes=" + str(len(archive)))
+          print("mods_zip_sha256=" + hashlib.sha256(archive).hexdigest())
+          zf = zipfile.ZipFile(io.BytesIO(archive))
+          infos = [i for i in zf.infolist() if not i.is_dir()]
+          print("entry_count=" + str(len(infos)))
+          print("studio_path_candidates:")
+          path_candidates = [i for i in infos if re.search(r"studio|imagestudio|image[-_ ]?gen", i.filename, re.I)]
+          for i in path_candidates[:300]:
+              print(f"{i.file_size}\t{i.filename}")
+          out = Path("forensic-image-studio-source")
+          selected = []
+          exts = {".js", ".mjs", ".cjs", ".html", ".css", ".json", ".ts"}
+          for i in infos:
+              name = i.filename
+              if Path(name).suffix.lower() not in exts or i.file_size > 8 * 1024 * 1024:
+                  continue
+              if not re.search(r"studio|imagestudio|image[-_ ]?gen", name, re.I):
+                  continue
+              data = zf.read(i)
+              target = out / name
+              target.parent.mkdir(parents=True, exist_ok=True)
+              target.write_bytes(data)
+              selected.append((name, len(data), hashlib.sha256(data).hexdigest()))
+          print("extracted_files=" + str(len(selected)))
+          for name, size, digest in selected:
+              print(f"{size}\t{digest}\t{name}")
+          # Search all text sources in the archive for the actual Image Studio
+          # queue contract, without dumping unrelated source or user prompts.
+          needles = (b"/api/batch/enqueue", b"imageBackendProbe", b"imageServerUrl", b"__waywardPauseSettingsUiFactory")
+          print("runtime_contract_matches:")
+          hits = 0
+          for i in infos:
+              if Path(i.filename).suffix.lower() not in exts or i.file_size > 16 * 1024 * 1024:
+                  continue
+              raw = zf.read(i)
+              low = raw.lower()
+              labels = [n.decode("ascii") for n in needles if n.lower() in low]
+              if labels:
+                  print(f"{i.filename}\t{labels}\tbytes={i.file_size}\tsha256={hashlib.sha256(raw).hexdigest()}")
+                  hits += 1
+                  target = out / i.filename
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(raw)
+          print("contract_file_count=" + str(hits))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr48-image-studio-source-forensic
+          path: forensic-image-studio-source/
+          if-no-files-found: warn
