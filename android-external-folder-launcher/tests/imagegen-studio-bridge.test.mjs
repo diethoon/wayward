@@ -9,6 +9,16 @@ const probes = [];
 let settingsClicked = 0;
 let runtime = { available: true, starting: false, ready: false, backendVersion: "0.8.4" };
 let backendState = { baseUrl: null, comfyui: false };
+class FakeImageElement {
+  constructor() { this._src = ""; this.attributes = {}; }
+  get src() { return this._src; }
+  set src(value) { this._src = String(value); }
+  setAttribute(name, value) {
+    this.attributes[String(name)] = String(value);
+    if (String(name).toLowerCase() === "src") this._src = String(value);
+  }
+}
+
 
 const document = {
   querySelector(selector) {
@@ -21,8 +31,9 @@ const document = {
 
 const window = {
   __WAYWARD_IMAGE_STUDIO_TEST__: true,
+  HTMLImageElement: FakeImageElement,
   setTimeout,
-  location: { href: "https://localhost:42000/game/Wayward_WML_ko.html" },
+  location: { href: "https://localhost:42000/game/Wayward_WML_ko.html", origin: "https://localhost:42000" },
   localStorage: {
     getItem(key) {
       if (key !== "tavern-settings") return null;
@@ -73,7 +84,7 @@ const factory = {
           };
         }
         if (name === "imageServerUrl") {
-          return path => backendState.baseUrl ? backendState.baseUrl + path : null;
+          return path => { const url = String(path || ""); return url.startsWith("https://") || url.startsWith("http://") ? url : backendState.baseUrl ? backendState.baseUrl + path : null; };
         }
         if (name === "imageBackend") return () => backendState;
         return undefined;
@@ -100,6 +111,25 @@ assert.equal(refreshed.ok, true);
 assert.equal(probes.at(-1).force, true);
 assert.equal(probes.at(-1).options.mode, "auto");
 assert.equal(api.fn("imageServerUrl")("/api/batch/enqueue"), "http://127.0.0.1:8189/api/batch/enqueue");
+assert.equal(api.fn("imageServerUrl")("/images/nai/characters/elena/portrait.png"), "https://localhost:42000/images/__wayward_generated__/nai/characters/elena/portrait.png");
+assert.equal(api.fn("imageServerUrl")("http://127.0.0.1:8189/images/nai/characters/elena/portrait.png"), "https://localhost:42000/images/__wayward_generated__/nai/characters/elena/portrait.png");
+const generatedImg = new FakeImageElement();
+generatedImg.src = "http://127.0.0.1:8189/images/nai/characters/elena/portrait.png";
+assert.equal(generatedImg.src, "https://localhost:42000/images/__wayward_generated__/nai/characters/elena/portrait.png");
+const generatedViaAttribute = new FakeImageElement();
+generatedViaAttribute.setAttribute("src", "/images/nai/characters/elena/portrait.png");
+assert.equal(generatedViaAttribute.src, "https://localhost:42000/images/__wayward_generated__/nai/characters/elena/portrait.png");
+const remoteImg = new FakeImageElement();
+remoteImg.src = "https://cdn.example/images/portrait.png";
+assert.equal(remoteImg.src, "https://cdn.example/images/portrait.png");
+assert.equal(events.some(item => item.name === "generated_image_dom_rewrite_installed"), true);
+runtime = { available: false, starting: false, ready: false, backendVersion: "0.8.4" };
+backendState = { baseUrl: null, comfyui: false };
+const cachedImgWhileServerStopped = new FakeImageElement();
+cachedImgWhileServerStopped.src = "http://127.0.0.1:8189/images/nai/characters/elena/portrait.png";
+assert.equal(cachedImgWhileServerStopped.src, "https://localhost:42000/images/__wayward_generated__/nai/characters/elena/portrait.png");
+assert.equal(api.fn("imageServerUrl")("/api/batch/enqueue"), null);
+runtime = { available: true, starting: false, ready: false, backendVersion: "0.8.4" };
 assert.equal(api.fn("imageBackend")().comfyui, false);
 assert.equal(legacyImageBackend().baseUrl, "http://127.0.0.1:8189");
 assert.equal(legacyImageBackend().comfyui, false);
@@ -160,7 +190,9 @@ assert.ok(probes.length > probeCount, "saving Image Studio settings must refresh
 window.localStorage.getItem = key => key === "tavern-settings"
   ? JSON.stringify({ state: { imageBackendMode: "custom", imageBackendUrl: "https://remote.example:8189" }, version: 3 })
   : null;
-window.WW_ImageStudioBridge.connection = () => ({ baseUrl: "https://remote.example:8189", comfyui: true });
+backendState = { baseUrl: "https://remote.example:8189", comfyui: true };
+window.WW_ImageStudioBridge.connection = () => backendState;
+assert.equal(api.fn("imageServerUrl")("https://remote.example:8189/images/remote.png"), "https://remote.example:8189/images/remote.png");
 const rejected = await window.WaywardLauncherImageStudio.discoverNow();
 assert.equal(rejected.ok, false);
 assert.equal(rejected.reason, "image_server_connection_pending");
