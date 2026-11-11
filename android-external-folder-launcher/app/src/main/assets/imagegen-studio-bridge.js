@@ -59,16 +59,19 @@
     if (!prefersLauncherLocal()) return null;
     const value = String(path || "").trim();
     if (!value || value.indexOf("\\") >= 0 || value.indexOf("\0") >= 0) return null;
-    const state = runtimeStatus();
-    if (!state.available && !state.starting) return null;
-
     let url;
     try { url = new URL(value, LOCAL_ORIGIN + "/"); }
     catch (_) { return null; }
     if (url.username || url.password ||
         (url.origin !== LOCAL_ORIGIN && url.origin !== "http://localhost:8189")) return null;
 
-    if (url.pathname.startsWith("/api/")) return LOCAL_ORIGIN + url.pathname + url.search;
+    if (url.pathname.startsWith("/api/")) {
+      const state = runtimeStatus();
+      if (!state.available && !state.starting) return null;
+      return LOCAL_ORIGIN + url.pathname + url.search;
+    }
+    // Cached image files live in app-private storage and remain readable even
+    // when the generation service is stopped; only API requests need it alive.
     if (!url.pathname.startsWith("/images/")) return null;
 
     const encodedSegments = url.pathname.slice("/images/".length).split("/");
