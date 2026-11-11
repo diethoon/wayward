@@ -72,7 +72,6 @@ public final class MainActivity extends Activity {
     private TextView status, folderText, profileSummary, zipSummary, imageGenStatus;
     private EditText comfyUrlInput;
     private String imageGenSessionMessage = "";
-    private static volatile boolean imageGenCopying = false;
     private static volatile boolean manualImageGenPreparing = false;
     private final Handler imageGenHandler = new Handler(Looper.getMainLooper());
     private final List<Runnable> imageGenReadyCallbacks = new ArrayList<>();
@@ -594,7 +593,7 @@ public final class MainActivity extends Activity {
             return;
         }
         try {
-            for (String assetName : new String[] {"imagegen-proxy.js", "image-provider-bridge.js"}) {
+            for (String assetName : new String[] {"imagegen-proxy.js", "image-provider-bridge.js", "imagegen-studio-bridge.js"}) {
                 try (InputStream in = getAssets().open(assetName)) {
                     ByteArrayOutputStream out = new ByteArrayOutputStream();
                     byte[] buffer = new byte[8192];
@@ -619,158 +618,50 @@ public final class MainActivity extends Activity {
         return new File(getFilesDir(), "imagegen/backend");
     }
 
-    private String imageStudioModId(SafTree sessionTree) throws Exception {
-        if (sessionTree != null) {
-            String folderMod = sessionTree.imageStudioModId();
-            if ("imagestudio".equals(folderMod)) return folderMod;
-        }
-        // ZIP-installed WML mods are served by the same overlay used by the
-        // WebView. Detect the adapter there as well; never extract the ZIP.
-        if (zipMods == null) return null;
-        try (InputStream script = zipMods.open("wml/mods/imagestudio/mod.js")) {
-            if (script == null) return null;
-            byte[] bytes = new byte[65536];
-            int used = 0;
-            while (used < bytes.length) {
-                int count = script.read(bytes, used, bytes.length - used);
-                if (count < 0) break;
-                if (count == 0) continue;
-                used += count;
-            }
-            String source = new String(bytes, 0, used, StandardCharsets.UTF_8);
-            int defineAt = source.indexOf("WML.define");
-            if (defineAt < 0) return null;
-            Matcher matcher = MOD_ID.matcher(source.substring(defineAt));
-            return matcher.find() && "imagestudio".equals(matcher.group(1))
-                    ? "imagestudio" : null;
-        }
-    }
-
-    private boolean ensureImageGenBackend(SafTree sessionTree) throws Exception {
-        // The WML mod is only the in-game adapter. The server implementation is
-        // shipped in the launcher APK and never copied from the selected game.
-        if (!"imagestudio".equals(imageStudioModId(sessionTree))) return false;
-        File backend = ImageGenBackendInstaller.install(this, imageGenBackendRoot());
-        return hasImageGenProject(backend);
-    }
-
-    private boolean hasImageGenProject(File backend) {
-        File nested = new File(backend, "wayward-imagegen");
-        File project = new File(nested, "src/cli.ts").isFile() ? nested : backend;
-        return new File(project, "package.json").isFile() && new File(project, "src/cli.ts").isFile();
-    }
-
     private void ensureImageGenServer(SafTree sessionTree, Runnable afterReady) {
         if (afterReady != null) imageGenReadyCallbacks.add(afterReady);
         if (sessionTree == null) {
-            imageGenSessionMessage = "현재 게임 세션의 폴더를 확인할 수 없어 이미지 서버 자동 시작을 건너뛰었습니다.";
+            imageGenSessionMessage = "게임 세션을 확인할 수 없어 이미지 서버 연결을 확인하지 못했습니다.";
             finishImageGenCallbacks();
             refreshImageGenStatus();
             return;
         }
-
         if (manualImageGenPreparing) {
-            imageGenSessionMessage = "이미지 생성 서버 준비가 진행 중입니다. 준비가 끝난 뒤 현재 세션을 다시 여세요.";
+            imageGenSessionMessage = "런처에서 선택한 이미지 생성 서버를 준비하고 있습니다.";
             refreshImageGenStatus();
-            finishImageGenCallbacks();
-            return;
-        }
-        if (imageGenCopying) {
             waitForImageGenReady();
             return;
         }
 
-        final String version;
-        try {
-            String detected = imageStudioModId(sessionTree);
-            if (detected == null) {
-                imageGenSessionMessage = "현재 세션의 WML Image Studio 모드가 없어 이미지 서버를 시작하지 않았습니다.";
-                refreshImageGenStatus();
-                finishImageGenCallbacks();
-                return;
-            }
-            // Start the local EasyGen/NovelAI-compatible server independently
-            // of credentials. The provider is configured after the panel opens.
-            version = "launcher-imagegen:" + ImageGenBackendInstaller.VERSION + ":novelai";
-        } catch (Exception e) {
-            imageGenSessionMessage = "현재 세션의 Image Studio 모드 검사 실패: " + msg(e);
+        ImageGenStatusStore.State state = ImageGenStatusStore.read(getFilesDir());
+        if (state.isStarting()) {
+            imageGenSessionMessage = "런처에서 선택한 이미지 생성 서버가 시작 중입니다.";
             refreshImageGenStatus();
-            finishImageGenCallbacks();
-            return;
-        }
-
-        ImageGenStatusStore.State shared = ImageGenStatusStore.read(getFilesDir());
-        if (shared.isReady() || shared.isStarting()) {
-            if (!sameImageGenVersion(shared.backendVersion, version)) {
-                imageGenSessionMessage = "현재 세션 Image Studio 버전(" + version + ")이 실행 중 서버 버전("
-                        + safeVersion(shared.backendVersion) + ")과 달라 공유하지 않았습니다. 실행 중인 서버를 중지한 뒤 세션을 다시 열어 주세요.";
-                refreshImageGenStatus();
-                finishImageGenCallbacks();
-                return;
-            }
-            imageGenSessionMessage = "현재 세션의 Image Studio " + version + "을 공통 이미지 서버에 연결합니다.";
             waitForImageGenReady();
             return;
         }
-
-        synchronized (IMAGEGEN_LOCK) {
-            shared = ImageGenStatusStore.read(getFilesDir());
-            if (shared.isReady() || shared.isStarting()) {
-                if (!sameImageGenVersion(shared.backendVersion, version)) {
-                    imageGenSessionMessage = "다른 세션에서 다른 Image Studio 버전의 서버가 실행 중입니다. 현재 서버를 중지한 뒤 다시 시도해 주세요.";
-                    refreshImageGenStatus();
-                    finishImageGenCallbacks();
-                    return;
-                }
-                waitForImageGenReady();
-                return;
-            }
-            if (imageGenCopying) {
-                waitForImageGenReady();
-                return;
-            }
-            imageGenCopying = true;
+        if (state.isAvailable()) {
+            imageGenSessionMessage = "런처에서 선택한 " + imageGenModeLabel(state.backendVersion)
+                    + " 서버를 게임 이미지 생성에 사용합니다.";
+            finishImageGenCallbacks();
+            refreshImageGenStatus();
+            return;
         }
 
-        imageGenSessionMessage = "현재 세션의 Image Studio 백엔드를 확인하고 런처 서버에 연결하는 중입니다…";
+        // Game entry must never silently start NovelAI or replace a manually
+        // selected ComfyUI mode. With no launcher server, Image Studio remains
+        // offline and the game's installed image packs continue to resolve.
+        imageGenSessionMessage = "런처 이미지 생성 서버가 실행되지 않았습니다. 기존 이미지팩을 사용합니다. "
+                + "새 그림을 만들려면 런처에서 NovelAI 또는 ComfyUI 서버를 직접 시작하세요.";
+        finishImageGenCallbacks();
         refreshImageGenStatus();
-        new Thread(() -> {
-            String problem = null;
-            File backend = imageGenBackendRoot();
-            try {
-                synchronized (IMAGEGEN_LOCK) {
-                    if (!ensureImageGenBackend(sessionTree)) {
-                        throw new IllegalStateException("현재 런처 APK에 포함된 ImageGen 서버 자산을 찾지 못했습니다.");
-                    }
-                }
-                writeImageGenRuntimeConfig(backend, "novelai", "");
-            } catch (Throwable error) {
-                problem = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
-            }
-            final String failure = problem;
-            runOnUiThread(() -> {
-                imageGenCopying = false;
-                if (failure != null) {
-                    imageGenSessionMessage = "Image Studio 백엔드 준비 실패: " + failure;
-                    refreshImageGenStatus();
-                    finishImageGenCallbacks();
-                    return;
-                }
-                startImageGenService(backend, version, "novelai", "");
-                waitForImageGenReady();
-            });
-        }, "wayward-imagegen-session-prepare").start();
     }
 
-    private static boolean sameImageGenVersion(String running, String requested) {
-        if(running==null||requested==null||running.isEmpty()||requested.isEmpty())return false;
-        // The engine mode is part of the version identity: NovelAI and ComfyUI
-        // share code but have different active provider configuration.
-        return running.equals(requested);
-    }
-
-    private static String safeVersion(String version) {
-        return version == null || version.isEmpty() ? "알 수 없음" : version;
+    private static String imageGenModeLabel(String backendVersion) {
+        String value = backendVersion == null ? "" : backendVersion;
+        if (value.endsWith(":novelai")) return "NovelAI";
+        if (value.endsWith(":comfy")) return "ComfyUI";
+        return "ImageGen";
     }
 
     private void waitForImageGenReady() {
@@ -780,7 +671,7 @@ public final class MainActivity extends Activity {
             @Override public void run() {
                 ImageGenStatusStore.State state = ImageGenStatusStore.read(getFilesDir());
                 boolean finished = state.isReady()
-                        || (!state.isStarting() && !imageGenCopying)
+                        || !state.isStarting()
                         || System.currentTimeMillis() >= deadline;
                 if (finished) {
                     imageGenPollRunnable = null;
@@ -889,7 +780,7 @@ public final class MainActivity extends Activity {
                 Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
                 return;
             }
-            if(imageGenCopying||manualImageGenPreparing){
+            if(manualImageGenPreparing){
                 imageGenSessionMessage="내장 이미지 서버를 준비하고 있습니다. 준비가 끝난 뒤 다시 시도해 주세요.";
                 refreshImageGenStatus();
                 Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
@@ -1033,7 +924,7 @@ public final class MainActivity extends Activity {
             }
         }
         else if (state.isStarting()) imageGenStatus.setText(state.message.isEmpty() ? "이미지 생성 서버 시작 중…" : state.message);
-        else if (imageGenCopying || manualImageGenPreparing) imageGenStatus.setText("이미지 생성 백엔드 준비 중…");
+        else if (manualImageGenPreparing) imageGenStatus.setText("이미지 생성 백엔드 준비 중…");
         else if (state.ready && !state.isFresh()) imageGenStatus.setText("이미지 생성 서비스 heartbeat가 끊겼습니다. 현재 세션을 다시 열면 서버를 재시작합니다.");
         else if (!state.message.isEmpty()) imageGenStatus.setText(state.message);
         else if (imageGenSessionMessage != null && !imageGenSessionMessage.isEmpty()) imageGenStatus.setText(imageGenSessionMessage);
@@ -1300,17 +1191,6 @@ public final class MainActivity extends Activity {
             }catch(Exception ignored){}
             ImagePipelineDiagnostics.record(MainActivity.this,"saf_directory_query_timing",details);
         }
-
-        String imageStudioModId() throws Exception {
-            // The game folder supplies only the WML adapter marker.
-            // The actual server is always installed from the launcher APK.
-            Node modDirectory = resolve("wml/mods/imagestudio");
-            if (modDirectory == null || !modDirectory.dir) return null;
-            Node modScript = find(modDirectory.id, "mod.js");
-            if (modScript == null || modScript.dir || !"imagestudio".equals(declared(modScript))) return null;
-            return "imagestudio";
-        }
-
         List<String> listModIds()throws Exception{
             long generation=directoryIndexGeneration.get();
             List<String> cached=cachedModIds;
