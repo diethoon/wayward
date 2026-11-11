@@ -884,7 +884,9 @@ public final class ImageGenServiceRuntimeTest {
                     + "if(!packResponse.ok)throw new Error('pack HTTP '+packResponse.status);"
                     + "var pack=await packResponse.json();var entry=pack.entries&&pack.entries[key];"
                     + "if(!entry||!entry.imagePath)throw new Error('generated Elena portrait missing from /api/pack: '+JSON.stringify(pack).slice(0,300));"
+                    + "var serverImageUrl='http://127.0.0.1:8189/images/'+entry.imagePath.split('/').map(encodeURIComponent).join('/');"
                     + "var imageUrl=new URL('/images/__wayward_generated__/'+entry.imagePath.split('/').map(encodeURIComponent).join('/'),window.location.origin).toString();"
+                    + "if(!HTMLImageElement.prototype.__waywardGeneratedImageUrlRewrite)throw new Error('launcher did not install the generated image DOM URL rewrite');"
                     + "if(new URL(imageUrl).origin!==window.location.origin)throw new Error('generated image URL is not same-origin: '+imageUrl);"
                     + "var imageResponse=await window.fetch(imageUrl,{credentials:'omit'});"
                     + "if(!imageResponse.ok)throw new Error('same-origin cached image HTTP '+imageResponse.status);"
@@ -903,7 +905,7 @@ public final class ImageGenServiceRuntimeTest {
                     + "globalThis.__WW_STUDIO_OFFLINE_ONLY__=true;"
                     + "dev.fn('settingsStore').getState().set({imageBackendMode:'off',ageAffirmed:true,contentAcknowledged:true});"
                     + "dev.hook('bee',{priority:-9000000,replace:function(){return key;}});"
-                    + "dev.hook(imageUrlSymbol,{priority:-9000000,replace:function(){return imageUrl;}});"
+                    + "dev.hook(imageUrlSymbol,{priority:-9000000,replace:function(){return serverImageUrl;}});"
                     + "var config=matching.get();"
                     + "['scene','outfit','room','exposure'].forEach(function(id){if(config.rules[id])config.rules[id].required=false;});"
                     + "matching.set(config);"
@@ -923,7 +925,7 @@ public final class ImageGenServiceRuntimeTest {
                     + "var visible=rect.width>0&&rect.height>0&&rect.right>0&&rect.bottom>0&&style.display!=='none'&&style.visibility!=='hidden'&&Number(style.opacity)>0;"
                     + "if(!visible)throw new Error('production portrait image decoded but not visible');"
                     + "window.__waywardCiImage={state:'loaded',displayedInPortraitHook:true,portraitHook:'imageUsagePortraitPanel',"
-                    + "imageAlt:portrait.alt,naturalWidth:portrait.naturalWidth,naturalHeight:portrait.naturalHeight,visible:visible,"
+                    + "imageAlt:portrait.alt,naturalWidth:portrait.naturalWidth,naturalHeight:portrait.naturalHeight,visible:visible,domRewritten:portrait.src===imageUrl,serverImageUrl:serverImageUrl,"
                     + "mimeType:blob.type||'',imagePath:entry.imagePath,imageUrl:imageUrl,imageOrigin:new URL(imageUrl).origin,gameOrigin:window.location.origin,sameOriginResource:new URL(imageUrl).origin===window.location.origin,entryCount:pack.entryCount||Object.keys(pack.entries||{}).length,"
                     + "cacheCompleted:batchStatus.completed,cacheCount:batchStatus.cached||0};"
                     + "})().catch(function(error){window.__waywardCiImage={state:'error',errorType:error&&error.name?String(error.name):'Error',message:error&&error.message?String(error.message).slice(0,320):'unknown'};});"
@@ -952,6 +954,8 @@ public final class ImageGenServiceRuntimeTest {
                     imageState.optBoolean("visible", false));
             assertTrue("Generated image was not served from the registered game's HTTPS origin: " + imageState,
                     imageState.optBoolean("sameOriginResource", false));
+            assertTrue("The actual game img.src was not rewritten from loopback to the HTTPS game origin: " + imageState,
+                    imageState.optBoolean("domRewritten", false));
             assertEquals("Generated image route did not use the active game origin: " + imageState,
                     GAME_ORIGIN, imageState.optString("imageOrigin", ""));
             resultSummary = "state=loaded\nportraitHook=imageUsagePortraitPanel\ndisplayedInPortraitHook=true\nvisibleOnScreen=true\nsameOriginImageRoute=true\nimageOrigin=" + imageState.optString("imageOrigin") + "\n"
