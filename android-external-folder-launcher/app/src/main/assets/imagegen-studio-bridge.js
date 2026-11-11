@@ -91,6 +91,55 @@
     } catch (_) { return null; }
     return gameOrigin + "/images/__wayward_generated__/" + segments.join("/") + url.search;
   }
+
+  function imageElementSource(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return value;
+    let path = "";
+    try { path = new URL(raw, window.location && window.location.href || LOCAL_ORIGIN + "/").pathname; }
+    catch (_) { return value; }
+    if (!path.startsWith("/images/")) return value;
+    const mapped = localEndpoint(raw);
+    if (!mapped || mapped === raw) return value;
+    report("generated_image_url_rewritten", { path: path.slice(0, 200), targetOrigin: window.location.origin });
+    return mapped;
+  }
+
+  function installImageElementUrlRewrite() {
+    const prototype = window.HTMLImageElement && window.HTMLImageElement.prototype;
+    if (!prototype || prototype.__waywardGeneratedImageUrlRewrite) {
+      report("generated_image_dom_rewrite_unavailable", {});
+      return;
+    }
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, "src");
+      if (!descriptor || typeof descriptor.set !== "function" || typeof descriptor.get !== "function") {
+        report("generated_image_src_descriptor_unavailable", {});
+        return;
+      }
+      Object.defineProperty(prototype, "src", {
+        configurable: descriptor.configurable,
+        enumerable: descriptor.enumerable,
+        get() { return descriptor.get.call(this); },
+        set(value) { descriptor.set.call(this, imageElementSource(value)); }
+      });
+      const nativeSetAttribute = prototype.setAttribute || (window.Element && window.Element.prototype.setAttribute);
+      if (typeof nativeSetAttribute === "function") {
+        prototype.setAttribute = function(name, value) {
+          const next = String(name || "").toLowerCase() === "src"
+            ? imageElementSource(value) : value;
+          return nativeSetAttribute.call(this, name, next);
+        };
+      }
+      Object.defineProperty(prototype, "__waywardGeneratedImageUrlRewrite", { value: true });
+      report("generated_image_dom_rewrite_installed", {});
+    } catch (error) {
+      report("generated_image_dom_rewrite_failed", {
+        reason: String(error && (error.message || error)).slice(0, 160)
+      });
+    }
+  }
+
   function refreshBackendProbe(reason) {
     if (!backendProbe || !prefersLauncherLocal()) return Promise.resolve({ ok: false, reason: "probe_unavailable" });
     const state = runtimeStatus();
@@ -429,6 +478,7 @@
     window.setTimeout(check, 500);
   }
 
+  installImageElementUrlRewrite();
   installLegacyApiHook();
   installPauseSettingsFactoryHook();
   installStudioBridgeHook();
