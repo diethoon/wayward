@@ -3,10 +3,49 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const read = path => fs.readFileSync(new URL(path, import.meta.url), "utf8");
+const readBackend = path => fs.readFileSync(new URL(
+  "../app/src/main/assets/imagegen-backend/wayward-imagegen/src/" + path,
+  import.meta.url
+), "utf8");
 const bridgeSource = read("../app/src/main/assets/imagegen-studio-bridge.js");
 const proxySource = read("../app/src/main/assets/imagegen-proxy.js");
 const proxyJava = read("../app/src/main/java/com/wayward/launcher/ImageGenProxy.java");
 const mainActivitySource = read("../app/src/main/java/com/wayward/launcher/MainActivity.java");
+
+// Pin the transport test to the actual 0.8.4 server request contract, not a
+// lookalike fixture. Image Studio supplies prompt text; the server applies the
+// selected provider's configured common prompts and generation parameters.
+const batchRoutesSource = readBackend("batch/routes.ts");
+const batchQueueSource = readBackend("batch/queue.ts");
+const comfyJobRunnerSource = readBackend("comfy/jobRunner.ts");
+const naiClientSource = readBackend("nai/client.ts");
+
+assert.match(batchRoutesSource,
+  /typeof item\.talentId !== 'string' \|\| typeof item\.prompt !== 'string'/,
+  "the production batch API requires talentId and prompt on every item");
+assert.match(batchQueueSource, /negativePrompt\?: string/,
+  "the production batch item accepts a separate negative prompt");
+assert.match(batchQueueSource,
+  /prompt: \[this\.config\.sdxlPositivePrompt\.trim\(\), item\.prompt\]/,
+  "the Comfy/Illustrious path retains the Image Studio prompt and adds its configured positive prompt");
+assert.match(batchQueueSource,
+  /negativePrompt: \[this\.config\.sdxlNegativePrompt\.trim\(\), item\.negativePrompt\?\.trim\(\)\]/,
+  "the Comfy/Illustrious path retains the Image Studio negative prompt and adds its configured negative prompt");
+assert.match(batchQueueSource,
+  /if \(workflow === 'nai'\) return NovelAI_프롬프트만들기\(this\.config, item\.prompt, item\.negativePrompt\)/,
+  "the NAI path receives both Image Studio prompt fields");
+assert.match(comfyJobRunnerSource,
+  /buildComfyPrompt\(\s*this\.config,\s*args\.prompt,\s*args\.negativePrompt,/,
+  "the final Comfy workflow is built from the prepared positive and negative prompts");
+assert.match(comfyJobRunnerSource,
+  /NovelAI_이미지생성하기\(config, job\.prompt, job\.negativePrompt \|\| '', args\.seed\)/,
+  "the final NAI request is built from the prepared positive and negative prompts");
+assert.match(naiClientSource,
+  /v4_prompt: \{ caption: \{ base_caption: prompt, char_captions: \[\] \}/,
+  "the NAI request uses the prepared positive prompt");
+assert.match(naiClientSource,
+  /v4_negative_prompt: \{ caption: \{ base_caption: negativePrompt, char_captions: \[\] \}/,
+  "the NAI request uses the prepared negative prompt");
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const toBase64 = value => Buffer.from(value, "utf8").toString("base64");
@@ -136,8 +175,23 @@ async function exerciseEngine(engine) {
   assert.equal(statusRequest.path, "/api/batch/status");
   assert.equal((await statusRequest.response.json()).enqueueMode, "append");
 
+  // Match BatchItem from wayward-imagegen 0.8.4. The earlier fixture used
+  // 'key' instead of required 'talentId', so it could not pass the real route.
   const payload = {
-    items: [{ key: "fixture-character-task", prompt: "fixture prompt must pass through unchanged" }],
+    items: [{
+      talentId: "fixture-character-task",
+      prompt: "fixture edited positive prompt: silver hair, blue coat, rainy street",
+      negativePrompt: "fixture edited negative prompt: blurry, low quality",
+      workflow: "illustrious",
+      imageType: "portrait",
+      steps: 32,
+      cfg: 6.5,
+      loraStrength: 0.72,
+      checkpoint: "fixture-checkpoint",
+      width: 896,
+      height: 1152,
+      weight: 4
+    }],
     jobId: "fixture-job",
     start: true
   };
@@ -154,7 +208,8 @@ async function exerciseEngine(engine) {
   assert.equal(enqueueRequest.method, "POST");
   assert.equal(enqueueRequest.path, "/api/batch/enqueue");
   assert.equal(enqueueRequest.headers["content-type"], "application/json");
-  assert.deepEqual(JSON.parse(enqueueRequest.body), payload);
+  assert.deepEqual(JSON.parse(enqueueRequest.body), payload,
+    engine + ": edited prompts and generation settings must pass through byte-for-byte");
   assert.equal((await enqueueRequest.response.json()).accepted, 1);
 
   for (const eventName of ["launcher_imagegen_request_intercepted", "launcher_imagegen_request_dispatched"]) {
@@ -162,8 +217,10 @@ async function exerciseEngine(engine) {
       true, engine + ": missing " + eventName + " diagnostic");
   }
   const serializedEvents = JSON.stringify(events);
-  assert.equal(serializedEvents.includes("fixture prompt"), false,
+  assert.equal(serializedEvents.includes("fixture edited positive prompt"), false,
     "diagnostics must not contain image prompts");
+  assert.equal(serializedEvents.includes("fixture edited negative prompt"), false,
+    "diagnostics must not contain negative prompts");
 
   runtime.available = false;
   runtime.ready = false;
@@ -188,4 +245,4 @@ const results = [];
 for (const engine of ["novelai", "comfy"]) results.push(await exerciseEngine(engine));
 assert.deepEqual(results, [{ engine: "novelai", calls: 2 }, { engine: "comfy", calls: 2 }]);
 
-console.log("Image Studio automatic generation dispatch reaches launcher NAI and ComfyUI loopback endpoints.");
+console.log("Image Studio prompt fields and generation settings reach the launcher-managed NAI/Comfy server without proxy mutation.");
