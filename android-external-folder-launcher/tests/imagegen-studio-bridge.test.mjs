@@ -168,7 +168,7 @@ assert.equal(settingsClicked, 1);
 // The foreground service reports provider-ready only after the NovelAI token
 // is saved and the health route returns HTTP 200. Force the original game's
 // imageBackendProbe so its captured imageServerUrl function sees that state.
-runtime = { available: true, starting: false, ready: false, backendVersion: "0.8.4" };
+runtime = { available: true, starting: false, ready: true, backendVersion: "0.8.4" };
 const readyRefresh = await window.WaywardLauncherImageStudio.refreshBackendProbe("test_token_saved");
 assert.equal(readyRefresh.ok, true);
 assert.equal(api.fn("imageBackend")().comfyui, true);
