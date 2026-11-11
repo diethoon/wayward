@@ -425,9 +425,13 @@ public final class ImageGenServiceRuntimeTest {
                                 // the real core boots in its documented English fallback;
                                 // do not mistake this packaging omission for a core failure.
                                 wmlLocaleBundleMissing.set(true);
+                                // The published Wayward 11.2 archive omits the optional Korean WML
+                                // translation sidecars referenced by this Korean HTML. Preserve the game's
+                                // intended WML language so Korean-only modules are not silently defaulted off.
+                                String localeShim = "window.WML_I18N=Object.assign({},window.WML_I18N||{},{lang:'ko'});";
                                 return new WebResourceResponse("application/javascript", "UTF-8",
-                                        404, "Not Found", java.util.Collections.emptyMap(),
-                                        new java.io.ByteArrayInputStream(new byte[0]));
+                                        200, "OK", java.util.Collections.emptyMap(),
+                                        new java.io.ByteArrayInputStream(localeShim.getBytes(StandardCharsets.UTF_8)));
                             }
                             if ("wml/mods/mods.js".equals(wmlRelative)) {
                                 try {
@@ -745,6 +749,9 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("The test must record the package's omitted Korean WML translation sidecars. "
                             + wmlBridgeDiagnostics,
                     wmlBridgeState.optBoolean("localeBundleMissing", false));
+            assertEquals("The Korean HTML fixture was incorrectly booted in English, disabling Korean-only mods. "
+                            + wmlBridgeDiagnostics,
+                    "ko", wmlBridgeState.optString("lang", ""));
             JSONObject officialSymbols = wmlBridgeState.optJSONObject("officialSymbols");
             assertNotNull("The launcher did not register the merged 2026-11-01 symbol table. "
                             + wmlBridgeDiagnostics, officialSymbols);
@@ -761,6 +768,17 @@ public final class ImageGenServiceRuntimeTest {
             assertEquals("The bundled 2026-11-01 semantic symbol table was not registered: "
                             + wmlBridgeDiagnostics,
                     "2026-11-01", wmlState.optString("symbolsGame", ""));
+            JSONObject setupById = new JSONObject();
+            org.json.JSONArray bootSetups = wmlBridgeState.optJSONArray("bootSetups");
+            if (bootSetups != null) {
+                for (int index = 0; index < bootSetups.length(); index++) {
+                    JSONObject setup = bootSetups.optJSONObject(index);
+                    if (setup != null) setupById.put(setup.optString("id"), setup);
+                }
+            }
+            assertEquals("The official Image Studio WML module did not finish setup: " + wmlBridgeDiagnostics,
+                    "ok", setupById.optJSONObject("imagestudio") == null ? "" :
+                            setupById.optJSONObject("imagestudio").optString("result", ""));
             assertTrue("WML did not load the pinned imagestudio module: " + wmlBridgeDiagnostics,
                     wmlState.optJSONArray("loaded") != null
                             && containsJsonString(wmlState.optJSONArray("loaded"), "imagestudio"));
