@@ -24,7 +24,7 @@ The following remain game-controlled and must continue to affect request constru
 - Character, style, composition, negative-prompt, and other Image Studio settings.
 - Existing cache, image-pack lookup, and display behavior.
 
-The bridge may replace the backend probe and API base URL, but must preserve the original Image Studio API facade and all unrelated functions/settings. It must not modify game saves, RNG, IDs, Undo, economy, supply, character behavior, or turn logic.
+The bridge may replace the backend probe and API base URL, and must neutralize a game-session offline/backend toggle while a launcher server is ready; it must preserve the original Image Studio API facade and all unrelated functions/settings. A ready launcher server always wins over game-session backend/offline selection. It must not modify game saves, RNG, IDs, Undo, economy, supply, character behavior, or turn logic.
 
 ## 3. Engine selection
 
@@ -32,7 +32,7 @@ The engine is selected only by the launcher server that is currently running:
 - Launcher NovelAI server -> NovelAI route.
 - Launcher ComfyUI server -> ComfyUI route.
 
-Changing a game-session backend setting must not change the running launcher's engine or request destination. Switching engines requires an explicit launcher action.
+Changing a game-session backend or offline setting must not change the running launcher's engine or request destination, and must not suppress generation while the launcher server is ready. Switching engines requires an explicit launcher action.
 
 ## 4. Per-engine generate-only-when-pack-missing controls (new UI requirement)
 
