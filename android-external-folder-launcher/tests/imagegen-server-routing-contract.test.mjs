@@ -4,6 +4,7 @@ import fs from "node:fs";
 const root = new URL("..", import.meta.url);
 const mainActivity = fs.readFileSync(new URL("app/src/main/java/com/wayward/launcher/MainActivity.java", root), "utf8");
 const service = fs.readFileSync(new URL("app/src/main/java/com/wayward/launcher/ImageGenService.java", root), "utf8");
+const statusStore = fs.readFileSync(new URL("app/src/main/java/com/wayward/launcher/ImageGenStatusStore.java", root), "utf8");
 
 const ensureStart = mainActivity.indexOf("private void ensureImageGenServer(");
 const ensureEnd = mainActivity.indexOf("private void waitForImageGenReady()", ensureStart);
@@ -15,6 +16,10 @@ assert.match(ensure, /이미지팩/, "no-server state must explicitly retain ima
 assert.doesNotMatch(ensure, /startImageGenService\s*\(/, "opening a game must not auto-start ImageGen");
 assert.doesNotMatch(ensure, /writeImageGenRuntimeConfig\s*\(/, "opening a game must not overwrite the selected engine");
 assert.doesNotMatch(ensure, /ImageGenBackendInstaller\.install\s*\(/, "opening a game must not install/start a backend");
+assert.match(ensure, /state\.isReady\(\)/, "session state check must use the ready contract");
+assert.match(statusStore, /boolean isReady\(\)/, "the status store defines isReady()");
+assert.doesNotMatch(ensure, /isAvailable\(\)/, "do not call a status method absent from the actual store");
+
 
 assert.match(mainActivity, /config\.put\("imageProvider","novelai"\.equals\(mode\)\?"nai":"sdxl"\)/,
   "NovelAI mode must configure the embedded server as NAI; ComfyUI mode must use SDXL");
