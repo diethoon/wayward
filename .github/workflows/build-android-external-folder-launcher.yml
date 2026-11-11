@@ -11,6 +11,12 @@ on:
       - "android-external-folder-launcher/**"
       - ".github/workflows/build-android-external-folder-launcher.yml"
   workflow_dispatch:
+    inputs:
+      run_live_cloudflare_smoke:
+        description: "Run one billable Cloudflare FLUX Worker inference request"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -679,9 +685,9 @@ jobs:
         with:
           path: ${{ runner.temp }}/wayward-flux-smoke-once/complete
           key: wayward-flux-smoke-once-20261110
-      - name: Generate one real Cloudflare FLUX smoke image
+      - name: Generate one opt-in live Cloudflare FLUX smoke image
         id: flux_smoke
-        if: steps.flux_smoke_once.outputs.cache-hit != 'true'
+        if: github.event_name == 'workflow_dispatch' && inputs.run_live_cloudflare_smoke == true && steps.flux_smoke_once.outputs.cache-hit != 'true'
         continue-on-error: true
         shell: bash
         run: |
@@ -792,7 +798,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Run the real ImageGen service on Android 15
+      - name: Run ImageGen and real WML portrait renderer on Android 15
         id: android_emulator_smoke
         timeout-minutes: 25
         uses: reactivecircus/android-emulator-runner@v2
