@@ -40,11 +40,17 @@ async function exerciseEngine(engine) {
     }
   };
 
+  const persistedSettings = {
+    imageBackendMode: "off",
+    retainUnrelatedSetting: "unchanged"
+  };
+  const settingsStore = { getState: () => persistedSettings };
   const factory = {
     connect(_wmlApi, config) {
       assert.equal(config.id, "imagestudio");
       return {
         fn(name) {
+          if (name === "settingsStore") return settingsStore;
           if (name === "imageBackendProbe") return async () => ({
             baseUrl: "https://game-configured.example:8189",
             comfyui: false
@@ -73,6 +79,12 @@ async function exerciseEngine(engine) {
   const api = window.__waywardPauseSettingsUiFactory.connect({}, { id: "imagestudio" });
   assert.equal(window.__WW_STUDIO_OFFLINE_ONLY__, false,
     engine + ": active launcher server must override saved offline-only=true");
+  const effectiveSettings = api.fn("settingsStore").getState();
+  assert.equal(effectiveSettings.imageBackendMode, "auto",
+    engine + ": active launcher engine must override the game-side 'off' generation selector");
+  assert.equal(effectiveSettings.retainUnrelatedSetting, "unchanged");
+  assert.equal(persistedSettings.imageBackendMode, "off",
+    "the saved game setting must not be overwritten");
 
   // Image Studio's bridge may try to restore its saved game-side offline preference.
   // While the launcher engine is ready, the wrapper must keep generation enabled.
@@ -151,6 +163,15 @@ async function exerciseEngine(engine) {
   const serializedEvents = JSON.stringify(events);
   assert.equal(serializedEvents.includes("fixture prompt"), false,
     "diagnostics must not contain image prompts");
+
+  runtime.available = false;
+  runtime.ready = false;
+  runtime.backendVersion = "";
+  window.WaywardLauncherImageStudioRouting.refreshRuntime();
+  assert.equal(api.fn("settingsStore").getState().imageBackendMode, "off",
+    "without a ready launcher server, preserve the game's normal off setting");
+  assert.equal(imageServerUrl("/api/batch/enqueue"), null,
+    "without a launcher server, do not route to an external game backend");
 
   return { engine, calls: forwarded.length };
 }
