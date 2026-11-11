@@ -15,6 +15,9 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
 import android.net.Uri;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
@@ -40,14 +43,19 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.SequenceInputStream;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.Base64;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -64,6 +72,7 @@ public final class ImageGenServiceRuntimeTest {
         Activity launcherActivity = null;
         Activity homeActivity = null;
         boolean stopActionSent = false;
+        CloudflareWorkerContractMock cloudflareMock = null;
         NotificationManager notifications =
                 (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
 
@@ -83,7 +92,8 @@ public final class ImageGenServiceRuntimeTest {
             deleteTestTree(new File(context.getFilesDir(), "imagegen"));
             ImageGenStatusStore.write(context.getFilesDir(), false, false, false,
                     "CI runtime test reset", "");
-            configureCloudflareProvider(context, GAME_PROFILE_ID);
+            cloudflareMock = new CloudflareWorkerContractMock();
+            configureCloudflareProvider(context, GAME_PROFILE_ID, cloudflareMock.endpoint());
             launcherActivity = instrumentation.startActivitySync(
                     new Intent(context, MainActivity.class)
                             .setData(Uri.parse("wayward://session/" + GAME_PROFILE_ID))
@@ -136,7 +146,7 @@ public final class ImageGenServiceRuntimeTest {
             // WebView, submit through Image Studio's /api/batch/enqueue endpoint,
             // call Cloudflare through the authenticated native provider adapter,
             // save through JobRunner/cache, and read the result back through /api/pack.
-            runCloudflareGamePageSmoke(instrumentation, context, launcherActivity);
+            runCloudflareGamePageSmoke(instrumentation, context, launcherActivity, cloudflareMock.endpoint());
             homeActivity = verifyCrossTaskImageStudioSettingsRouting(
                     instrumentation, context, launcherActivity);
             restartImageGenServerWithKeystoreToken(instrumentation, context, launcherActivity);
@@ -188,6 +198,144 @@ public final class ImageGenServiceRuntimeTest {
                     // Preserve the primary assertion/error from the runtime test.
                 }
             }
+            if (cloudflareMock != null) cloudflareMock.close();
+        }
+    }
+
+    /**
+     * Quota-free local implementation of the Cloudflare Worker JSON contract.
+     * The Android CI path still traverses ImageProviderClient, the authenticated
+     * native adapter, ImageGen's normal cache, the production HTTPS image route,
+     * and the real WML Image Studio portrait component. Live Worker inference is
+     * kept in a separate opt-in workflow step to avoid burning daily free neurons.
+     */
+    private static final class CloudflareWorkerContractMock implements AutoCloseable {
+        private final ServerSocket server;
+        private final byte[] imageBytes;
+        private final java.util.concurrent.atomic.AtomicInteger requests =
+                new java.util.concurrent.atomic.AtomicInteger();
+        private volatile boolean running = true;
+        private final Thread acceptThread;
+
+        CloudflareWorkerContractMock() throws Exception {
+            server = new ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"));
+            imageBytes = createFixturePng();
+            acceptThread = new Thread(this::acceptLoop, "ci-cloudflare-worker-contract");
+            acceptThread.setDaemon(true);
+            acceptThread.start();
+        }
+
+        String endpoint() {
+            return "http://127.0.0.1:" + server.getLocalPort();
+        }
+
+        int requestCount() { return requests.get(); }
+
+        private void acceptLoop() {
+            while (running) {
+                try (Socket socket = server.accept()) {
+                    socket.setSoTimeout(10_000);
+                    handle(socket);
+                } catch (IOException error) {
+                    if (running) android.util.Log.e("WaywardCIWorkerMock",
+                            "Contract worker request failed", error);
+                }
+            }
+        }
+
+        private void handle(Socket socket) throws IOException {
+            InputStream input = socket.getInputStream();
+            String requestLine = readHttpLine(input);
+            if (requestLine == null || !requestLine.startsWith("POST ")) {
+                writeResponse(socket, 405, "Method Not Allowed",
+                        "{\\"success\\":false,\\"error\\":\\"POST required\\"}");
+                return;
+            }
+            int contentLength = 0;
+            String header;
+            while ((header = readHttpLine(input)) != null && !header.isEmpty()) {
+                int colon = header.indexOf(':');
+                if (colon > 0 && "content-length".equalsIgnoreCase(header.substring(0, colon).trim())) {
+                    contentLength = Integer.parseInt(header.substring(colon + 1).trim());
+                }
+            }
+            if (contentLength < 0 || contentLength > 64 * 1024) {
+                writeResponse(socket, 413, "Payload Too Large",
+                        "{\\"success\\":false,\\"error\\":\\"request too large\\"}");
+                return;
+            }
+            byte[] requestBody = new byte[contentLength];
+            int offset = 0;
+            while (offset < requestBody.length) {
+                int count = input.read(requestBody, offset, requestBody.length - offset);
+                if (count < 0) throw new IOException("Unexpected end of provider request body.");
+                offset += count;
+            }
+            requests.incrementAndGet();
+            JSONObject response = new JSONObject();
+            try {
+                response.put("success", true);
+                response.put("image", Base64.getEncoder().encodeToString(imageBytes));
+                response.put("mimeType", "image/png");
+            } catch (Exception error) {
+                throw new IOException("Could not serialize Worker contract response.", error);
+            }
+            writeResponse(socket, 200, "OK", response.toString());
+        }
+
+        private static String readHttpLine(InputStream input) throws IOException {
+            ByteArrayOutputStream line = new ByteArrayOutputStream();
+            int value;
+            while ((value = input.read()) >= 0) {
+                if (value == '\n') {
+                    byte[] bytes = line.toByteArray();
+                    int length = bytes.length;
+                    if (length > 0 && bytes[length - 1] == '\r') length--;
+                    return new String(bytes, 0, length, StandardCharsets.US_ASCII);
+                }
+                line.write(value);
+                if (line.size() > 16 * 1024) throw new IOException("HTTP header line exceeds 16 KiB.");
+            }
+            return line.size() == 0 ? null : line.toString(StandardCharsets.US_ASCII.name());
+        }
+
+        private static void writeResponse(Socket socket, int status, String reason, String body)
+                throws IOException {
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            OutputStream output = socket.getOutputStream();
+            String headers = "HTTP/1.1 " + status + " " + reason + "\r\n"
+                    + "Content-Type: application/json; charset=utf-8\r\n"
+                    + "Content-Length: " + bytes.length + "\r\n"
+                    + "Connection: close\r\n\r\n";
+            output.write(headers.getBytes(StandardCharsets.US_ASCII));
+            output.write(bytes);
+            output.flush();
+        }
+
+        private static byte[] createFixturePng() throws Exception {
+            Bitmap bitmap = Bitmap.createBitmap(384, 561, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+            canvas.drawColor(Color.rgb(45, 31, 58));
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            paint.setColor(Color.rgb(221, 158, 185));
+            canvas.drawOval(111, 54, 273, 216, paint);
+            paint.setColor(Color.rgb(82, 56, 105));
+            canvas.drawRoundRect(72, 190, 312, 555, 92, 92, paint);
+            paint.setColor(Color.rgb(237, 196, 208));
+            canvas.drawRoundRect(127, 236, 257, 470, 44, 44, paint);
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            boolean encoded = bitmap.compress(Bitmap.CompressFormat.PNG, 100, output);
+            bitmap.recycle();
+            if (!encoded) throw new IOException("Could not encode the CI portrait PNG fixture.");
+            return output.toByteArray();
+        }
+
+        @Override public void close() {
+            running = false;
+            try { server.close(); } catch (IOException ignored) {}
+            try { acceptThread.join(1500L); } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
@@ -222,7 +370,8 @@ public final class ImageGenServiceRuntimeTest {
     }
 
     private static void runCloudflareGamePageSmoke(
-            Instrumentation instrumentation, Context context, Activity activity) throws Exception {
+            Instrumentation instrumentation, Context context, Activity activity,
+            String providerEndpoint) throws Exception {
         String resultSummary = "state=not_started";
         WebView[] webHolder = new WebView[1];
         CountDownLatch pageFinished = new CountDownLatch(1);
@@ -241,7 +390,7 @@ public final class ImageGenServiceRuntimeTest {
         }
 
         try {
-            configureCloudflareProvider(context, GAME_PROFILE_ID);
+            configureCloudflareProvider(context, GAME_PROFILE_ID, providerEndpoint);
 
             // Install the exact pinned Image Studio 1.31.20 release ZIP into
             // the launcher's app-private ZIP store. This exercises the real
@@ -1015,7 +1164,8 @@ public final class ImageGenServiceRuntimeTest {
                     + "gameHtmlBytes=" + gameHtml.length + "\n"
                     + "gameHtmlSourceCommit=26d6c32e0b0abbb886e3029efd548b7ca6774401\n"
                     + "gameHtmlBlob=d198eacfc127c55dc44bd5d1b8e29ff2bb7d08e6\n"
-                    + "cloudflareEndpoint=" + FLUX_ENDPOINT + "\n"
+                    + "cloudflareEndpoint=" + providerEndpoint + "\n"
+                    + "providerMode=local_worker_contract_fixture\n"
                     + "providerType=cloudflare-worker\n"
                     + "imagePath=" + imageState.optString("imagePath") + "\n"
                     + "imageAlt=" + imageState.optString("imageAlt") + "\n"
@@ -1194,7 +1344,8 @@ public final class ImageGenServiceRuntimeTest {
                 "keystore_token_restart_verified", null);
     }
 
-    private static void configureCloudflareProvider(Context context, String profileId) throws Exception {
+    private static void configureCloudflareProvider(Context context, String profileId,
+                                                     String endpoint) throws Exception {
         ImageProviderStore.Snapshot snapshot = new ImageProviderStore(context).load();
         snapshot.providers.clear();
         snapshot.defaults.clear();
@@ -1202,9 +1353,9 @@ public final class ImageGenServiceRuntimeTest {
 
         ImageProviderStore.Provider provider = new ImageProviderStore.Provider();
         provider.id = FLUX_PROVIDER_ID;
-        provider.name = "Wayward Android CI Cloudflare FLUX";
+        provider.name = "Wayward Android CI Worker contract fixture";
         provider.type = "cloudflare-worker";
-        provider.endpoint = FLUX_ENDPOINT;
+        provider.endpoint = endpoint;
         provider.enabled = true;
         provider.allowInGame = true;
         snapshot.providers.add(provider);
