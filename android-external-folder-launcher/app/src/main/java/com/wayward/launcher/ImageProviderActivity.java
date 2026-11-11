@@ -576,7 +576,7 @@ public final class ImageProviderActivity extends Activity {
         fields.addView(vercelPreset, new LinearLayout.LayoutParams(-1, -2));
         addGap(fields, 5);
         fields.addView(label(
-                "Vercel 대시보드에서 AI Gateway API 키를 만든 뒤 입력하세요. 이 API 호출은 새 Vercel 배포 없이 실행되며, 저장한 키는 Android Keystore로 암호화됩니다. 기본 생성 모델: bfl/flux-2-pro.",
+                "Vercel 대시보드에서 AI Gateway API 키를 만든 뒤 입력하고 저장하세요. 새 Vercel 배포는 필요 없습니다. 키는 Android Keystore로 암호화됩니다. 저장 후 게임별 '실패 시 대체 서비스'에서 Vercel을 선택하면 Cloudflare Worker 오류 시 자동 재시도합니다. 기본 모델: bfl/flux-2-pro.",
                 11, MUTED, false));
 
         addGap(page, 10);
