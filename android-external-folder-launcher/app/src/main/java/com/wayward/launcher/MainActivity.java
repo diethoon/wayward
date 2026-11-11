@@ -558,7 +558,8 @@ public final class MainActivity extends Activity {
                         return folderHandler.serveGamePath(path.substring(6));
                     }
                     if(path != null && path.startsWith("/images/__wayward_generated__/"))
-                        return serveGeneratedImageRequest(path, imageDiagnostics);\n                    if(FolderHandler.isImageRequestPath(path))return serveImageRequest(folderHandler,path,imageDiagnostics);
+                        return serveGeneratedImageRequest(path, imageDiagnostics);
+                    if(FolderHandler.isImageRequestPath(path))return serveImageRequest(folderHandler,path,imageDiagnostics);
                 }
                 if("art.sintention.com".equalsIgnoreCase(u.getHost())){
                     String path=u.getPath();
