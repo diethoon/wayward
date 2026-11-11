@@ -88,7 +88,6 @@
         serverStarting: status.starting,
         providerReady: status.ready,
         engine: engineName(status),
-        gameModeOff: modeOff,
         offlineOnly
       });
     }
