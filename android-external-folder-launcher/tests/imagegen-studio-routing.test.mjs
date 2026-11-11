@@ -5,11 +5,9 @@ import vm from "node:vm";
 const source = fs.readFileSync(new URL("../app/src/main/assets/imagegen-studio-bridge.js", import.meta.url), "utf8");
 const events = [];
 let runtime = { available: false, starting: false, ready: false, backendVersion: "" };
-let gameSettings = { imageBackendMode: "auto" };
 const storage = {
   getItem(key) {
     if (key === "ww-image-studio-offline-only-v1") return "false";
-    if (key === "tavern-settings") return JSON.stringify({ state: gameSettings });
     return null;
   },
   setItem() {}
@@ -110,13 +108,15 @@ window.WW_ImageStudioBridge.setOfflineOnly(false);
 assert.equal(nativeOffline, false);
 assert.equal(window.__WW_STUDIO_OFFLINE_ONLY__, false);
 
-// An explicit game-level "off" selection blocks generation even with a server.
-gameSettings = { imageBackendMode: "off" };
-assert.equal(window.WaywardLauncherImageStudioRouting.refreshRuntime().baseUrl, null);
-assert.equal(window.__WW_STUDIO_OFFLINE_ONLY__, true);
+// Game-session backend selection cannot override a running launcher server.
+for (const mode of ["off", "auto", "novelai", "comfy", "custom"]) {
+  const selectedByGame = window.WaywardLauncherImageStudioRouting.refreshRuntime();
+  assert.equal(selectedByGame.baseUrl, "http://127.0.0.1:8189", mode + " game mode must not redirect launcher requests");
+  assert.equal(selectedByGame.engine, "comfy", mode + " game mode must not switch the launcher engine");
+  assert.equal(window.__WW_STUDIO_OFFLINE_ONLY__, false);
+}
 
 // A server stop returns the game to image-pack-only mode without remote fallback.
-gameSettings = { imageBackendMode: "auto" };
 runtime = { available: false, starting: false, ready: false, backendVersion: "" };
 const stopped = window.WaywardLauncherImageStudioRouting.refreshRuntime();
 assert.equal(stopped.baseUrl, null);
