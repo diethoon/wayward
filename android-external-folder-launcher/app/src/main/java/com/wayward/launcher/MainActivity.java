@@ -718,8 +718,15 @@ public final class MainActivity extends Activity {
         boolean endpointChanged="comfy".equals(mode)&&!endpoint.equals(storedEndpoint==null?"":storedEndpoint);
         boolean sameMode=running.backendVersion!=null&&running.backendVersion.endsWith(":"+mode);
         if(running.isStarting()){
-            imageGenSessionMessage="이미 이미지 서버를 시작하고 있습니다. 준비가 끝난 뒤 다시 시도해 주세요.";
-            refreshImageGenStatus();
+            if(!sameMode||endpointChanged){
+                imageGenSessionMessage="실행 중인 이미지 엔진을 선택한 모드로 전환합니다…";
+                refreshImageGenStatus();
+                stopImageGenServer();
+                waitForImageGenStopThenStart(mode,endpoint,0);
+            }else{
+                imageGenSessionMessage="선택한 이미지 생성 서버가 시작 중입니다. 준비가 끝날 때까지 기다려 주세요.";
+                refreshImageGenStatus();
+            }
             return;
         }
         if(running.isReady()&&sameMode&&!endpointChanged){
