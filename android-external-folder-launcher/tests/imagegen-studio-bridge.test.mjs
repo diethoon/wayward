@@ -129,7 +129,7 @@ const cachedImgWhileServerStopped = new FakeImageElement();
 cachedImgWhileServerStopped.src = "http://127.0.0.1:8189/images/nai/characters/elena/portrait.png";
 assert.equal(cachedImgWhileServerStopped.src, "https://localhost:42000/images/__wayward_generated__/nai/characters/elena/portrait.png");
 assert.equal(api.fn("imageServerUrl")("/api/batch/enqueue"), null);
-runtime = { available: true, starting: false, ready: true, backendVersion: "0.8.4" };
+runtime = { available: true, starting: false, ready: false, backendVersion: "0.8.4" };
 assert.equal(api.fn("imageBackend")().comfyui, false);
 assert.equal(legacyImageBackend().baseUrl, "http://127.0.0.1:8189");
 assert.equal(legacyImageBackend().comfyui, false);
