@@ -124,6 +124,7 @@ remoteImg.src = "https://cdn.example/images/portrait.png";
 assert.equal(remoteImg.src, "https://cdn.example/images/portrait.png");
 assert.equal(events.some(item => item.name === "generated_image_dom_rewrite_installed"), true);
 runtime = { available: false, starting: false, ready: false, backendVersion: "0.8.4" };
+backendState = { baseUrl: null, comfyui: false };
 const cachedImgWhileServerStopped = new FakeImageElement();
 cachedImgWhileServerStopped.src = "http://127.0.0.1:8189/images/nai/characters/elena/portrait.png";
 assert.equal(cachedImgWhileServerStopped.src, "https://localhost:42000/images/__wayward_generated__/nai/characters/elena/portrait.png");
