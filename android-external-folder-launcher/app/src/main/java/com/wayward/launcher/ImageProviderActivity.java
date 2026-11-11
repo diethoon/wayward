@@ -154,6 +154,7 @@ public final class ImageProviderActivity extends Activity {
         scroll.addView(page);
         frame.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
         setContentView(frame);
+        LauncherWindowInsets.apply(frame);
 
         LinearLayout top = row();
         TextView back = label("‹", 34, TEXT, false);
