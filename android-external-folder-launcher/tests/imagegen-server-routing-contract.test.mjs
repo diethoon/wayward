@@ -12,6 +12,11 @@ assert.ok(ensureStart >= 0 && ensureEnd > ensureStart, "session server detection
 const ensure = mainActivity.slice(ensureStart, ensureEnd);
 
 assert.match(mainActivity, /"imagegen-studio-bridge\.js"/, "the launcher routing bridge must load at document start");
+assert.match(mainActivity, /@JavascriptInterface public String imageGenRuntimeStatus\(\)/,
+  "WebView must receive the actual managed ImageGen service state");
+assert.match(mainActivity, /result\.put\("backendVersion",state\.backendVersion\)/,
+  "WebView routing must distinguish the selected NovelAI or ComfyUI engine");
+
 assert.match(ensure, /이미지팩/, "no-server state must explicitly retain image-pack mode");
 assert.doesNotMatch(ensure, /startImageGenService\s*\(/, "opening a game must not auto-start ImageGen");
 assert.doesNotMatch(ensure, /writeImageGenRuntimeConfig\s*\(/, "opening a game must not overwrite the selected engine");
