@@ -73,7 +73,7 @@ const factory = {
           };
         }
         if (name === "imageServerUrl") {
-          return path => /^https?:\\/\\//i.test(String(path || "")) ? String(path) : backendState.baseUrl ? backendState.baseUrl + path : null;
+          return path => { const url = String(path || ""); return url.startsWith("https://") || url.startsWith("http://") ? url : backendState.baseUrl ? backendState.baseUrl + path : null; };
         }
         if (name === "imageBackend") return () => backendState;
         return undefined;
