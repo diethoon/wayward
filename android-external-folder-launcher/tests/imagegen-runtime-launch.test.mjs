@@ -15,7 +15,7 @@ const instrumentation = read("../app/src/androidTest/java/com/wayward/launcher/I
 const embed = read("../scripts/embed_imagegen_backend.py");
 
 assert.match(main, /NovelAI 서버 시작/);
-assert.match(main, /ComfyUI 연결 서버 실행/);
+assert.match(main, /ComfyUI 연결 서버 시작/);
 assert.match(main, /startNovelAiServer/);
 assert.match(main, /startOrSwitchManagedImageGenServer/);
 assert.match(main, /waitForImageGenStopThenStart/);
