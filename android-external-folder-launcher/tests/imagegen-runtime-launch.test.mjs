@@ -14,7 +14,7 @@ const endpoint = read("../app/src/main/java/com/wayward/launcher/ComfyEndpoint.j
 const instrumentation = read("../app/src/androidTest/java/com/wayward/launcher/ImageGenServiceRuntimeTest.java");
 const embed = read("../scripts/embed_imagegen_backend.py");
 
-assert.match(main, /NovelAI · 런처 내장 서버 실행/);
+assert.match(main, /NovelAI 서버 시작/);
 assert.match(main, /ComfyUI 연결 서버 실행/);
 assert.match(main, /startNovelAiServer/);
 assert.match(main, /startOrSwitchManagedImageGenServer/);
