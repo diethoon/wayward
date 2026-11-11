@@ -8,37 +8,45 @@ const manifest = read("../app/src/main/AndroidManifest.xml");
 const proxy = read("../app/src/main/java/com/wayward/launcher/ImageGenProxy.java");
 
 assert.match(main, /ensureImageGenServer\(sessionTree,/,
-  "session startup must inspect the SafTree captured for the active launch");
+  "session entry must inspect only the currently opened session state");
 assert.match(main, /web\.loadUrl\(gameUrl\);[\s\S]*?ensureImageGenServer\(sessionTree,/,
-  "game navigation must start before optional ImageGen preparation");
-assert.match(main, /String imageStudioModId\(\)/,
-  "the active session must identify the WML Image Studio adapter");
-assert.match(main, /zipMods\.open\("wml\/mods\/imagestudio\/mod\.js"\)/,
-  "active-session detection must include the app-private ZIP overlay");
-assert.doesNotMatch(main, /wml\/mods\/imagestudio\/backend\//,
-  "the game folder must not be required to contain the bundled server source");
-assert.match(main, /ImageGenBackendInstaller\.install\(this, imageGenBackendRoot\(\)\)/,
-  "the embedded backend is installed from APK assets, not copied from the game folder");
-const automaticStartup = main.slice(main.indexOf("private void ensureImageGenServer"), main.indexOf("private static boolean sameImageGenVersion"));
-assert.doesNotMatch(automaticStartup, /extractDirectory\(/,
-  "automatic Image Studio startup must not extract the original WML ZIP mod");
-assert.match(automaticStartup, /:novelai/,
-  "automatic startup must use the NovelAI-compatible EasyGen mode");
+  "the game page must open without waiting for optional image services");
+assert.match(main, /"imagegen-studio-bridge\.js"/,
+  "the Image Studio routing policy must load before WML modules initialize");
+
+const automaticStartup = main.slice(
+  main.indexOf("private void ensureImageGenServer"),
+  main.indexOf("private void waitForImageGenReady()")
+);
+assert.ok(automaticStartup.length > 0, "passive session ImageGen status detection must exist");
+assert.match(automaticStartup, /ImageGenStatusStore\.read\(getFilesDir\(\)\)/,
+  "session entry must read the already-running launcher server state");
+assert.match(automaticStartup, /이미지팩/,
+  "no-server session entry must explicitly retain the installed image-pack path");
+assert.doesNotMatch(automaticStartup, /startImageGenService\s*\(/,
+  "opening a game must not silently start a generation engine");
+assert.doesNotMatch(automaticStartup, /writeImageGenRuntimeConfig\s*\(/,
+  "opening a game must not overwrite the selected NovelAI or ComfyUI mode");
+assert.doesNotMatch(automaticStartup, /ImageGenBackendInstaller\.install\s*\(/,
+  "opening a game must not install or prepare a server that was not requested");
+assert.doesNotMatch(automaticStartup, /novelai/,
+  "session entry must not force NovelAI mode");
+assert.doesNotMatch(main, /String imageStudioModId\(\)/,
+  "server startup no longer depends on extracting or inspecting the game's WML mod");
+
 assert.match(main, /ImageGenBackendInstaller\.install\(this,backend\)/,
-  "manual startup must install the server embedded in the launcher APK");
-assert.match(main, /launcher-imagegen:/,
-  "server version identity must identify the bundled launcher backend");
+  "explicit manual startup installs the backend embedded in the launcher APK");
 assert.match(main, /writeImageGenRuntimeConfig\(backend,mode,requestedUrl\)/,
-  "the selected provider and ComfyUI endpoint must be configured in app-private storage");
-const manualStartup = main.slice(main.indexOf("private void startManagedImageGenServer"), main.indexOf("private void writeImageGenRuntimeConfig"));
-assert.doesNotMatch(manualStartup, /new SafTree|zipMods|wml\/mods\//,
-  "manual startup must not search game folders or extract WML ZIP mods");
-assert.doesNotMatch(main, /for \(GameProfile profile : profiles\)/,
-  "backend lookup must not silently take another registered session's mod");
-assert.match(main, /ImageGenStatusStore\.read\(getFilesDir\(\)\)/,
-  "activity reads status from process-shared storage");
-assert.match(main, /EXTRA_BACKEND_VERSION, version/,
-  "the selected session's backend version must be sent to the service");
+  "explicit manual startup writes the user-selected provider mode and endpoint");
+assert.match(main, /config\.put\("imageProvider","novelai"\.equals\(mode\)\?"nai":"sdxl"\)/,
+  "NovelAI and ComfyUI use their corresponding embedded backend providers");
+assert.match(service, /EXTRA_LAUNCH_MODE/,
+  "the selected engine mode is delivered to the foreground ImageGen service");
+assert.match(service, /if \("comfy"\.equals\(launchMode\) && !comfyUrl\.isEmpty\(\)\)/,
+  "ComfyUI mode passes the selected PC endpoint to the embedded server");
+assert.match(service, /builder\.command\(\)\.add\("--comfy-url"\)/,
+  "ComfyUI mode uses the embedded server's ComfyUI route");
+
 assert.match(manifest, /android:process=":imagegen"/,
   "ImageGen must run in a process separate from the WebView UI");
 assert.match(service, /catch \(Throwable error\)/,
@@ -48,4 +56,4 @@ assert.match(service, /heartbeat\.scheduleAtFixedRate/,
 assert.match(proxy, /127\.0\.0\.1:8189/,
   "all session WebViews must target the one shared loopback server");
 
-console.log("ImageGen session contract tests passed.");
+console.log("ImageGen session passive-detection and explicit engine-selection contracts passed.");
