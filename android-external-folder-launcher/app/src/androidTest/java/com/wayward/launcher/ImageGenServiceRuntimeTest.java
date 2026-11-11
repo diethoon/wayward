@@ -1100,16 +1100,18 @@ public final class ImageGenServiceRuntimeTest {
                     + "localStorage.setItem('wml.dev','true');"
                     + "var dev=WML.dev(),bridge=window.WW_ImageStudioBridge,matching=window.WW_ImageStudioMatching;"
                     + "if(!dev||!bridge||!matching)throw new Error('real WML Image Studio APIs are unavailable');"
-                    + "var imageUrlSymbol=WML.status().modSymbols.imagestudio.imageEntryUrl;"
-                    + "if(!imageUrlSymbol)throw new Error('Image Studio imageEntryUrl hook symbol is missing');"
-                    + "var gamePack={entries:{}};gamePack.entries[key]={talentName:key,imagePath:entry.imagePath,imageType:'portrait'};"
-                    + "bridge.packs=function(){return [gamePack];};"
-                    + "bridge.ready=function(){return Promise.resolve();};"
-                    + "bridge.connection=function(){return {baseUrl:null,comfyui:false};};"
-                    + "globalThis.__WW_STUDIO_OFFLINE_ONLY__=true;"
-                    + "dev.fn('settingsStore').getState().set({imageBackendMode:'auto',ageAffirmed:true,contentAcknowledged:true});"
+                    + "var symbols=WML.status().modSymbols.imagestudio||{};"
+                    + "var imageLookupSymbol=symbols.imageLookup,portraitPanelSymbol=symbols.imageUsagePortraitPanel;"
+                    + "if(!imageLookupSymbol||!portraitPanelSymbol)throw new Error('Image Studio imageLookup/imageUsagePortraitPanel symbols are missing');"
+                    + "var portraitPanelCalls=0;"
+                    + "dev.hook(portraitPanelSymbol,{priority:-9000000,after:function(value){portraitPanelCalls++;return value;}});"
+                    + "dev.hook(imageLookupSymbol,{priority:-9000000,replace:function(){return null;}});"
+                    + "dev.fn('settingsStore').getState().set({imageBackendMode:'custom',imageBackendUrl:'http://127.0.0.1:8189',ageAffirmed:true,contentAcknowledged:true});"
+                    + "if(!window.WaywardLauncherImageStudio||!window.WaywardLauncherImageStudio.refreshBackendProbe)throw new Error('launcher image backend probe is unavailable');"
+                    + "var probeDeadline=Date.now()+15000,probeResult=null;"
+                    + "while(Date.now()<probeDeadline){probeResult=await window.WaywardLauncherImageStudio.refreshBackendProbe('ci-real-portrait-render');if(probeResult&&probeResult.ok&&probeResult.baseUrl==='http://127.0.0.1:8189')break;await new Promise(function(resolve){setTimeout(resolve,200);});}"
+                    + "if(!probeResult||!probeResult.ok||probeResult.baseUrl!=='http://127.0.0.1:8189')throw new Error('WML did not select the launcher-local image backend: '+JSON.stringify(probeResult));"
                     + "dev.hook('bee',{priority:-9000000,replace:function(){return key;}});"
-                    + "dev.hook(imageUrlSymbol,{priority:-9000000,replace:function(){return serverImageUrl;}});"
                     + "var config=matching.get();"
                     + "['scene','outfit','room','exposure'].forEach(function(id){if(config.rules[id])config.rules[id].required=false;});"
                     + "matching.set(config);"
@@ -1131,20 +1133,22 @@ public final class ImageGenServiceRuntimeTest {
                     + "var shortKeyCloseDeadline=Date.now()+5000;while(Date.now()<shortKeyCloseDeadline){var shortKeyStillOpen=[...document.querySelectorAll('body *')].some(function(element){return element.children.length===0&&String(element.textContent||'').trim()==='최종 이미지 파일명 추가 축약'&&isVisible(element);});if(!shortKeyStillOpen)break;await new Promise(function(resolve){setTimeout(resolve,100);});}"
                     + "if([...document.querySelectorAll('body *')].some(function(element){return element.children.length===0&&String(element.textContent||'').trim()==='최종 이미지 파일명 추가 축약'&&isVisible(element);}))throw new Error('short image key prompt did not close after 선택: 사용 안 함');}"
                     + "await new Promise(function(resolve){setTimeout(resolve,750);});"
-                    + "var portraitDeadline=Date.now()+20000,portrait=null;"
+                    + "var portraitDeadline=Date.now()+45000,portrait=null,portraitCandidates=[];"
                     + "while(Date.now()<portraitDeadline){"
-                    + "portrait=[...document.querySelectorAll('#root img')].find(function(img){return img.src===imageUrl;});"
-                    + "if(portrait&&portrait.complete&&portrait.naturalWidth>0&&portrait.naturalHeight>0)break;"
+                    + "portraitCandidates=[...document.querySelectorAll('#root img')];"
+                    + "portrait=portraitCandidates.find(function(img){var src=img.currentSrc||img.src;return src===imageUrl&&img.complete&&img.naturalWidth>0&&img.naturalHeight>0&&img.isConnected;});"
+                    + "if(portrait)break;"
                     + "await new Promise(function(resolve){setTimeout(resolve,200);});"
                     + "}"
-                    + "if(!portrait)throw new Error('production imageUsagePortraitPanel did not render the generated image in #root');"
+                    + "if(!portrait)throw new Error('the live WML portrait component did not load the same-origin generated image: '+JSON.stringify({expected:imageUrl,hookCalls:portraitPanelCalls,images:portraitCandidates.map(function(img){var r=img.getBoundingClientRect();return {src:img.currentSrc||img.src,alt:img.alt,className:String(img.className||'').slice(0,120),naturalWidth:img.naturalWidth,naturalHeight:img.naturalHeight,connected:img.isConnected,rect:{x:r.x,y:r.y,width:r.width,height:r.height}};}).slice(0,24)}));"
                     + "await portrait.decode();"
-                    + "var rect=portrait.getBoundingClientRect(),style=getComputedStyle(portrait);"
-                    + "var visible=rect.width>0&&rect.height>0&&rect.right>0&&rect.bottom>0&&style.display!=='none'&&style.visibility!=='hidden'&&Number(style.opacity)>0;"
-                    + "if(!visible)throw new Error('production portrait image decoded but not visible: '+JSON.stringify({rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height,right:rect.right,bottom:rect.bottom},display:style.display,visibility:style.visibility,opacity:style.opacity,onboardingTitles:[...document.querySelectorAll('body *')].filter(function(element){return element.children.length===0&&isVisible(element)&&/프롬프트|축약|확장 연결/.test(String(element.textContent||''));}).map(function(element){return String(element.textContent||'').trim().slice(0,100);}).slice(0,20)}));"
+                    + "var rect=portrait.getBoundingClientRect(),style=getComputedStyle(portrait),parent=portrait.parentElement,ancestorInfo=[];"
+                    + "for(var depth=0;parent&&depth<6;depth++,parent=parent.parentElement){var parentRect=parent.getBoundingClientRect(),parentStyle=getComputedStyle(parent);ancestorInfo.push({tag:parent.tagName,id:parent.id,className:String(parent.className||'').slice(0,100),display:parentStyle.display,visibility:parentStyle.visibility,opacity:parentStyle.opacity,rect:{x:parentRect.x,y:parentRect.y,width:parentRect.width,height:parentRect.height}});}"
+                    + "var visible=portrait.isConnected&&portrait.getClientRects().length>0&&rect.width>0&&rect.height>0&&rect.right>0&&rect.bottom>0&&style.display!=='none'&&style.visibility!=='hidden'&&Number(style.opacity)>0;"
+                    + "if(!visible)throw new Error('live WML portrait image decoded but is not laid out visibly: '+JSON.stringify({rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height,right:rect.right,bottom:rect.bottom},display:style.display,visibility:style.visibility,opacity:style.opacity,ancestorInfo:ancestorInfo,hookCalls:portraitPanelCalls}));"
                     + "window.__waywardCiImage={state:'loaded',displayedInPortraitHook:true,portraitHook:'imageUsagePortraitPanel',"
-                    + "imageAlt:portrait.alt,naturalWidth:portrait.naturalWidth,naturalHeight:portrait.naturalHeight,visible:visible,domRewritten:portrait.src===imageUrl,serverImageUrl:serverImageUrl,"
-                    + "mimeType:blob.type||'',imagePath:entry.imagePath,imageUrl:imageUrl,imageOrigin:new URL(imageUrl).origin,gameOrigin:window.location.origin,sameOriginResource:new URL(imageUrl).origin===window.location.origin,entryCount:pack.entryCount||Object.keys(pack.entries||{}).length,"
+                    + "imageAlt:portrait.alt,naturalWidth:portrait.naturalWidth,naturalHeight:portrait.naturalHeight,visible:visible,portraitPanelCalls:portraitPanelCalls,domRewritten:portrait.src===imageUrl,serverImageUrl:serverImageUrl,"
+                    + "mimeType:blob.type||'',imagePath:entry.imagePath,imageUrl:portrait.currentSrc||portrait.src,imageOrigin:new URL(portrait.currentSrc||portrait.src).origin,gameOrigin:window.location.origin,sameOriginResource:new URL(portrait.currentSrc||portrait.src).origin===window.location.origin,entryCount:pack.entryCount||Object.keys(pack.entries||{}).length,"
                     + "cacheCompleted:batchStatus.completed,cacheCount:batchStatus.cached||0};"
                     + "})().catch(function(error){window.__waywardCiImage={state:'error',errorType:error&&error.name?String(error.name):'Error',message:error&&error.message?String(error.message).slice(0,320):'unknown'};});"
                     + "return 'dispatched';})()";
@@ -1164,6 +1168,8 @@ public final class ImageGenServiceRuntimeTest {
             assertEquals("Cloudflare image did not render in the production WML portrait hook. "
                     + imageState + "; pipeline=" + ImagePipelineDiagnostics.readRecent(context, 120),
                     "loaded", imageState.optString("state", ""));
+            assertTrue("The real WML imageUsagePortraitPanel did not render during the image test: " + imageState,
+                    imageState.optInt("portraitPanelCalls", 0) > 0);
             assertTrue("The production portrait component did not display the actual generated image: " + imageState,
                     imageState.optBoolean("displayedInPortraitHook", false));
             assertTrue("The generated portrait did not decode in Android WebView: " + imageState,
@@ -1176,7 +1182,7 @@ public final class ImageGenServiceRuntimeTest {
                     imageState.optBoolean("domRewritten", false));
             assertEquals("Generated image route did not use the active game origin: " + imageState,
                     GAME_ORIGIN, imageState.optString("imageOrigin", ""));
-            resultSummary = "state=loaded\nportraitHook=imageUsagePortraitPanel\ndisplayedInPortraitHook=true\nvisibleOnScreen=true\nsameOriginImageRoute=true\nimageOrigin=" + imageState.optString("imageOrigin") + "\n"
+            resultSummary = "state=loaded\nportraitHook=imageUsagePortraitPanel\nportraitPanelCalls=" + imageState.optInt("portraitPanelCalls") + "\ndisplayedInPortraitHook=true\nvisibleOnScreen=true\nsameOriginImageRoute=true\nimageOrigin=" + imageState.optString("imageOrigin") + "\n"
                     + "gameHtmlBytes=" + gameHtml.length + "\n"
                     + "gameHtmlSourceCommit=26d6c32e0b0abbb886e3029efd548b7ca6774401\n"
                     + "gameHtmlBlob=d198eacfc127c55dc44bd5d1b8e29ff2bb7d08e6\n"
