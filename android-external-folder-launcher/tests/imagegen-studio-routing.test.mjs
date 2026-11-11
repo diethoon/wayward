@@ -7,7 +7,7 @@ const events = [];
 let runtime = { available: false, starting: false, ready: false, backendVersion: "" };
 const storage = {
   getItem(key) {
-    if (key === "ww-image-studio-offline-only-v1") return "false";
+    if (key === "ww-image-studio-offline-only-v1") return "true";
     return null;
   },
   setItem() {}
