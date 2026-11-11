@@ -368,6 +368,11 @@ public final class ImageGenServiceRuntimeTest {
                     home.setVisibility(View.GONE);
 
                     WebView gameWeb = new WebView(main);
+                    Method serveGeneratedImageRoute = MainActivity.class.getDeclaredMethod(
+                            "serveGeneratedImageRequest", String.class, java.util.concurrent.atomic.AtomicInteger.class);
+                    serveGeneratedImageRoute.setAccessible(true);
+                    java.util.concurrent.atomic.AtomicInteger generatedImageDiagnosticSamples =
+                            new java.util.concurrent.atomic.AtomicInteger();
                     WebSettings settings = gameWeb.getSettings();
                     settings.setJavaScriptEnabled(true);
                     settings.setDomStorageEnabled(true);
@@ -381,6 +386,26 @@ public final class ImageGenServiceRuntimeTest {
                                 WebView view, android.webkit.WebResourceRequest request) {
                             Uri requestUri = request == null ? null : request.getUrl();
                             String requestPath = requestUri == null ? null : requestUri.getPath();
+                            if (requestUri != null
+                                    && "localhost".equalsIgnoreCase(requestUri.getHost())
+                                    && requestUri.getPort() == 38123
+                                    && requestPath != null
+                                    && requestPath.startsWith("/images/__wayward_generated__/")) {
+                                try {
+                                    WebResourceResponse generated = (WebResourceResponse) serveGeneratedImageRoute.invoke(
+                                            main, requestPath, generatedImageDiagnosticSamples);
+                                    if (generated == null) {
+                                        throw new IllegalStateException("Native generated-image route returned null.");
+                                    }
+                                    return generated;
+                                } catch (Exception error) {
+                                    pageError.set("Native generated-image route: " + error.getMessage());
+                                    return new WebResourceResponse("text/plain", "UTF-8", 500, "Route Error",
+                                            java.util.Collections.emptyMap(),
+                                            new java.io.ByteArrayInputStream(
+                                                    String.valueOf(error.getMessage()).getBytes(StandardCharsets.UTF_8)));
+                                }
+                            }
                             String zipPath = null;
                             if (requestPath != null
                                     && (requestPath.contains("/mods/") || requestPath.endsWith(".js"))) {
