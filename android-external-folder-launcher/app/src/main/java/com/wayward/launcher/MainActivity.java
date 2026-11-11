@@ -136,63 +136,163 @@ public final class MainActivity extends Activity {
     }
     private int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private void status(String s){if(status!=null)status.setText(s);}
-    private LinearLayout.LayoutParams buttonParams(){return new LinearLayout.LayoutParams(-1,dp(52));}
+    private LinearLayout.LayoutParams buttonParams(){return new LinearLayout.LayoutParams(-1,dp(46));}
+    private android.graphics.drawable.GradientDrawable uiShape(int fill,int stroke,float radius){
+        android.graphics.drawable.GradientDrawable shape=new android.graphics.drawable.GradientDrawable();
+        shape.setColor(fill);shape.setCornerRadius(dp(radius));
+        if(stroke!=0)shape.setStroke(dp(1),stroke);
+        return shape;
+    }
+    private LinearLayout uiCard(){
+        LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(13),dp(12),dp(13),dp(12));
+        card.setBackground(uiShape(Color.WHITE,Color.rgb(229,232,235),16));
+        return card;
+    }
+    private TextView uiText(String value,float size,int color,boolean bold){
+        TextView text=new TextView(this);text.setText(value);text.setTextSize(size);text.setTextColor(color);
+        text.setIncludeFontPadding(false);
+        if(bold)text.setTypeface(null,android.graphics.Typeface.BOLD);
+        return text;
+    }
+    private void gap(LinearLayout parent,int height){
+        View spacer=new View(this);parent.addView(spacer,new LinearLayout.LayoutParams(1,dp(height)));
+    }
     private Button button(String label,boolean primary,Runnable run){
-        Button b=new Button(this);b.setText(label);b.setAllCaps(false);b.setTextSize(15);b.setTextColor(Color.WHITE);
-        b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primary?Color.rgb(54,105,76):Color.rgb(49,64,54)));
+        Button b=new Button(this);b.setText(label);b.setAllCaps(false);b.setTextSize(13);
+        b.setTextColor(primary?Color.WHITE:Color.rgb(35,39,43));
+        b.setPadding(dp(12),dp(5),dp(12),dp(5));b.setMinHeight(dp(42));
+        b.setBackground(uiShape(primary?Color.rgb(35,39,43):Color.WHITE,primary?0:Color.rgb(218,222,226),12));
         b.setOnClickListener(v->run.run());return b;
     }
-    private void showHome(){
-        root=new FrameLayout(this);root.setBackgroundColor(Color.rgb(16,25,21));
-        ScrollView scroll=new ScrollView(this);LinearLayout page=new LinearLayout(this);
-        page.setOrientation(LinearLayout.VERTICAL);page.setPadding(dp(22),dp(24),dp(22),dp(24));scroll.addView(page);
-        TextView title=new TextView(this);title.setText("WAYWARD");title.setTextColor(Color.WHITE);title.setTextSize(29);title.setTypeface(null,1);page.addView(title);
-        TextView desc=new TextView(this);desc.setText("게임 폴더 여러 개를 등록해 각각 독립된 실행 세션으로 엽니다.");desc.setTextColor(Color.rgb(174,194,181));desc.setTextSize(14);
-        LinearLayout.LayoutParams dl=new LinearLayout.LayoutParams(-1,-2);dl.topMargin=dp(4);dl.bottomMargin=dp(18);page.addView(desc,dl);
-        TextView detail=new TextView(this);detail.setText("게임 원본 폴더는 직접 읽기만 합니다. ZIP 모드는 압축을 풀지 않고 앱 내부 저장소에 보관한 뒤 WML 경로로 가상 제공됩니다.");detail.setTextColor(Color.rgb(214,224,217));detail.setTextSize(14);detail.setLineSpacing(dp(3),1f);page.addView(detail);
-        status=new TextView(this);status.setTextColor(Color.rgb(245,210,130));status.setTextSize(13);status.setPadding(dp(13),dp(12),dp(13),dp(12));status.setBackgroundColor(Color.rgb(35,48,40));
-        LinearLayout.LayoutParams sl=new LinearLayout.LayoutParams(-1,-2);sl.topMargin=dp(16);sl.bottomMargin=dp(8);page.addView(status,sl);
-        folderText=new TextView(this);folderText.setTextColor(Color.rgb(160,180,166));folderText.setTextSize(12);LinearLayout.LayoutParams fl=new LinearLayout.LayoutParams(-1,-2);fl.bottomMargin=dp(12);page.addView(folderText,fl);
-        page.addView(button("게임 폴더 추가",true,this::chooseFolder),buttonParams());
-
-        TextView ptitle=new TextView(this);ptitle.setText("등록된 게임 폴더 · 독립 실행 세션");ptitle.setTextColor(Color.WHITE);ptitle.setTextSize(16);ptitle.setTypeface(null,1);
-        LinearLayout.LayoutParams ptl=new LinearLayout.LayoutParams(-1,-2);ptl.topMargin=dp(22);ptl.bottomMargin=dp(7);page.addView(ptitle,ptl);
-        profileSummary=new TextView(this);profileSummary.setTextColor(Color.rgb(160,180,166));profileSummary.setTextSize(12);page.addView(profileSummary);
-        profileList=new LinearLayout(this);profileList.setOrientation(LinearLayout.VERTICAL);LinearLayout.LayoutParams pl=new LinearLayout.LayoutParams(-1,-2);pl.topMargin=dp(7);page.addView(profileList,pl);
-
-        TextView ztitle=new TextView(this);ztitle.setText("앱 전용 ZIP 모드");ztitle.setTextColor(Color.WHITE);ztitle.setTextSize(16);ztitle.setTypeface(null,1);
-        LinearLayout.LayoutParams ztl=new LinearLayout.LayoutParams(-1,-2);ztl.topMargin=dp(24);ztl.bottomMargin=dp(7);page.addView(ztitle,ztl);
-        page.addView(button("모드 ZIP 설치 · 압축 해제 없이 앱에만 저장",false,this::chooseModZip),buttonParams());
-        zipSummary=new TextView(this);zipSummary.setTextColor(Color.rgb(160,180,166));zipSummary.setTextSize(12);LinearLayout.LayoutParams zsl=new LinearLayout.LayoutParams(-1,-2);zsl.topMargin=dp(7);page.addView(zipSummary,zsl);
-        zipModList=new LinearLayout(this);zipModList.setOrientation(LinearLayout.VERTICAL);LinearLayout.LayoutParams zpl=new LinearLayout.LayoutParams(-1,-2);zpl.topMargin=dp(6);page.addView(zipModList,zpl);
-
-        TextView imageTitle=new TextView(this);imageTitle.setText("이미지 생성 서비스");imageTitle.setTextColor(Color.WHITE);imageTitle.setTextSize(16);imageTitle.setTypeface(null,1);
-        LinearLayout.LayoutParams imageTitleParams=new LinearLayout.LayoutParams(-1,-2);imageTitleParams.topMargin=dp(24);imageTitleParams.bottomMargin=dp(7);page.addView(imageTitle,imageTitleParams);
-        TextView imageDesc=new TextView(this);imageDesc.setText("Wayward ImageGen 0.8.4 서버를 런처 APK에 내장했습니다. 게임 폴더나 ZIP에서 서버를 찾지 않으며, NovelAI와 PC ComfyUI를 같은 내장 서버로 실행합니다.");imageDesc.setTextColor(Color.rgb(174,194,181));imageDesc.setTextSize(12);imageDesc.setLineSpacing(dp(2),1f);page.addView(imageDesc);
-        page.addView(button("이미지 서비스 관리 · 등록 / 테스트",true,()->startActivity(new Intent(MainActivity.this,ImageProviderActivity.class))),buttonParams());
-        page.addView(button("Image Studio 연결 · 런처 등록 서비스 사용",true,this::startLauncherProviderServer),buttonParams());
-        page.addView(button("이미지 전달 진단 · 로그 보기",false,()->startActivity(new Intent(MainActivity.this,ImageDiagnosticsActivity.class))),buttonParams());
-        TextView runtimeHint=new TextView(this);runtimeHint.setText("이미지 서버 자체는 인증정보 없이 먼저 실행됩니다. NovelAI 인증정보는 NovelAI 생성 경로에만 사용하며 Cloudflare FLUX는 별도 Worker 서비스의 자체 인증 설정만 사용합니다. ComfyUI 원격 연결도 독립 설정입니다. NovelAI 토큰을 서버 실행 후 변경했다면 새 토큰 적용을 위해 서버를 중지하고 다시 시작하세요.");runtimeHint.setTextColor(Color.rgb(174,194,181));runtimeHint.setTextSize(12);runtimeHint.setLineSpacing(dp(2),1f);LinearLayout.LayoutParams runtimeHintParams=new LinearLayout.LayoutParams(-1,-2);runtimeHintParams.topMargin=dp(10);page.addView(runtimeHint,runtimeHintParams);
-        comfyUrlInput=new EditText(this);comfyUrlInput.setSingleLine(true);comfyUrlInput.setTextSize(14);comfyUrlInput.setTextColor(Color.WHITE);comfyUrlInput.setHintTextColor(Color.rgb(142,160,148));comfyUrlInput.setHint("http://PC의-LAN-IP:8188 또는 https://PC의-Tailscale-주소:8188");comfyUrlInput.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);comfyUrlInput.setPadding(dp(12),dp(9),dp(12),dp(9));comfyUrlInput.setText(getSharedPreferences(PREFS,MODE_PRIVATE).getString(KEY_COMFY_URL,""));LinearLayout.LayoutParams comfyInputParams=new LinearLayout.LayoutParams(-1,dp(52));comfyInputParams.topMargin=dp(8);comfyInputParams.bottomMargin=dp(7);page.addView(comfyUrlInput,comfyInputParams);
-        page.addView(button("NovelAI · 런처 내장 서버 실행",true,this::startNovelAiServer),buttonParams());
-        page.addView(button("ComfyUI 연결 서버 실행",true,this::startComfyConnectionServer),buttonParams());
-        page.addView(button("이미지 생성 설정 / 상태 열기",false,this::openImageGenPanel),buttonParams());
-        imageGenStatus=new TextView(this);imageGenStatus.setTextColor(Color.rgb(245,210,130));imageGenStatus.setTextSize(12);imageGenStatus.setPadding(dp(10),dp(9),dp(10),dp(9));imageGenStatus.setBackgroundColor(Color.rgb(35,48,40));
-        LinearLayout.LayoutParams imageStatusParams=new LinearLayout.LayoutParams(-1,-2);imageStatusParams.topMargin=dp(8);imageStatusParams.bottomMargin=dp(7);page.addView(imageGenStatus,imageStatusParams);
-        page.addView(button("이미지 생성 서버 중지",false,this::stopImageGenServer),buttonParams());
-
-        TextView help=new TextView(this);help.setText("ZIP 설치 위치: 이 앱의 비공개 files 저장소\n게임 폴더에는 ZIP이나 압축 해제 파일을 쓰지 않습니다. 설치한 모드는 등록된 게임 세션에서 공통으로 사용할 수 있으며, 모드 활성화/순서는 각 게임 세션의 브라우저 저장소에 따로 보관됩니다.");
-        help.setTextColor(Color.rgb(151,171,158));help.setTextSize(12);help.setLineSpacing(dp(3),1f);LinearLayout.LayoutParams hl=new LinearLayout.LayoutParams(-1,-2);hl.topMargin=dp(18);page.addView(help,hl);
-        home=page;root.addView(scroll,new FrameLayout.LayoutParams(-1,-1));setContentView(root);
-        renderProfiles();renderZipMods();refreshImageGenStatus();
-    }
-
     private Button compactButton(String label,boolean primary,Runnable action){
-        Button b=new Button(this);b.setText(label);b.setAllCaps(false);b.setTextSize(12);b.setMinHeight(dp(42));
-        b.setTextColor(Color.WHITE);b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primary?Color.rgb(54,105,76):Color.rgb(70,78,70)));
+        Button b=new Button(this);b.setText(label);b.setAllCaps(false);b.setTextSize(12);
+        b.setTextColor(primary?Color.WHITE:Color.rgb(43,47,52));b.setPadding(dp(9),dp(3),dp(9),dp(3));
+        b.setMinHeight(dp(36));b.setBackground(uiShape(primary?Color.rgb(43,47,52):Color.rgb(246,247,248),
+                primary?0:Color.rgb(224,227,230),10));
         b.setOnClickListener(v->action.run());return b;
     }
+    private void showHome(){
+        root=new FrameLayout(this);root.setBackgroundColor(Color.rgb(246,247,248));
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);
+        LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);
+        page.setPadding(dp(16),dp(13),dp(16),dp(24));scroll.addView(page);
 
+        LinearLayout top=new LinearLayout(this);top.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView title=uiText("WAYWARD",24,Color.rgb(24,27,31),true);title.setLetterSpacing(0.035f);
+        top.addView(title,new LinearLayout.LayoutParams(0,-2,1f));
+        Button info=compactButton("안내",false,this::showLauncherInfoDialog);
+        top.addView(info,new LinearLayout.LayoutParams(dp(56),dp(38)));
+        LinearLayout.LayoutParams topParams=new LinearLayout.LayoutParams(-1,-2);topParams.bottomMargin=dp(3);
+        page.addView(top,topParams);
+        TextView subtitle=uiText("GAME LAUNCHER  ·  게임과 모드를 한곳에서",11,Color.rgb(111,118,125),false);
+        subtitle.setLetterSpacing(0.025f);page.addView(subtitle);
+
+        LinearLayout statusCard=uiCard();
+        LinearLayout.LayoutParams statusParams=new LinearLayout.LayoutParams(-1,-2);
+        statusParams.topMargin=dp(13);statusParams.bottomMargin=dp(16);page.addView(statusCard,statusParams);
+        status=uiText("런처 상태 확인 중",12,Color.rgb(35,39,43),true);
+        statusCard.addView(status);
+        folderText=uiText("",11,Color.rgb(113,120,127),false);
+        LinearLayout.LayoutParams folderParams=new LinearLayout.LayoutParams(-1,-2);folderParams.topMargin=dp(6);
+        statusCard.addView(folderText,folderParams);
+
+        LinearLayout gameHeader=new LinearLayout(this);gameHeader.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView gamesTitle=uiText("내 게임",16,Color.rgb(27,30,34),true);
+        gameHeader.addView(gamesTitle,new LinearLayout.LayoutParams(0,-2,1f));
+        profileSummary=uiText("0개",11,Color.rgb(111,118,125),false);gameHeader.addView(profileSummary);
+        LinearLayout.LayoutParams gameHeaderParams=new LinearLayout.LayoutParams(-1,-2);
+        gameHeaderParams.bottomMargin=dp(8);page.addView(gameHeader,gameHeaderParams);
+        profileList=new LinearLayout(this);profileList.setOrientation(LinearLayout.VERTICAL);page.addView(profileList);
+
+        LinearLayout tiles=new LinearLayout(this);tiles.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams tilesParams=new LinearLayout.LayoutParams(-1,-2);
+        tilesParams.topMargin=dp(14);tilesParams.bottomMargin=dp(14);page.addView(tiles,tilesParams);
+
+        LinearLayout modsCard=uiCard();
+        LinearLayout.LayoutParams tileLeft=new LinearLayout.LayoutParams(0,-2,1f);tileLeft.rightMargin=dp(6);
+        tiles.addView(modsCard,tileLeft);
+        modsCard.addView(uiText("MODS",9,Color.rgb(128,135,142),true));
+        gap(modsCard,5);modsCard.addView(uiText("ZIP 모드",15,Color.rgb(27,30,34),true));
+        zipSummary=uiText("0개 설치됨",11,Color.rgb(109,117,125),false);
+        LinearLayout.LayoutParams zipSummaryParams=new LinearLayout.LayoutParams(-1,-2);zipSummaryParams.topMargin=dp(5);
+        modsCard.addView(zipSummary,zipSummaryParams);
+        LinearLayout.LayoutParams zipInstallParams=new LinearLayout.LayoutParams(-1,dp(38));zipInstallParams.topMargin=dp(10);
+        modsCard.addView(compactButton("ZIP 설치",true,this::chooseModZip),zipInstallParams);
+        LinearLayout.LayoutParams zipManageParams=new LinearLayout.LayoutParams(-1,dp(36));zipManageParams.topMargin=dp(5);
+        modsCard.addView(compactButton("목록 관리",false,this::showZipManager),zipManageParams);
+
+        LinearLayout imageCard=uiCard();
+        LinearLayout.LayoutParams tileRight=new LinearLayout.LayoutParams(0,-2,1f);tileRight.leftMargin=dp(6);
+        tiles.addView(imageCard,tileRight);
+        imageCard.addView(uiText("IMAGE",9,Color.rgb(128,135,142),true));
+        gap(imageCard,5);imageCard.addView(uiText("이미지 생성",15,Color.rgb(27,30,34),true));
+        imageGenStatus=uiText("서버 상태 확인 중",11,Color.rgb(109,117,125),false);
+        imageGenStatus.setMaxLines(3);
+        LinearLayout.LayoutParams imageStatusParams=new LinearLayout.LayoutParams(-1,dp(43));imageStatusParams.topMargin=dp(5);
+        imageCard.addView(imageGenStatus,imageStatusParams);
+        LinearLayout.LayoutParams providerButtonParams=new LinearLayout.LayoutParams(-1,dp(38));providerButtonParams.topMargin=dp(4);
+        imageCard.addView(compactButton("서비스 관리",true,()->startActivity(new Intent(MainActivity.this,ImageProviderActivity.class))),providerButtonParams);
+        LinearLayout.LayoutParams panelButtonParams=new LinearLayout.LayoutParams(-1,dp(36));panelButtonParams.topMargin=dp(5);
+        imageCard.addView(compactButton("설정 패널",false,this::openImageGenPanel),panelButtonParams);
+
+        LinearLayout advancedCard=uiCard();
+        LinearLayout.LayoutParams advancedParams=new LinearLayout.LayoutParams(-1,-2);page.addView(advancedCard,advancedParams);
+        LinearLayout advancedHeader=new LinearLayout(this);advancedHeader.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView advancedTitle=uiText("고급 도구",14,Color.rgb(33,37,41),true);
+        advancedHeader.addView(advancedTitle,new LinearLayout.LayoutParams(0,-2,1f));
+        Button expand=compactButton("펼치기  +",false,()->{});
+        advancedHeader.addView(expand,new LinearLayout.LayoutParams(dp(88),dp(34)));
+        advancedCard.addView(advancedHeader);
+        LinearLayout advancedContent=new LinearLayout(this);advancedContent.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams advancedContentParams=new LinearLayout.LayoutParams(-1,-2);
+        advancedContentParams.topMargin=dp(10);advancedCard.addView(advancedContent,advancedContentParams);
+        advancedContent.setVisibility(View.GONE);
+        expand.setOnClickListener(v->{
+            boolean show=advancedContent.getVisibility()!=View.VISIBLE;
+            advancedContent.setVisibility(show?View.VISIBLE:View.GONE);
+            expand.setText(show?"접기  −":"펼치기  +");
+        });
+        TextView advancedHint=uiText("일반 실행에는 필요하지 않은 서버 제어와 진단 도구입니다.",11,Color.rgb(111,118,125),false);
+        advancedContent.addView(advancedHint);
+        LinearLayout.LayoutParams launcherProviderParams=new LinearLayout.LayoutParams(-1,dp(40));launcherProviderParams.topMargin=dp(8);
+        advancedContent.addView(compactButton("Image Studio에 런처 서비스 연결",true,this::startLauncherProviderServer),launcherProviderParams);
+        LinearLayout.LayoutParams novelParams=new LinearLayout.LayoutParams(-1,dp(40));novelParams.topMargin=dp(6);
+        advancedContent.addView(compactButton("NovelAI 서버 시작",false,this::startNovelAiServer),novelParams);
+        comfyUrlInput=new EditText(this);comfyUrlInput.setSingleLine(true);comfyUrlInput.setTextSize(12);
+        comfyUrlInput.setTextColor(Color.rgb(35,39,43));comfyUrlInput.setHintTextColor(Color.rgb(143,149,155));
+        comfyUrlInput.setHint("ComfyUI 주소 · http://PC-IP:8188");
+        comfyUrlInput.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);
+        comfyUrlInput.setPadding(dp(11),dp(7),dp(11),dp(7));
+        comfyUrlInput.setBackground(uiShape(Color.WHITE,Color.rgb(221,225,229),10));
+        comfyUrlInput.setText(getSharedPreferences(PREFS,MODE_PRIVATE).getString(KEY_COMFY_URL,""));
+        LinearLayout.LayoutParams comfyInputParams=new LinearLayout.LayoutParams(-1,dp(44));
+        comfyInputParams.topMargin=dp(7);advancedContent.addView(comfyUrlInput,comfyInputParams);
+        LinearLayout.LayoutParams comfyStartParams=new LinearLayout.LayoutParams(-1,dp(40));
+        comfyStartParams.topMargin=dp(6);
+        advancedContent.addView(compactButton("ComfyUI 연결 서버 시작",false,this::startComfyConnectionServer),comfyStartParams);
+        LinearLayout advancedActions=new LinearLayout(this);advancedActions.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams advancedActionsParams=new LinearLayout.LayoutParams(-1,dp(40));
+        advancedActionsParams.topMargin=dp(6);advancedContent.addView(advancedActions,advancedActionsParams);
+        Button diagnostics=compactButton("전달 진단",false,()->startActivity(new Intent(MainActivity.this,ImageDiagnosticsActivity.class)));
+        advancedActions.addView(diagnostics,new LinearLayout.LayoutParams(0,-1,1f));
+        Button stop=compactButton("서버 중지",false,this::stopImageGenServer);
+        LinearLayout.LayoutParams stopParams=new LinearLayout.LayoutParams(0,-1,1f);stopParams.leftMargin=dp(6);
+        advancedActions.addView(stop,stopParams);
+        TextView storageHint=uiText("게임 폴더는 직접 수정하지 않습니다. ZIP 모드는 앱 내부 저장소에 보관됩니다.",10,Color.rgb(126,133,140),false);
+        LinearLayout.LayoutParams storageHintParams=new LinearLayout.LayoutParams(-1,-2);
+        storageHintParams.topMargin=dp(10);advancedContent.addView(storageHint,storageHintParams);
+
+        home=page;root.addView(scroll,new FrameLayout.LayoutParams(-1,-1));setContentView(root);
+        renderProfiles();renderZipMods();refreshStatus();refreshImageGenStatus();
+    }
+
+    private void showLauncherInfoDialog(){
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("런처 안내")
+                .setMessage("게임 폴더는 읽기 권한으로 연결해 원본 파일을 직접 수정하지 않습니다. ZIP 모드는 이 앱의 비공개 저장소에 보관하고 게임 세션에서 가상 경로로 제공합니다. 게임별 실행 세션과 브라우저 저장 데이터는 서로 분리됩니다.")
+                .setPositiveButton("확인",null).show();
+    }
     private void chooseFolder(){
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
@@ -383,40 +483,83 @@ public final class MainActivity extends Activity {
     }
 
     private void renderProfiles(){
-        if(profileList==null)return;profileList.removeAllViews();
-        if(profileSummary!=null)profileSummary.setText("등록된 폴더 "+profiles.size()+"개 · 각 폴더는 최근 앱에서 별도 창으로 유지됩니다.");
+        if(profileList==null)return;
+        profileList.removeAllViews();
+        if(profileSummary!=null)profileSummary.setText(profiles.size()+"개 등록");
         if(profiles.isEmpty()){
-            TextView empty=new TextView(this);empty.setText("등록된 게임 폴더가 없습니다. 위 버튼으로 Wayward 또는 Faith 폴더를 추가하세요.");
-            empty.setTextColor(Color.rgb(151,171,158));empty.setTextSize(12);profileList.addView(empty);return;
+            LinearLayout empty=uiCard();
+            empty.addView(uiText("등록된 게임이 없습니다.",13,Color.rgb(44,48,52),true));
+            LinearLayout.LayoutParams hintParams=new LinearLayout.LayoutParams(-1,-2);hintParams.topMargin=dp(4);
+            empty.addView(uiText("상단의 폴더 추가를 눌러 Wayward 또는 Faith 폴더를 선택하세요.",11,Color.rgb(112,119,126),false),hintParams);
+            profileList.addView(empty);return;
         }
         for(GameProfile p:profiles){
-            LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.HORIZONTAL);card.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            card.setPadding(dp(8),dp(5),dp(5),dp(5));card.setBackgroundColor(Color.rgb(29,43,35));
-            LinearLayout.LayoutParams cl=new LinearLayout.LayoutParams(-1,-2);cl.bottomMargin=dp(6);profileList.addView(card,cl);
-            TextView label=new TextView(this);label.setText(p.label);label.setTextColor(Color.WHITE);label.setTextSize(13);label.setMaxLines(2);
-            card.addView(label,new LinearLayout.LayoutParams(0,dp(48),1f));
-            Button start=compactButton("실행",true,()->launchProfileSession(p.id));card.addView(start,new LinearLayout.LayoutParams(dp(72),dp(48)));
-            Button remove=compactButton("삭제",false,()->removeProfile(p.id));LinearLayout.LayoutParams rl=new LinearLayout.LayoutParams(dp(72),dp(48));rl.leftMargin=dp(4);card.addView(remove,rl);
+            LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.HORIZONTAL);
+            card.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            card.setPadding(dp(11),dp(7),dp(7),dp(7));
+            card.setBackground(uiShape(Color.WHITE,Color.rgb(229,232,235),14));
+            LinearLayout.LayoutParams cardParams=new LinearLayout.LayoutParams(-1,-2);cardParams.bottomMargin=dp(6);
+            profileList.addView(card,cardParams);
+            LinearLayout identity=new LinearLayout(this);identity.setOrientation(LinearLayout.VERTICAL);
+            TextView name=uiText(p.label,14,Color.rgb(30,34,38),true);name.setMaxLines(1);
+            identity.addView(name);
+            TextView meta=uiText(p.id.equals(activeProfileId)?"현재 선택된 게임":"등록된 게임 폴더",10,Color.rgb(124,131,138),false);
+            LinearLayout.LayoutParams metaParams=new LinearLayout.LayoutParams(-1,-2);metaParams.topMargin=dp(3);
+            identity.addView(meta,metaParams);
+            card.addView(identity,new LinearLayout.LayoutParams(0,dp(42),1f));
+            Button start=compactButton("실행",true,()->launchProfileSession(p.id));
+            card.addView(start,new LinearLayout.LayoutParams(dp(66),dp(38)));
+            Button more=compactButton("⋯",false,()->showProfileActions(p));
+            LinearLayout.LayoutParams moreParams=new LinearLayout.LayoutParams(dp(40),dp(38));moreParams.leftMargin=dp(5);
+            card.addView(more,moreParams);
         }
     }
 
+    private void showProfileActions(GameProfile profile){
+        new android.app.AlertDialog.Builder(this).setTitle(profile.label)
+                .setItems(new String[]{"게임 실행","폴더 등록 해제"},(dialog,which)->{
+                    if(which==0)launchProfileSession(profile.id);
+                    else new android.app.AlertDialog.Builder(this).setTitle("게임 폴더 등록 해제")
+                            .setMessage(profile.label+" 폴더를 런처 목록에서 제거할까요? 게임 원본 파일은 삭제되지 않습니다.")
+                            .setNegativeButton("취소",null)
+                            .setPositiveButton("등록 해제",(confirm,button)->removeProfile(profile.id)).show();
+                }).setNegativeButton("닫기",null).show();
+    }
+
     private void renderZipMods(){
-        if(zipModList==null||zipMods==null)return;zipModList.removeAllViews();
+        if(zipMods==null)return;
         List<String> ids=zipMods.listModIds();
-        if(zipSummary!=null)zipSummary.setText("앱 전용 ZIP 모드 "+ids.size()+"개 · 게임 폴더에는 파일을 풀거나 쓰지 않습니다.");
-        if(ids.isEmpty()){
-            TextView empty=new TextView(this);empty.setText("아직 설치된 ZIP 모드가 없습니다.");empty.setTextColor(Color.rgb(151,171,158));empty.setTextSize(12);zipModList.addView(empty);return;
-        }
+        if(zipSummary!=null)zipSummary.setText(ids.size()+"개 설치됨");
+        if(zipModList==null)return;
+        zipModList.removeAllViews();
         for(String id:ids){
-            LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            TextView label=new TextView(this);label.setText(id);label.setTextColor(Color.rgb(214,224,217));label.setTextSize(13);
-            row.addView(label,new LinearLayout.LayoutParams(0,dp(44),1f));
-            Button remove=compactButton("ZIP 제거",false,()->{
-                if(zipMods.uninstall(id)){bumpZipRevision();renderZipMods();refreshStatus();if(web!=null){loadedZipRevision=getZipRevision();web.reload();}}
-                else Toast.makeText(this,"ZIP 모드를 제거하지 못했습니다.",Toast.LENGTH_SHORT).show();
-            });
-            row.addView(remove,new LinearLayout.LayoutParams(dp(100),dp(44)));zipModList.addView(row);
+            TextView label=uiText(id,12,Color.rgb(57,62,67),false);
+            zipModList.addView(label,new LinearLayout.LayoutParams(-1,dp(34)));
         }
+    }
+
+    private void showZipManager(){
+        List<String> ids=zipMods==null?new ArrayList<>():zipMods.listModIds();
+        android.app.AlertDialog.Builder dialog=new android.app.AlertDialog.Builder(this).setTitle("ZIP 모드 관리");
+        if(ids.isEmpty()){
+            dialog.setMessage("설치된 ZIP 모드가 없습니다.");
+        }else{
+            dialog.setItems(ids.toArray(new String[0]),(window,which)->showZipModActions(ids.get(which)));
+        }
+        dialog.setPositiveButton("ZIP 설치",(window,which)->chooseModZip());
+        dialog.setNegativeButton("닫기",null);dialog.show();
+    }
+
+    private void showZipModActions(String id){
+        new android.app.AlertDialog.Builder(this).setTitle(id)
+                .setMessage("이 ZIP 모드를 앱 내부 저장소에서 제거할까요?")
+                .setNegativeButton("취소",null)
+                .setPositiveButton("제거",(dialog,which)->{
+                    if(zipMods!=null&&zipMods.uninstall(id)){
+                        bumpZipRevision();renderZipMods();refreshStatus();
+                        if(web!=null){loadedZipRevision=getZipRevision();web.reload();}
+                    }else Toast.makeText(this,"ZIP 모드를 제거하지 못했습니다.",Toast.LENGTH_SHORT).show();
+                }).show();
     }
 
     private String gameFile(){
@@ -437,13 +580,18 @@ public final class MainActivity extends Activity {
     }
     private void refreshStatus(){
         if(tree==null){
-            status("등록된 게임 폴더 "+profiles.size()+"개 · 앱 전용 ZIP 모드 "+(zipMods==null?0:zipMods.listModIds().size())+"개");
-            if(folderText!=null)folderText.setText("");return;
+            int zipCount=zipMods==null?0:zipMods.listModIds().size();
+            status("준비 완료  ·  게임 "+profiles.size()+"개  ·  ZIP 모드 "+zipCount+"개");
+            if(folderText!=null)folderText.setText("게임 폴더를 등록하면 여기에서 상태를 확인할 수 있습니다.");
+            return;
         }
         try{
-            String f=gameFile();status(f==null?"게임 HTML을 찾지 못했습니다.":"게임 확인 완료 · 인식 가능한 WML 모드 "+allModIds().size()+"개");
-            if(folderText!=null)folderText.setText("선택 폴더: "+tree.rootName()+"\n실행 파일: "+(f==null?"없음":f));
-        }catch(Exception e){status("폴더를 읽을 수 없습니다. "+msg(e));}
+            String f=gameFile();
+            status(f==null?"선택한 폴더에서 게임 HTML을 찾지 못했습니다.":"게임 폴더 확인 완료  ·  WML 모드 "+allModIds().size()+"개");
+            if(folderText!=null)folderText.setText(tree.rootName()+"  ·  "+(f==null?"실행 파일 없음":f));
+        }catch(Exception e){
+            status("폴더를 읽을 수 없습니다. "+msg(e));
+        }
     }
     private void refreshGame(){if(web!=null&&web.getVisibility()==View.VISIBLE){if(tree!=null)tree.invalidateDirectoryIndex();web.clearCache(true);web.reload();Toast.makeText(this,"게임과 앱 전용 ZIP 모드 및 이미지 캐시를 새로 읽습니다.",Toast.LENGTH_SHORT).show();}else refreshStatus();}
 
