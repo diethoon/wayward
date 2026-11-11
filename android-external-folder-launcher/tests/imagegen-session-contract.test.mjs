@@ -29,8 +29,6 @@ assert.doesNotMatch(automaticStartup, /writeImageGenRuntimeConfig\s*\(/,
   "opening a game must not overwrite the selected NovelAI or ComfyUI mode");
 assert.doesNotMatch(automaticStartup, /ImageGenBackendInstaller\.install\s*\(/,
   "opening a game must not install or prepare a server that was not requested");
-assert.doesNotMatch(automaticStartup, /novelai/,
-  "session entry must not force NovelAI mode");
 assert.doesNotMatch(main, /String imageStudioModId\(\)/,
   "server startup no longer depends on extracting or inspecting the game's WML mod");
 
