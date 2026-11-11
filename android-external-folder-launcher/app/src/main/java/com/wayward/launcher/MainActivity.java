@@ -557,7 +557,7 @@ public final class MainActivity extends Activity {
                         }
                         return folderHandler.serveGamePath(path.substring(6));
                     }
-                    if(FolderHandler.isImageRequestPath(path))return serveImageRequest(folderHandler,path,imageDiagnostics);
+                    if(path != null && path.startsWith("/images/__wayward_generated__/"))\n                        return serveGeneratedImageRequest(path, imageDiagnostics);\n                    if(FolderHandler.isImageRequestPath(path))return serveImageRequest(folderHandler,path,imageDiagnostics);
                 }
                 if("art.sintention.com".equalsIgnoreCase(u.getHost())){
                     String path=u.getPath();
@@ -609,6 +609,68 @@ public final class MainActivity extends Activity {
             DiagnosticsLogger.event(this,"WARN","webview","image_resource_slow_or_failed",details);
         }
         return response;
+    }
+
+
+    /**
+     * Serves ImageGen's app-private cache under the HTTPS game origin.
+     * The managed Bun server is HTTP loopback-only, so its /images URL cannot
+     * be used directly by this HTTPS WebView (mixed content is disabled).
+     */
+    private WebResourceResponse serveGeneratedImageRequest(
+            String requestPath, java.util.concurrent.atomic.AtomicInteger samples) {
+        final String prefix = "/images/__wayward_generated__/";
+        if (requestPath == null || !requestPath.startsWith(prefix)) {
+            return generatedImageError(404, "Not Found", requestPath);
+        }
+        try {
+            String relative = FolderHandler.normal(requestPath.substring(prefix.length()));
+            if (relative == null) return generatedImageError(400, "Bad Request", requestPath);
+
+            String mime = FolderHandler.mime(relative);
+            if (!("image/png".equals(mime) || "image/jpeg".equals(mime)
+                    || "image/webp".equals(mime) || "image/gif".equals(mime)
+                    || "image/avif".equals(mime))) {
+                return generatedImageError(415, "Unsupported Media Type", requestPath);
+            }
+
+            File root = new File(getFilesDir(), "imagegen/images").getCanonicalFile();
+            File image = new File(root, relative).getCanonicalFile();
+            String rootPrefix = root.getPath() + File.separator;
+            if (!image.getPath().startsWith(rootPrefix)) {
+                return generatedImageError(403, "Forbidden", requestPath);
+            }
+            if (!image.isFile()) return generatedImageError(404, "Not Found", requestPath);
+            long length = image.length();
+            if (length <= 0 || length > 25L * 1024L * 1024L) {
+                return generatedImageError(413, "Content Too Large", requestPath);
+            }
+
+            java.util.HashMap<String, String> headers = new java.util.HashMap<>();
+            headers.put("Cache-Control", "no-store");
+            headers.put("X-Content-Type-Options", "nosniff");
+            return new WebResourceResponse(mime, null, 200, "OK", headers, new FileInputStream(image));
+        } catch (java.io.FileNotFoundException error) {
+            return generatedImageError(404, "Not Found", requestPath);
+        } catch (Exception error) {
+            return generatedImageError(500, "Read Error", requestPath);
+        }
+    }
+
+    private WebResourceResponse generatedImageError(int status, String reason, String requestPath) {
+        try {
+            JSONObject diagnostic = new JSONObject();
+            diagnostic.put("srcKind", "generated_image");
+            diagnostic.put("responseStatus", status);
+            ImagePipelineDiagnostics.addSanitizedPath(diagnostic, requestPath);
+            ImagePipelineDiagnostics.record(this, "webview_generated_image_resource_error", diagnostic);
+        } catch (Exception ignored) {}
+        byte[] body = "Generated image unavailable".getBytes(StandardCharsets.UTF_8);
+        java.util.HashMap<String, String> headers = new java.util.HashMap<>();
+        headers.put("Cache-Control", "no-store");
+        headers.put("X-Content-Type-Options", "nosniff");
+        return new WebResourceResponse("text/plain", "UTF-8", status, reason, headers,
+                new ByteArrayInputStream(body));
     }
 
     private void installImageGenDocumentStartScript(String origin) {
