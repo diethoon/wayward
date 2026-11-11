@@ -776,7 +776,7 @@ public final class ImageGenServiceRuntimeTest {
                     wmlBridgeState.optBoolean("localeBundleMissing", false));
             assertEquals("The Korean HTML fixture was incorrectly booted in English, disabling Korean-only mods. "
                             + wmlBridgeDiagnostics,
-                    "ko", wmlBridgeState.optString("lang", ""));
+                    "ko", wmlState.optString("lang", ""));
             JSONObject officialSymbols = wmlBridgeState.optJSONObject("officialSymbols");
             assertNotNull("The launcher did not register the merged 2026-11-01 symbol table. "
                             + wmlBridgeDiagnostics, officialSymbols);
