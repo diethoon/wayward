@@ -63,6 +63,32 @@
     return backend.baseUrl ? backend.baseUrl + raw : null;
   }
 
+  function wrapSettingsStore(store) {
+    if (!store || typeof store.getState !== "function") return store;
+    try {
+      const originalGetState = store.getState.bind(store);
+      const facade = Object.create(store);
+      Object.defineProperty(facade, "getState", {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value() {
+          const state = originalGetState();
+          // The launcher's running engine is authoritative. Keep the persisted
+          // game preference untouched, but do not let "off" suppress requests
+          // while a launcher-managed provider is ready.
+          if (runtimeStatus().ready && state && state.imageBackendMode === "off") {
+            return { ...state, imageBackendMode: "auto" };
+          }
+          return state;
+        }
+      });
+      return facade;
+    } catch (_) {
+      return store;
+    }
+  }
+
   function applyRuntimePolicy() {
     const status = runtimeStatus();
     const offlineOnly = !status.ready;
@@ -100,6 +126,9 @@
       enumerable: true,
       writable: true,
       value(name, ...args) {
+        if (name === "settingsStore") {
+          return wrapSettingsStore(originalFn(name, ...args));
+        }
         if (name === "imageBackendProbe") {
           return async () => applyRuntimePolicy();
         }
