@@ -19,6 +19,7 @@ const batchRoutesSource = readBackend("batch/routes.ts");
 const batchQueueSource = readBackend("batch/queue.ts");
 const comfyJobRunnerSource = readBackend("comfy/jobRunner.ts");
 const naiClientSource = readBackend("nai/client.ts");
+const generationSettingsSource = readBackend("routes/generationSettings.ts");
 
 assert.match(batchRoutesSource,
   /typeof item\.talentId !== 'string' \|\| typeof item\.prompt !== 'string'/,
@@ -46,6 +47,19 @@ assert.match(naiClientSource,
 assert.match(naiClientSource,
   /v4_negative_prompt: \{ caption: \{ base_caption: negativePrompt, char_captions: \[\] \}/,
   "the NAI request uses the prepared negative prompt");
+
+assert.match(generationSettingsSource,
+  /router\.get\('\/api\/generation\/settings'/,
+  "Image Studio generation settings are readable from the bundled backend");
+assert.match(generationSettingsSource,
+  /router\.add\('PUT', '\/api\/generation\/settings'/,
+  "Image Studio generation settings are writable through the bundled backend");
+assert.match(generationSettingsSource,
+  /config\.sdxlPositivePrompt = settings\.sdxlPositivePrompt[\s\S]*config\.sdxlNegativePrompt = settings\.sdxlNegativePrompt/,
+  "saved Comfy positive/negative prompt settings are applied to runtime config");
+assert.match(generationSettingsSource,
+  /config\.naiCommonPrompt = settings\.naiCommonPrompt[\s\S]*config\.naiArtistPrompt = settings\.naiArtistPrompt[\s\S]*config\.naiNegativePrompt = settings\.naiNegativePrompt/,
+  "saved NAI prompt settings are applied to runtime config");
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const toBase64 = value => Buffer.from(value, "utf8").toString("base64");
@@ -147,6 +161,8 @@ async function exerciseEngine(engine) {
     "http://127.0.0.1:8189/api/batch/status");
   assert.equal(imageServerUrl("/api/batch/enqueue"),
     "http://127.0.0.1:8189/api/batch/enqueue");
+  assert.equal(imageServerUrl("/api/generation/settings"),
+    "http://127.0.0.1:8189/api/generation/settings");
 
   async function sendThroughWebViewProxy(url, init, responseBody) {
     const promise = window.fetch(url, init);
@@ -174,6 +190,51 @@ async function exerciseEngine(engine) {
   assert.equal(statusRequest.method, "GET");
   assert.equal(statusRequest.path, "/api/batch/status");
   assert.equal((await statusRequest.response.json()).enqueueMode, "append");
+
+  const settingsRead = await sendThroughWebViewProxy(
+    imageServerUrl("/api/generation/settings"),
+    { method: "GET", credentials: "omit" },
+    {
+      imageProvider: "sdxl",
+      sdxlPositivePrompt: "fixture common positive style",
+      sdxlNegativePrompt: "fixture common negative quality filters",
+      sdxlSteps: 32,
+      sdxlCfg: 6.5
+    }
+  );
+  assert.equal(settingsRead.method, "GET");
+  assert.equal(settingsRead.path, "/api/generation/settings");
+  const loadedSettings = await settingsRead.response.json();
+  assert.equal(loadedSettings.sdxlPositivePrompt, "fixture common positive style");
+  assert.equal(loadedSettings.sdxlNegativePrompt, "fixture common negative quality filters");
+  assert.equal(loadedSettings.sdxlSteps, 32);
+
+  // Image Studio's provider-specific prompt editor saves settings with PUT.
+  // Verify that the same launcher route carries edited values unchanged.
+  const editedSettings = {
+    imageProvider: "sdxl",
+    sdxlPositivePrompt: "edited common positive: cinematic portrait, soft rim light",
+    sdxlNegativePrompt: "edited common negative: blur, artifacts, bad anatomy",
+    sdxlSteps: 34,
+    sdxlCfg: 6.8,
+    sdxlWidth: 896,
+    sdxlHeight: 1152
+  };
+  const settingsWrite = await sendThroughWebViewProxy(
+    imageServerUrl("/api/generation/settings"),
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "omit",
+      body: JSON.stringify(editedSettings)
+    },
+    { saved: true, settings: editedSettings }
+  );
+  assert.equal(settingsWrite.method, "PUT");
+  assert.equal(settingsWrite.path, "/api/generation/settings");
+  assert.deepEqual(JSON.parse(settingsWrite.body), editedSettings,
+    engine + ": Image Studio prompt editor settings must pass through unchanged");
+  assert.equal((await settingsWrite.response.json()).saved, true);
 
   // Match BatchItem from wayward-imagegen 0.8.4. The earlier fixture used
   // 'key' instead of required 'talentId', so it could not pass the real route.
@@ -243,6 +304,6 @@ assert.match(proxyJava, /new URL\("http:\/\/127\.0\.0\.1:8189" \+ safePath\)/,
 
 const results = [];
 for (const engine of ["novelai", "comfy"]) results.push(await exerciseEngine(engine));
-assert.deepEqual(results, [{ engine: "novelai", calls: 2 }, { engine: "comfy", calls: 2 }]);
+assert.deepEqual(results, [{ engine: "novelai", calls: 4 }, { engine: "comfy", calls: 4 }]);
 
 console.log("Image Studio prompt fields and generation settings reach the launcher-managed NAI/Comfy server without proxy mutation.");
