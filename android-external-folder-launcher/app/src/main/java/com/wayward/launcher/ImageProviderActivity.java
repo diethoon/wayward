@@ -36,13 +36,13 @@ import java.util.concurrent.Executors;
 
 /** Native provider hub: profiles, encrypted credentials, and real sample-generation tests. */
 public final class ImageProviderActivity extends Activity {
-    private static final int BG = Color.rgb(14, 22, 19);
-    private static final int SURFACE = Color.rgb(27, 39, 33);
-    private static final int SURFACE_ALT = Color.rgb(36, 50, 42);
-    private static final int TEXT = Color.rgb(244, 247, 244);
-    private static final int MUTED = Color.rgb(169, 187, 175);
-    private static final int GREEN = Color.rgb(67, 139, 96);
-    private static final int AMBER = Color.rgb(235, 190, 111);
+    private static final int BG = Color.rgb(246, 247, 248);
+    private static final int SURFACE = Color.WHITE;
+    private static final int SURFACE_ALT = Color.rgb(244, 245, 246);
+    private static final int TEXT = Color.rgb(27, 30, 34);
+    private static final int MUTED = Color.rgb(109, 117, 125);
+    private static final int GREEN = Color.rgb(43, 47, 52);
+    private static final int AMBER = Color.rgb(145, 105, 34);
 
     private final ExecutorService tests = Executors.newFixedThreadPool(2);
     private ImageProviderStore store;
@@ -128,7 +128,7 @@ public final class ImageProviderActivity extends Activity {
     private LinearLayout card() {
         LinearLayout layout = column();
         layout.setPadding(dp(16), dp(15), dp(16), dp(15));
-        layout.setBackground(shape(SURFACE, Color.rgb(48, 65, 55), 17));
+        layout.setBackground(shape(SURFACE, Color.rgb(228, 231, 234), 15));
         return layout;
     }
 
@@ -150,7 +150,7 @@ public final class ImageProviderActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         LinearLayout page = column();
-        page.setPadding(dp(18), dp(12), dp(18), dp(30));
+        page.setPadding(dp(16), dp(9), dp(16), dp(24));
         scroll.addView(page);
         frame.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
         setContentView(frame);
@@ -165,31 +165,31 @@ public final class ImageProviderActivity extends Activity {
             else finish();
         });
         LinearLayout heading = column();
-        heading.addView(label(title, 22, TEXT, true));
+        heading.addView(label(title, 20, TEXT, true));
         heading.addView(label(subtitle, 12, MUTED, false));
         LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(0, -2, 1);
         headingParams.leftMargin = dp(8);
         top.addView(heading, headingParams);
         page.addView(top);
-        addGap(page, 18);
+        addGap(page, 10);
     }
 
     private void renderList() {
         editorShowing = false;
-        renderShell("이미지 서비스", "생성 엔진을 등록하고 게임별 기본 서비스를 지정합니다.");
+        renderShell("이미지 서비스", "공급자 등록 · 게임별 기본 엔진");
         LinearLayout page = (LinearLayout) ((ScrollView) frame.getChildAt(0)).getChildAt(0);
 
         LinearLayout intro = card();
         intro.addView(label("한 번 등록하고, 게임마다 선택", 16, TEXT, true));
         addGap(intro, 7);
-        intro.addView(label("Cloudflare FLUX, OpenAI 호환 API, 직접 구성한 REST 서비스까지 관리합니다. API 키는 Android 보안 키로 암호화해 앱 내부에만 저장합니다.", 13, MUTED, false));
+        intro.addView(label("연결 정보는 기기 내부에서 암호화해 보관합니다.", 12, MUTED, false));
         page.addView(intro);
         addGap(page, 12);
 
         LinearLayout novelAiCard = card();
         novelAiCard.addView(label("NovelAI · 런처 내장 서버", 15, TEXT, true));
         addGap(novelAiCard, 5);
-        novelAiCard.addView(label("NovelAI API 토큰은 Android Keystore 기반 AES-256-GCM으로 암호화해 앱 내부에 저장합니다. 게임 폴더와 WebView 저장소에는 넣지 않습니다.", 12, MUTED, false));
+        novelAiCard.addView(label("토큰은 기기 내부에서 암호화해 보관합니다.", 11, MUTED, false));
         addGap(novelAiCard, 8);
         novelAiCard.addView(label(data.novelAiToken == null || data.novelAiToken.isEmpty()
                 ? "상태: 토큰 미등록" : "상태: 토큰 등록됨 · 암호화 저장", 12, data.novelAiToken == null || data.novelAiToken.isEmpty() ? AMBER : GREEN, true));

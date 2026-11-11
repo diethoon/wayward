@@ -26,10 +26,10 @@ import java.util.Locale;
 
 /** User-facing viewer for local-only image pipeline diagnostics. */
 public final class ImageDiagnosticsActivity extends Activity {
-    private static final int BG = Color.rgb(16, 25, 21);
-    private static final int CARD = Color.rgb(35, 48, 40);
-    private static final int TEXT = Color.rgb(232, 239, 233);
-    private static final int MUTED = Color.rgb(164, 182, 170);
+    private static final int BG = Color.rgb(246, 247, 248);
+    private static final int CARD = Color.WHITE;
+    private static final int TEXT = Color.rgb(27, 30, 34);
+    private static final int MUTED = Color.rgb(109, 117, 125);
     private TextView logText;
     private Button clearLogButton;
     private String lastLog = "";
@@ -39,7 +39,7 @@ public final class ImageDiagnosticsActivity extends Activity {
         super.onCreate(state);
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setPadding(dp(18), dp(18), dp(18), dp(18));
+        page.setPadding(dp(16), dp(12), dp(16), dp(18));
         page.setBackgroundColor(BG);
 
         TextView title = new TextView(this);
@@ -104,10 +104,10 @@ public final class ImageDiagnosticsActivity extends Activity {
         Button button = new Button(this);
         button.setText(label);
         button.setAllCaps(false);
-        button.setTextColor(Color.WHITE);
-        button.setTextSize(14);
+        button.setTextColor(primary ? Color.WHITE : Color.rgb(40, 44, 48));
+        button.setTextSize(13);
         button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
-                primary ? Color.rgb(54, 105, 76) : Color.rgb(55, 68, 59)));
+                primary ? Color.rgb(43, 47, 52) : Color.rgb(239, 241, 243)));
         button.setOnClickListener(v -> action.run());
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(46));
         params.bottomMargin = dp(6);

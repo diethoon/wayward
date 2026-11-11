@@ -42,7 +42,7 @@ assert.match(ingestApi, /parseBody\(req\)/);
 assert.match(common, /MAX_IP_BATCHES_PER_MINUTE/);
 assert.match(main, /onRenderProcessGone/);
 assert.match(main, /logImageProviderDiagnostic/);
-assert.match(main, /이미지 전달 진단 · 로그 보기/);
+assert.match(main, /전달 진단/);
 assert.match(imagePipeline, /image-pipeline\.ndjson/);
 assert.match(imagePipeline, /MAX_BYTES/);
 assert.doesNotMatch(imagePipeline, /DiagnosticsUploader|uploadPending/);
