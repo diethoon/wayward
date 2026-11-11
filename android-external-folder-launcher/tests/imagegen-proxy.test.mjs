@@ -16,13 +16,18 @@ assert.match(source, /window\.WMLHost\.imageGenProxyFetch/);
 
 const bridgeCalls = [];
 const nativeCalls = [];
+const diagnostics = [];
 const window = {
+  __WAYWARD_LAUNCHER_IMAGE_RUNTIME__: Object.freeze({ engine: "novelai" }),
   location: { href: "https://session-test.appassets.androidplatform.net/game/index.html" },
   fetch: async (input) => {
     nativeCalls.push(String(input));
     return new Response("native-network");
   },
   WMLHost: {
+    logImageProviderDiagnostic(name, details) {
+      diagnostics.push({ name, details: JSON.parse(details) });
+    },
     imageGenProxyFetch(id, method, url, headersJson, bodyBase64) {
       bridgeCalls.push({ id, method, url, headersJson, bodyBase64 });
       const response = {
@@ -59,6 +64,14 @@ assert.deepEqual(await response.json(), { ok: true });
 assert.equal(bridgeCalls.length, 1);
 assert.equal(bridgeCalls[0].url, "/api/image/health");
 assert.equal(bridgeCalls[0].method, "GET");
+assert.equal(diagnostics.some(item =>
+  item.name === "launcher_imagegen_request_intercepted" &&
+  item.details.engine === "novelai"), true);
+assert.equal(diagnostics.some(item =>
+  item.name === "launcher_imagegen_request_dispatched" &&
+  item.details.engine === "novelai"), true);
+assert.equal(JSON.stringify(diagnostics).includes("items"), false,
+  "request diagnostics must not include body or prompt contents");
 
 const post = await window.fetch("http://localhost:8189/api/batch/enqueue?x=1", {
   method: "POST",

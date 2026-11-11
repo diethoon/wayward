@@ -31,28 +31,51 @@
   function prefersLauncherLocal() {
     const settings = gameSettings();
     const mode = String(settings.imageBackendMode || "auto");
-    if (mode === "off") return false;
+    // A ready launcher-managed engine takes precedence over the game's
+    // persisted "off" selector, without changing the saved preference.
+    if (mode === "off") return runtimeStatus().ready;
     if (mode !== "custom") return true;
     const raw = String(settings.imageBackendUrl || "").trim().replace(/\/+$/, "");
     return raw === LOCAL_ORIGIN || raw === "http://localhost:8189";
   }
 
+  function runtimeEngine(status) {
+    const declared = String(status && status.engine || "").trim().toLowerCase();
+    if (declared) return declared;
+    const version = String(status && status.backendVersion || "");
+    const parts = version.split(":");
+    return parts[0] === "launcher-imagegen" && parts[2]
+      ? parts[2].toLowerCase()
+      : "unknown";
+  }
+
   function runtimeStatus() {
+    let status = null;
     try {
-      if (!host || typeof host.imageGenRuntimeStatus !== "function") {
-        return { available: false, starting: false, ready: false };
+      if (host && typeof host.imageGenRuntimeStatus === "function") {
+        const raw = host.imageGenRuntimeStatus();
+        status = typeof raw === "string" ? JSON.parse(raw) : raw;
       }
-      const raw = host.imageGenRuntimeStatus();
-      const status = typeof raw === "string" ? JSON.parse(raw) : raw;
-      return {
-        available: status && status.available === true,
-        starting: status && status.starting === true,
-        ready: status && status.ready === true,
-        backendVersion: String(status && status.backendVersion || "")
-      };
-    } catch (_) {
-      return { available: false, starting: false, ready: false };
-    }
+    } catch (_) {}
+
+    const result = {
+      available: !!(status && status.available === true),
+      starting: !!(status && status.starting === true),
+      ready: !!(status && status.ready === true),
+      backendVersion: String(status && status.backendVersion || ""),
+      engine: runtimeEngine(status)
+    };
+    try {
+      window.__WAYWARD_LAUNCHER_IMAGE_RUNTIME__ = Object.freeze({
+        available: result.available,
+        starting: result.starting,
+        ready: result.ready,
+        engine: result.engine,
+        offlineOnly: !result.ready
+      });
+      window.__WW_STUDIO_OFFLINE_ONLY__ = !result.ready;
+    } catch (_) {}
+    return result;
   }
 
   function localEndpoint(path) {
@@ -248,6 +271,31 @@
     }
   }
 
+  function wrapSettingsStore(store) {
+    if (!store || typeof store.getState !== "function") return store;
+    try {
+      const originalGetState = store.getState.bind(store);
+      const facade = Object.create(store);
+      Object.defineProperty(facade, "getState", {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value() {
+          const state = originalGetState();
+          // The launcher's running engine is authoritative. Keep the persisted
+          // game preference untouched while allowing this session to generate.
+          if (runtimeStatus().ready && state && state.imageBackendMode === "off") {
+            return { ...state, imageBackendMode: "auto" };
+          }
+          return state;
+        }
+      });
+      return facade;
+    } catch (_) {
+      return store;
+    }
+  }
+
   function wrapPauseSettingsFactory(factory) {
     if (!factory || typeof factory.connect !== "function" || factory.__waywardImageStudioWrapped) return factory;
     const originalConnect = factory.connect;
@@ -260,6 +308,7 @@
         try {
           api.fn = function(name, ...args) {
             const value = originalFn(name, ...args);
+            if (name === "settingsStore") return wrapSettingsStore(value);
             if (name === "imageBackendProbe" && typeof value === "function") {
               registerBackendProbe(value);
               return value;
