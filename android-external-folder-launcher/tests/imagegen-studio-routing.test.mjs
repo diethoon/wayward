@@ -100,10 +100,10 @@ assert.equal(comfy.engine, "comfy");
 assert.equal(comfy.baseUrl, "http://127.0.0.1:8189");
 assert.equal(window.WW_ImageStudioBridge.connection().engine, "comfy");
 
-// An explicit in-game offline-only choice is preserved while the launcher is ready.
+// Game-session offline/backend preferences cannot suppress a ready launcher server.
 window.WW_ImageStudioBridge.setOfflineOnly(true);
-assert.equal(nativeOffline, true);
-assert.equal(window.__WW_STUDIO_OFFLINE_ONLY__, true);
+assert.equal(nativeOffline, false);
+assert.equal(window.__WW_STUDIO_OFFLINE_ONLY__, false);
 window.WW_ImageStudioBridge.setOfflineOnly(false);
 assert.equal(nativeOffline, false);
 assert.equal(window.__WW_STUDIO_OFFLINE_ONLY__, false);
