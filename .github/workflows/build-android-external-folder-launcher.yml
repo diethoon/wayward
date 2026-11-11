@@ -787,7 +787,7 @@ jobs:
       - name: Upload verified Android launcher debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: WaywardLauncher-ImageGen-runtime-debug-v0.3.13
+          name: WaywardLauncher-ImageGen-runtime-debug-v0.3.14
           path: android-external-folder-launcher/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
@@ -814,7 +814,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: WaywardLauncher-Android15-ImageGen-runtime-v0.3.13
+          name: WaywardLauncher-Android15-ImageGen-runtime-v0.3.14
           path: ${{ runner.temp }}/android-launcher-smoke
           if-no-files-found: warn
           retention-days: 14
