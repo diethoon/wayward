@@ -147,6 +147,8 @@ public final class ImageGenServiceRuntimeTest {
             // call Cloudflare through the authenticated native provider adapter,
             // save through JobRunner/cache, and read the result back through /api/pack.
             runCloudflareGamePageSmoke(instrumentation, context, launcherActivity, cloudflareMock.endpoint());
+            assertTrue("The local Worker contract fixture received no native provider generation request.",
+                    cloudflareMock.requestCount() > 0);
             homeActivity = verifyCrossTaskImageStudioSettingsRouting(
                     instrumentation, context, launcherActivity);
             restartImageGenServerWithKeystoreToken(instrumentation, context, launcherActivity);
@@ -248,7 +250,7 @@ public final class ImageGenServiceRuntimeTest {
             String requestLine = readHttpLine(input);
             if (requestLine == null || !requestLine.startsWith("POST ")) {
                 writeResponse(socket, 405, "Method Not Allowed",
-                        "{\\"success\\":false,\\"error\\":\\"POST required\\"}");
+                        "{}");
                 return;
             }
             int contentLength = 0;
@@ -261,7 +263,7 @@ public final class ImageGenServiceRuntimeTest {
             }
             if (contentLength < 0 || contentLength > 64 * 1024) {
                 writeResponse(socket, 413, "Payload Too Large",
-                        "{\\"success\\":false,\\"error\\":\\"request too large\\"}");
+                        "{}");
                 return;
             }
             byte[] requestBody = new byte[contentLength];
