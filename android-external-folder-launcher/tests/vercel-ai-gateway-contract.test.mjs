@@ -15,7 +15,7 @@ assert.match(client, /openAiEndpoint\(provider\.endpoint\)/);
 assert.match(client, /value\.endsWith\("\/v1"\).*?images\/generations/s);
 assert.match(client, /body\.put\("response_format",\s*"b64_json"\)/);
 assert.match(client, /effectivePrompt\s*\+=\s*"\\n\\nAvoid: "/);
-assert.match(client, /data\[0\]\.url or data\[0\]\.b64_json/);
+assert.match(client, /data\[0\]\.url 또는 data\[0\]\.b64_json/);
 
 assert.match(activity, /Vercel AI Gateway 프리셋 적용/);
 assert.match(activity, /https:\/\/ai-gateway\.vercel\.sh\/v1/);
