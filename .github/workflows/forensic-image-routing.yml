@@ -1,0 +1,146 @@
+name: Wayward image routing byte-for-byte forensics
+
+on:
+  push:
+    branches:
+      - forensic/image-routing-20261112
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pinned forensic source
+        uses: actions/checkout@v4
+        with:
+          ref: forensic/image-routing-20261112
+      - name: Fetch canonical game HTML and mods archive from main
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          mkdir -p forensic
+          git show origin/main:Wayward_WML_ko.html > forensic/Wayward_WML_ko.html
+          git show origin/main:mods.zip > forensic/mods.zip
+      - name: Scan every HTML byte in 4096-byte chunks
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, zipfile, re, json, shutil
+
+          root = Path("forensic")
+          html = root / "Wayward_WML_ko.html"
+          chunk_log = root / "html-chunks.sha256.txt"
+          match_log = root / "html-matches.txt"
+          summary = root / "summary.txt"
+          chunk_size = 4096
+          overlap_size = 512
+          patterns = [
+              b"imageGenerate", b"imageBackend", b"imageBackendProbe",
+              b"imageServerUrl", b"imageLookup", b"imageManifest",
+              b"ImageStudio", b"Image Studio", b"8189",
+              b"/api/batch/enqueue", b"/api/image/generate",
+              b"api/generation", b"comfyui", b"novelai",
+              b"image-provider", b"imagegen"
+          ]
+          counts = {p.decode("ascii"): 0 for p in patterns}
+          examples = {p.decode("ascii"): [] for p in patterns}
+          whole = hashlib.sha256()
+          chunk_count = 0
+          total = 0
+          previous = b""
+          with html.open("rb") as src, chunk_log.open("w", encoding="utf-8") as chunks, match_log.open("w", encoding="utf-8") as matches:
+              while True:
+                  block = src.read(chunk_size)
+                  if not block:
+                      break
+                  start = total
+                  total += len(block)
+                  whole.update(block)
+                  digest = hashlib.sha256(block).hexdigest()
+                  chunks.write(f"{start}\t{len(block)}\t{digest}\n")
+                  chunk_count += 1
+
+                  scan = previous + block
+                  scan_start = start - len(previous)
+                  lower = scan.lower()
+                  for pattern in patterns:
+                      needle = pattern.lower()
+                      pos = 0
+                      while True:
+                          idx = lower.find(needle, pos)
+                          if idx < 0:
+                              break
+                          absolute = scan_start + idx
+                          if absolute >= start:
+                              counts[pattern.decode("ascii")] += 1
+                              bucket = examples[pattern.decode("ascii")]
+                              if len(bucket) < 24:
+                                  left = max(0, idx - 280)
+                                  right = min(len(scan), idx + len(pattern) + 420)
+                                  context = scan[left:right].decode("utf-8", errors="replace")
+                                  context = context.replace("\r", " ").replace("\n", " ")
+                                  bucket.append((absolute, context))
+                          pos = idx + 1
+                  previous = scan[-overlap_size:]
+
+              matches.write(f"file={html}\nbytes={total}\nsha256={whole.hexdigest()}\nchunks={chunk_count}\nchunk_size={chunk_size}\noverlap={overlap_size}\n\n")
+              for key in counts:
+                  matches.write(f"## {key}: {counts[key]} matches\n")
+                  for offset, context in examples[key]:
+                      matches.write(f"offset={offset}: {context}\n")
+                  matches.write("\n")
+
+          expected_size = 4_373_978
+          expected_sha_prefix = "d75797d4"
+          actual_sha = whole.hexdigest()
+          lines = [
+              f"HTML path: {html}",
+              f"HTML bytes: {total}",
+              f"HTML SHA-256: {actual_sha}",
+              f"Expected size match (4373978): {total == expected_size}",
+              f"Expected SHA prefix match ({expected_sha_prefix}): {actual_sha.startswith(expected_sha_prefix)}",
+              f"Chunk count: {chunk_count}",
+              f"Chunk size: {chunk_size}",
+              f"Overlap: {overlap_size}",
+              ""
+          ]
+          with zipfile.ZipFile(root / "mods.zip") as z:
+              names = z.namelist()
+              selected = [n for n in names if any(k in n.lower() for k in ("imagestudio", "imagegen", "easygen", "image-provider"))]
+              lines.append(f"mods.zip entries: {len(names)}")
+              lines.append("Selected image-related archive entries:")
+              lines.extend(selected[:500])
+              extract_root = root / "selected-mod-files"
+              extract_root.mkdir(exist_ok=True)
+              source_files = []
+              for name in names:
+                  low = name.lower()
+                  if not low.endswith((".js", ".mjs", ".json", ".ts", ".md")):
+                      continue
+                  if not any(k in low for k in ("imagestudio", "imagegen", "easygen", "image-provider")):
+                      continue
+                  info = z.getinfo(name)
+                  if info.file_size > 2_000_000:
+                      continue
+                  target = extract_root / name.replace("/", "__")
+                  data = z.read(name)
+                  target.write_bytes(data)
+                  source_files.append((name, len(data), hashlib.sha256(data).hexdigest(), target.name))
+              lines.append("")
+              lines.append("Extracted source files (path | bytes | sha256 | local name):")
+              lines.extend(" | ".join(map(str, x)) for x in source_files)
+
+          summary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          print(summary.read_text(encoding="utf-8"))
+          print("\nHTML match counts:")
+          for key, value in counts.items():
+              print(f"{key}: {value}")
+          PY
+      - name: Upload bounded forensic report
+        uses: actions/upload-artifact@v4
+        with:
+          name: wayward-image-routing-forensics
+          path: forensic/
+          if-no-files-found: error
+          retention-days: 7
