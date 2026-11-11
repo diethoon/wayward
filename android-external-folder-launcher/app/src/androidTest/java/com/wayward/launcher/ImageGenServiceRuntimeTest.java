@@ -515,7 +515,9 @@ public final class ImageGenServiceRuntimeTest {
                     // consent and WML toggles before loading the real game so a previous
                     // CI session cannot silently hide the age gate or turn Image Studio off.
                     String resetHtml = "<!doctype html><html><head><meta charset='utf-8'></head>"
-                            + "<body><script>localStorage.clear();sessionStorage.clear();</script></body></html>";
+                            + "<body><script>localStorage.clear();sessionStorage.clear();"
+                            + "localStorage.setItem('wml.toggles',JSON.stringify({imagestudio:true}));"
+                            + "</script></body></html>";
                     gameWeb.loadDataWithBaseURL(
                             GAME_ORIGIN + "/game/__wayward_ci_storage_reset__.html",
                             resetHtml, "text/html", "UTF-8", null);
@@ -709,7 +711,11 @@ public final class ImageGenServiceRuntimeTest {
                             + "imageUsagePortraitPanel:status.symbols.symbols.imageUsagePortraitPanel&&status.symbols.symbols.imageUsagePortraitPanel.name}:null,"
                             + "wml:status?{game:status.game,booted:status.booted,listed:status.listed,"
                             + "loaded:status.loaded,failed:status.failed,warnings:status.warnings,missing:status.missing,"
+                            + "unread:status.unread,defaultOff:status.defaultOff,installed:status.installed,"
                             + "symbolsGame:status.symbols&&status.symbols.game,modSymbolIds:Object.keys(status.modSymbols||{})}:null,"
+                            + "imageStudioScriptServed:" + imageStudioScriptServed.get() + ","
+                            + "imageSearchScriptServed:" + imageSearchScriptServed.get() + ","
+                            + "moduleRequests:" + new org.json.JSONArray(moduleRequests).toString() + ","
                             + "folderMods:localStorage.getItem('wml.folders')"
                             + "});})()",
                     10_000L);
