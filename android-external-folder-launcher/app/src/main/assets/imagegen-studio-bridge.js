@@ -7,7 +7,6 @@
   window.__waywardLauncherImageStudioRoutingInstalled = true;
   const LOCAL_ORIGIN = "http://127.0.0.1:8189";
   const OFFLINE_KEY = "ww-image-studio-offline-only-v1";
-  const SETTINGS_KEY = "tavern-settings";
   const wrappedFactories = new WeakSet();
   let userOfflineOnly = false;
   let lastPolicy = "";
@@ -37,16 +36,6 @@
     }
   }
 
-  function gameBackendMode() {
-    try {
-      const root = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || "{}");
-      const state = root && root.state && typeof root.state === "object" ? root.state : root;
-      return String(state && state.imageBackendMode || "auto");
-    } catch (_) {
-      return "auto";
-    }
-  }
-
   function engineName(status) {
     const version = String(status && status.backendVersion || "");
     if (version.endsWith(":novelai")) return "novelai";
@@ -57,8 +46,7 @@
   function backendState() {
     const status = runtimeStatus();
     const launcherAvailable = status.available || status.starting;
-    const modeOff = gameBackendMode() === "off";
-    const baseUrl = launcherAvailable && !modeOff ? LOCAL_ORIGIN : null;
+    const baseUrl = launcherAvailable ? LOCAL_ORIGIN : null;
     const ready = Boolean(baseUrl && status.ready);
     return {
       baseUrl,
@@ -80,12 +68,11 @@
 
   function applyRuntimePolicy() {
     const status = runtimeStatus();
-    const modeOff = gameBackendMode() === "off";
-    const offlineOnly = userOfflineOnly || modeOff || !status.ready;
+    const offlineOnly = userOfflineOnly || !status.ready;
     window.__WW_STUDIO_OFFLINE_ONLY__ = offlineOnly;
     const signature = [
       status.available, status.starting, status.ready,
-      engineName(status), modeOff, userOfflineOnly, offlineOnly
+      engineName(status), userOfflineOnly, offlineOnly
     ].join(":");
     window.__WAYWARD_LAUNCHER_IMAGE_RUNTIME__ = Object.freeze({
       available: status.available,
