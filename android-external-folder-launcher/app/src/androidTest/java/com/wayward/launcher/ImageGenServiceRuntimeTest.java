@@ -956,7 +956,7 @@ public final class ImageGenServiceRuntimeTest {
                     + "bridge.ready=function(){return Promise.resolve();};"
                     + "bridge.connection=function(){return {baseUrl:null,comfyui:false};};"
                     + "globalThis.__WW_STUDIO_OFFLINE_ONLY__=true;"
-                    + "dev.fn('settingsStore').getState().set({imageBackendMode:'off',ageAffirmed:true,contentAcknowledged:true});"
+                    + "dev.fn('settingsStore').getState().set({imageBackendMode:'auto',ageAffirmed:true,contentAcknowledged:true});"
                     + "dev.hook('bee',{priority:-9000000,replace:function(){return key;}});"
                     + "dev.hook(imageUrlSymbol,{priority:-9000000,replace:function(){return serverImageUrl;}});"
                     + "var config=matching.get();"
