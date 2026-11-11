@@ -81,10 +81,26 @@ final class ImageProviderClient {
                 throw new IllegalArgumentException("모델 ID를 입력해 주세요.");
             }
             body.put("model", provider.model.trim());
-            body.put("prompt", prompt);
-            if (negativePrompt != null && !negativePrompt.trim().isEmpty()) body.put("negative_prompt", negativePrompt.trim());
+            boolean vercelGateway = false;
+            try {
+                vercelGateway = "ai-gateway.vercel.sh".equalsIgnoreCase(
+                        new URI(provider.endpoint.trim()).getHost());
+            } catch (Exception ignored) {}
+            String effectivePrompt = prompt;
+            if (negativePrompt != null && !negativePrompt.trim().isEmpty()) {
+                if (vercelGateway) {
+                    // FLUX.2 Pro on AI Gateway follows the OpenAI Images schema
+                    // and has no separate negative_prompt field; retain the
+                    // constraint as natural-language prompt guidance.
+                    effectivePrompt += "\n\nAvoid: " + negativePrompt.trim();
+                } else {
+                    body.put("negative_prompt", negativePrompt.trim());
+                }
+            }
+            body.put("prompt", effectivePrompt);
             body.put("n", 1);
             body.put("size", size);
+            if (vercelGateway) body.put("response_format", "b64_json");
         } else if ("custom-json".equals(provider.type)) {
             endpoint = provider.endpoint.trim();
             String template = provider.requestTemplate == null ? "" : provider.requestTemplate.trim();
