@@ -532,9 +532,11 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("Could not clear the isolated Wayward WebView origin.",
                     storageResetFinished.await(10, TimeUnit.SECONDS));
             String clearedStorage = awaitJsString(instrumentation, gameWeb,
-                    "JSON.stringify({local:localStorage.length,session:sessionStorage.length})",
+                    "(function(){var before=Object.keys(localStorage);localStorage.clear();sessionStorage.clear();"
+                            + "return JSON.stringify({before:before,local:localStorage.length,session:sessionStorage.length});})()",
                     5_000L);
-            if (!"{\"local\":0,\"session\":0}".equals(clearedStorage)) {
+            JSONObject storageState = new JSONObject(clearedStorage);
+            if (storageState.optInt("local", -1) != 0 || storageState.optInt("session", -1) != 0) {
                 throw new IllegalStateException("Wayward CI browser storage did not reset: " + clearedStorage);
             }
             instrumentation.runOnMainSync(() -> gameWeb.loadDataWithBaseURL(
@@ -712,7 +714,9 @@ public final class ImageGenServiceRuntimeTest {
                             + "wml:status?{game:status.game,booted:status.booted,listed:status.listed,"
                             + "loaded:status.loaded,failed:status.failed,warnings:status.warnings,missing:status.missing,"
                             + "unread:status.unread,defaultOff:status.defaultOff,installed:status.installed,"
+                            + "order:status.order,lang:status.lang,modLangs:status.langs&&status.langs.imagestudio,"
                             + "symbolsGame:status.symbols&&status.symbols.game,modSymbolIds:Object.keys(status.modSymbols||{})}:null,"
+                            + "bootSetups:window.WML&&window.WML.bootReport?window.WML.bootReport().data.setups.filter(function(item){return item.id==='imagestudio'||item.id==='image-search-customize'||item.id==='attention-image-prompt'||item.id==='addon-compat';}):null,"
                             + "imageStudioScriptServed:" + imageStudioScriptServed.get() + ","
                             + "imageSearchScriptServed:" + imageSearchScriptServed.get() + ","
                             + "moduleRequests:" + new org.json.JSONArray(moduleRequests).toString() + ","
