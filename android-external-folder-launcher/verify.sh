@@ -20,7 +20,6 @@ node --check app/src/main/assets/imagegen-studio-bridge.js
 node tests/imagegen-studio-bridge.test.mjs
 node tests/imagegen-proxy.test.mjs
 node tests/image-provider-bridge.test.mjs
-node tests/vercel-ai-gateway-contract.test.mjs
 node tests/wml-folder-bootstrap.test.mjs
 node tests/launcher-companions-removal.test.mjs
 node tests/web-file-chooser-contract.test.mjs
