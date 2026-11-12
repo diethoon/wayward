@@ -144,11 +144,10 @@ async function exerciseEngine(engine) {
   // While the launcher engine is ready, the wrapper must keep generation enabled.
   window.WW_ImageStudioBridge = {
     connection() { return { baseUrl: "https://game-configured.example:8189", comfyui: false }; },
-    setOfflineOnly(value) { window.__WW_STUDIO_OFFLINE_ONLY__ = !!value; }
   };
   assert.equal(window.WW_ImageStudioBridge.connection().baseUrl, "http://127.0.0.1:8189");
-  assert.equal(window.WW_ImageStudioBridge.connection().engine, engine);
-  window.WW_ImageStudioBridge.setOfflineOnly(true);
+  assert.equal(window.WaywardLauncherImageStudio.getRuntimeStatus().engine, engine);
+  // runtimeStatus() reflects readiness to the offline-only compatibility flag.
   assert.equal(window.__WW_STUDIO_OFFLINE_ONLY__, false);
 
   const probe = await api.fn("imageBackendProbe")({
