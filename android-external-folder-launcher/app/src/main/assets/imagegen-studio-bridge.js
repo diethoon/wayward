@@ -586,63 +586,6 @@
     window.setTimeout(check, 500);
   }
 
-  function installLauncherOwnedSettingsUi() {
-    const apply = () => {
-      const root = window.document;
-      if (!root) return;
-      const hide = element => {
-        if (!element) return;
-        element.hidden = true;
-        element.setAttribute("aria-hidden", "true");
-        element.style.setProperty("display", "none", "important");
-      };
-
-      // Keep prompt/character editing available, but remove game-side engine choice.
-      const engineButton = root.querySelector("#wwis-generation-settings");
-      if (engineButton) {
-        engineButton.textContent = "생성 옵션 (엔진·서버는 런처 관리)";
-        engineButton.setAttribute("aria-label", "생성 옵션. 엔진과 서버는 런처에서 관리합니다.");
-      }
-      const engineChoice = root.querySelector('input[name="wwis-provider"]');
-      hide(engineChoice && engineChoice.closest(".wwis-card"));
-
-      // The Comfy URL/models card is launcher-owned. The in-game editor cannot
-      // select a remote Comfy endpoint or cause background probes against it.
-      hide(root.querySelector("#wwis-comfy-settings"));
-
-      // NAI credentials and credential checks are exclusively managed by the launcher.
-      for (const selector of ["#wwis-nai-token", "#wwis-nai-token-clear"]) {
-        const control = root.querySelector(selector);
-        hide(control && (control.closest("label") || control));
-      }
-      const naiCheck = root.querySelector("#wwis-nai-check");
-      hide(naiCheck && (naiCheck.closest(".wwis-row") || naiCheck));
-
-      const naiCard = root.querySelector("#wwis-nai-settings");
-      if (naiCard && !root.querySelector("#wwis-launcher-nai-credential-note")) {
-        const note = root.createElement("p");
-        note.id = "wwis-launcher-nai-credential-note";
-        note.className = "wwis-setting-status";
-        note.textContent = "NovelAI 인증 정보와 서버 선택은 런처 설정에서만 관리됩니다.";
-        const heading = naiCard.querySelector("h3");
-        if (heading && heading.parentNode) heading.parentNode.insertBefore(note, heading.nextSibling);
-      }
-
-      const settingsTitle = root.querySelector(".wwis-generation-toolbar strong");
-      if (settingsTitle && settingsTitle.textContent !== "생성 옵션 · 엔진/서버는 런처 관리") {
-        settingsTitle.textContent = "생성 옵션 · 엔진/서버는 런처 관리";
-      }
-    };
-
-    apply();
-    if (window.MutationObserver && window.document && window.document.documentElement) {
-      const observer = new window.MutationObserver(apply);
-      observer.observe(window.document.documentElement, { childList: true, subtree: true });
-      window.__waywardLauncherSettingsUiObserver = observer;
-    }
-  }
-
-  installLauncherOwnedSettingsUi();
   installImageElementUrlRewrite();
   installLauncherOwnedSettingsUi();
   installLegacyApiHook();
