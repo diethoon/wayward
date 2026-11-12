@@ -1,43 +1,54 @@
-# 클라우드세이브 — Google Drive (WML / v0.4.4)
+# 클라우드세이브 — Google Drive (WML / v0.5.0)
 
-이 모드는 Wayward의 현재 WML HTML과 함께 사용하는 Google Drive 저장 모드입니다. 0.4.2부터 게임 내부 `nativeSaveJSON` 심볼을 찾을 수 없는 최신 빌드에서는 현재 게임 상태를 JSON으로 보존하는 호환 경로를 사용합니다. 저장 파일은 게임 페이지에서 암호화한 뒤 Google Drive의 앱 전용 `appDataFolder`에 직접 올립니다. 게임 세이브 본문을 저장 서버에 업로드하지 않습니다.
+**대상:** Wayward WML
+**모드 버전:** 0.5.0
+
+Google Drive `appDataFolder`에 개인 세이브를 저장하는 WML 모드입니다. 세이브 본문은 게임 페이지에서 AES-256-GCM으로 암호화한 뒤 Google Drive에 직접 전송합니다. 인증 서버는 세이브 본문을 받지 않습니다.
 
 ## 설치
 
-1. 이 `cloud-save` 폴더를 게임의 `wml/mods/` 안에 복사합니다. `mod.js`, `crypto.js`, `README.md`가 같은 폴더에 있어야 합니다.
+1. `cloud-save` 폴더를 게임의 `wml/mods/` 안에 복사합니다. `mod.js`, `crypto.js`, `README.md`가 같은 폴더에 있어야 합니다.
 2. `wml/mods/mods.js`의 `WML.enable([...])`에 `"cloud-save"`가 있는지 확인합니다. 없을 때만 기존 항목을 보존한 채 추가합니다.
-3. 게임을 다시 열고 **클라우드세이브 (Google Drive)** 를 엽니다. 모드가 일시 정지 메뉴의 기본 불러오기 근처와 대체 메뉴 버튼에 나타납니다.
-4. **Google 계정으로 연결**을 눌러 열린 인증 창에서 Google 계정을 선택하고 Drive 앱 데이터 접근을 허용합니다. `file://` 실행에서는 인증 페이지가 로컬 파일 경고를 표시하므로, 본인이 직접 시작한 요청인지 확인한 뒤 진행합니다.
+3. 게임을 다시 열고 **클라우드세이브 (Google Drive)** 를 엽니다.
 
-## 인증 브리지와 환경 설정
+## Google 인증 경로
 
-인증 페이지는 기존에 작동하던 Vercel 인증 서비스 주소를 사용합니다.
+- 인증 화면은 GitHub Pages의 `https://jeiky224.github.io/cloud/`에서 실행합니다.
+- OAuth code 교환·토큰 갱신·권한 철회는 `https://wayward-auth-relay.trpgengine1.workers.dev`에서 처리합니다.
+- 인증은 OAuth Authorization Code + PKCE 방식입니다. Google Client Secret은 Cloudflare Worker의 `GOOGLE_CLIENT_SECRET` Secret에만 보관하며 모드 파일이나 GitHub Pages에 넣지 않습니다.
+- 게임 페이지와 GitHub 인증 페이지 사이에는 192-bit 임시 nonce가 붙은 `postMessage`를 사용하고, Worker WebSocket 릴레이를 보조 경로로 사용합니다. 게임 주소 자체를 Google OAuth 허용 원본으로 등록할 필요가 없습니다.
+- `file://`, `localhost`, `127.0.0.1`, LAN HTTP, HTTPS 및 WebView처럼 게임 Origin이 달라도 동일한 고정 인증 페이지를 사용합니다. 브라우저에서 팝업을 막으면 해당 게임 주소의 팝업을 허용해야 합니다.
 
-`https://wayward-cloud-auth.vercel.app/`
+### Google Cloud / Cloudflare 사전 설정
 
-- 인증 화면과 OAuth 시작/콜백은 기존 Vercel 프로젝트 `wayward-cloud-auth`를 사용합니다. 사용자는 Vercel API 키나 OAuth client secret을 게임 파일에 넣을 필요가 없습니다.
-- 인증 서비스는 저장 데이터를 받지 않습니다. OAuth 브라우저 토큰을 게임 창에만 전달하며 요청의 nonce와 창 출처를 확인합니다.
-- OAuth 시작 및 콜백은 Vercel 프로젝트 `wayward-cloud-auth`가 처리합니다. 인증이 설정 오류로 거부된다면 Google OAuth 클라이언트의 승인된 JavaScript 원본에 `https://wayward-cloud-auth.vercel.app`가 등록되어 있는지와 Vercel 인증 서비스 상태를 확인하세요. client secret을 게임 HTML이나 모드 ZIP에 넣지 마세요.
-- 브라우저가 팝업을 차단하면 인증 팝업을 허용해야 합니다. 일부 브라우저는 `file://`에서 팝업 메시지, WebCrypto 또는 로컬 저장소를 제한할 수 있으므로 문제가 있으면 AWebServer/localhost 또는 HTTPS에서 실행하세요.
+- OAuth Client ID: `35944231952-p82giir62o28bo001j9uvmqo3kgp9c99.apps.googleusercontent.com`
+- 승인된 리디렉션 URI: `https://jeiky224.github.io/cloud/`
+- 요청 범위: `https://www.googleapis.com/auth/drive.appdata`
+- Cloudflare Worker `wayward-auth-relay`에 Secret 이름 `GOOGLE_CLIENT_SECRET`을 등록해야 합니다. Secret 값은 Google Cloud Console에서 해당 OAuth Client의 클라이언트 보안 비밀을 사용합니다. 소스 코드나 이 저장소에 올리지 마세요.
+- GitHub Pages는 `jeiky224/cloud` 저장소의 `main` 브랜치 루트에서 게시하도록 설정해야 합니다.
 
-## 게임 버전 호환성
+## 로그인 유지 / 로그아웃
 
-- 게임 빌드 날짜는 세이브의 출처 정보로만 저장하며, 빌드 날짜가 다르다는 이유만으로 불러오기를 차단하지 않습니다.
-- `pauseMenu` 심볼은 선택 기능으로 처리합니다. 해당 심볼을 찾지 못하는 빌드에서도 클라우드 창과 대체 진입 버튼을 사용할 수 있습니다.
-- 세이브의 공통 스키마(`wayward-cloud-save`, `nativeFormat: 1`)와 Wayward 게임 계열을 확인합니다. 게임의 저장 구조나 복원 순서가 바뀐 경우까지 자동 변환한다고 보장하지 않으며, 구조 검증이 실패하면 복원하지 않아야 합니다.
+- **로그인 계속 유지:** Google refresh token을 현재 게임 Origin의 브라우저 저장소에 보관합니다. 액세스 토큰이 약 1시간 후 만료되면 모드가 백그라운드로 갱신하고 Drive 요청을 한 번 재시도합니다. 브라우저·게임을 다시 열어도 같은 Origin의 저장소가 유지되면 재로그인 없이 복구합니다.
+- **새로고침하면 로그아웃:** 토큰을 메모리에만 보관합니다. 게임 페이지를 닫거나 새로고침하면 다시 로그인해야 합니다.
+- **로그아웃:** Google 토큰 철회를 요청하고 현재 게임 Origin에 저장된 로그인 정보를 삭제합니다. 네트워크가 끊겨 서버 측 철회를 확인하지 못하더라도 로컬 토큰은 삭제합니다.
+- 저장소는 Origin별로 분리됩니다. 예를 들어 `http://localhost:8080`과 `http://127.0.0.1:8080`, `file://`, HTTPS는 서로 다른 로그인 저장소입니다. 한 환경에서 로그인한 상태가 다른 Origin에 자동 공유되지는 않으며, 각 환경에서 첫 로그인을 한 번씩 해야 합니다.
 
-## 저장·암호화·로그인 유지
+**‘영원히’ 유지는 보장할 수 없습니다.** Google은 사용자가 권한을 철회하거나 refresh token을 6개월 동안 사용하지 않는 경우, 비밀번호 변경·계정 보안 정책·토큰 수 제한·OAuth 동의 화면의 테스트 상태 등으로 refresh token을 무효화할 수 있습니다. Google 프로젝트의 OAuth 동의 상태는 외부 사용자에 대해 Production으로 게시해야 하며, Testing 상태에서는 일반적으로 refresh token이 7일 후 만료됩니다. 그 외 Google이 권한을 유지하는 동안에는 자동 갱신을 계속 시도합니다.
 
-- 저장 슬롯에는 별도 슬롯 개수 제한을 두지 않습니다. 각 슬롯은 저장 시각·진행 요약·선택 메모를 표시합니다. 메모를 누르면 별도 최상위 팝업에서 전체 내용을 확인합니다.
-- 새 세이브는 AES-256-GCM으로 자동 암호화·복호화됩니다. Drive에 별도의 키 파일을 만들지 않으며 새 세이브마다 암호화 비밀번호를 입력할 필요가 없습니다.
-- 암호화 키는 모드 코드에 포함되어 난독화되어 있으나, 소스 분석으로 추출할 수 있습니다. 따라서 이를 강한 기밀성 보장이나 비밀키 보관 수단으로 간주하지 마세요.
-- **로그인 유지 설정**에서 토큰이 유효한 동안 브라우저 재실행 후에도 연결을 복원하거나, 새로고침 시 로그아웃하도록 선택할 수 있습니다. 토큰은 보통 약 1시간 후 만료되므로 만료 후에는 다시 로그인해야 합니다. 공용 기기에서는 영구 유지를 켜지 말고 사용 후 **로그아웃**하세요.
-- 저장 목록은 첫 로딩 전에는 빈 목록으로 오인하지 않도록 로딩/새로고침 필요 상태를 표시합니다. 새로고침은 로그인 토큰이 유효할 때 수행합니다.
-- 기존 Cloudflare Worker / 1회성 코드 방식의 저장 데이터는 자동으로 Drive에 이전되지 않습니다.
+## 세이브 데이터
+
+- 저장 파일은 게임 페이지에서 AES-256-GCM으로 암호화한 뒤 Google Drive `appDataFolder`로 직접 업로드합니다.
+- 새 세이브는 별도 비밀번호 입력 없이 암호화됩니다. 이전 암호화 형식의 세이브는 저장 당시 암호가 필요할 수 있습니다.
+- 슬롯 수를 별도로 제한하지 않습니다.
+- 게임 빌드 식별자는 진단용이며 날짜가 다르다는 이유만으로 불러오기를 차단하지 않습니다. 단, 게임 내부 저장 구조가 호환되지 않으면 복원이 실패할 수 있습니다.
+- 모드에 포함된 구형 임베디드 암호화 키는 소스 분석으로 추출할 수 있으므로 강한 기밀성의 근거로 취급하지 마세요.
+- 기존 Cloudflare 일회성 공유 저장 데이터는 자동으로 Drive로 이전되지 않습니다.
 
 ## 문제 해결
 
-- 인증 창이 열리지 않으면 브라우저의 팝업 차단 설정을 확인합니다.
-- 인증이 실패하면 계정이 Drive 앱 데이터 접근을 허용했는지, Google OAuth 클라이언트의 JavaScript 원본이 `https://wayward-cloud-auth.vercel.app`인지 확인합니다.
-- Drive 목록이 비어 보이면 계정 연결을 확인한 후 **저장 목록 새로고침**을 누릅니다. 다른 Google 계정의 `appDataFolder`는 별도입니다.
-- 빌드 버전이 다르더라도 공통 세이브 형식이면 불러오기를 시도합니다. 저장 구조가 크게 바뀐 게임 빌드에서는 별도 호환 규칙이 필요할 수 있습니다.
+- 팝업이 열리지 않으면 게임 페이지에서 팝업을 허용하고 다시 연결하세요.
+- `Google OAuth server secret is not configured`가 나오면 Cloudflare Worker에 `GOOGLE_CLIENT_SECRET`이 등록되지 않은 것입니다.
+- `redirect_uri_mismatch`가 나오면 Google OAuth Client의 승인된 리디렉션 URI가 `https://jeiky224.github.io/cloud/`와 정확히 일치하는지 확인하세요.
+- refresh token이 폐기된 경우 모드에서 로그아웃한 뒤 Google 계정으로 다시 연결하세요.
+- 저장 목록은 첫 연결 후 자동으로 불러옵니다. 네트워크 오류가 발생하면 저장 목록 새로고침을 다시 눌러 주세요.
