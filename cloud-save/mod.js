@@ -440,8 +440,8 @@ WML.define({
         slotsError = '';
         message = 'GitHub Pages 정적 인증 팝업을 열었습니다. 보안 핸드셰이크를 기다립니다.';
         bridgeHandshakeTimer = setTimeout(() => {
-            closeAuthSession(true, '인증 페이지 핸드셰이크 시간 초과');
           if (!bridgeReady) {
+            closeAuthSession(true, '인증 페이지 핸드셰이크 시간 초과');
             authStatus = 'reauth-required';
             message = '정적 인증 페이지와 핸드셰이크가 시간 초과되었습니다. 팝업을 허용하고 다시 시도하세요.';
             if (isConnected()) render();
@@ -921,7 +921,8 @@ WML.define({
           'reauth-required': 'Google 액세스 토큰이 만료되었거나 인증이 필요합니다. 팝업에서 다시 연결하세요.',
           'consent-denied': 'Google 계정 또는 권한 승인이 거부되었습니다.',
           'scope-missing': 'Google Drive appData 권한이 승인되지 않았습니다.',
-          'permission-revoked': 'Google Drive 권한이 철회되었거나 거부되었습니다.',
+          'permission-revoked': 'Google Drive 권한 철회가 확인되었습니다.',
+          'permission-denied': 'Google Drive API가 권한을 거부했습니다. 계정 권한과 앱 설정을 확인하세요.',
           'revoke-failed': 'Google 앱 권한 철회 성공 응답을 받지 못했습니다.',
           'auth-cancelled': 'Google 인증 창이 닫혔습니다.',
           'popup-blocked': '브라우저가 인증 팝업을 차단했습니다.'
