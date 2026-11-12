@@ -117,10 +117,12 @@ WML.define({
     }
     function setSessionPolicy(policy) {
       sessionPolicy = policy === 'reauth' ? 'reauth' : 'remember';
-      explicitLogout = false;
-      permissionRevoked = false;
+      // Changing a preference must never undo an explicit logout or a
+      // permission-revoked marker. Only a successful new authorization clears it.
       saveAuthPreferences();
       if (hasToken()) authStatus = 'connected';
+      else if (permissionRevoked) authStatus = 'permission-revoked';
+      else if (explicitLogout) authStatus = 'explicit-logout';
       else authStatus = sessionPolicy === 'remember'
         ? (hadPreviousAuth ? 'restore-pending' : 'reauth-required')
         : 'session-only';
