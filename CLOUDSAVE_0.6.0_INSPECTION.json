@@ -89,9 +89,9 @@
     ]
   },
   "auth-page/index.html": {
-    "bytes": 8586,
-    "sha256": "1862d7944326cfa0ed6090d12ea31cb662c893c4ee8bf21901b9c2509ccf5ff2",
-    "scannedBytes": 8586,
+    "bytes": 9036,
+    "sha256": "c5a92ed598adfd4fc55927eea6a4888ac3d9061a701daa60d02446f80e3b2afe",
+    "scannedBytes": 9036,
     "chunks": [
       {
         "offset": 0,
@@ -101,12 +101,12 @@
       {
         "offset": 4096,
         "length": 4096,
-        "sha256": "55374c4542645e3f6982e90056c489c7a4d72f14320d33ceef3d83a63eafb37e"
+        "sha256": "a0021f28ac0d4cafa5798beee0d4ddd7f96e25497bfc9b263fcdf470182c680c"
       },
       {
         "offset": 8192,
-        "length": 394,
-        "sha256": "261df26b3ddda8e9607e024408db40300484126bf3623d11c3ef25c9d7a6e46f"
+        "length": 844,
+        "sha256": "4bfa08f98b58636838e1571d6eda59b00fe7feeb5fd5852973d2e62e2cdecb5e"
       }
     ]
   },
