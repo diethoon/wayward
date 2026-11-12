@@ -47,6 +47,7 @@ WML.define({
     let authNonce = '';
     let authSessionId = '';
     let bridgeReady = false;
+    let pageAuthenticated = false;
     let bridgeStatus = 'disconnected';
     let bridgeWatchTimer = null;
     let bridgeHandshakeTimer = null;
@@ -119,7 +120,7 @@ WML.define({
         explicitLogout ? (permissionRevoked ? 'revoked' : '1') : null);
     }
     function hasLogin() {
-      return !!(bridgeReady && authPopup && !authPopup.closed && bridgeStatus === 'connected');
+      return !!(bridgeReady && pageAuthenticated && authPopup && !authPopup.closed);
     }
     function hasToken() {
       // Compatibility name for old UI paths; no access token exists in this game.
@@ -187,6 +188,7 @@ WML.define({
       authNonce = '';
       authSessionId = '';
       bridgeReady = false;
+      pageAuthenticated = false;
       bridgeStatus = 'disconnected';
       rejectPendingDriveRequests(reason || 'Google Drive 인증 창 연결이 종료되었습니다.');
       driveSlots = [];
@@ -253,18 +255,25 @@ WML.define({
         permissionRevoked = false;
         hadPreviousAuth = true;
         writeStorage(HAD_AUTH_KEY, '1');
+        pageAuthenticated = true;
         writeStorage(EXPLICIT_LOGOUT_KEY, null);
       } else if (bridgeStatus === 'permission-revoked') {
+        pageAuthenticated = false;
         markPermissionRevoked();
       } else if (bridgeStatus === 'scope-missing') {
+        pageAuthenticated = false;
         markScopeMissing();
       } else if (bridgeStatus === 'consent-denied') {
+        pageAuthenticated = false;
         markConsentDenied();
       } else if (bridgeStatus === 'logged-out') {
+        pageAuthenticated = false;
         markExplicitLogout(false);
       } else if (bridgeStatus === 'revoke-failed') {
+        pageAuthenticated = false;
         authStatus = 'revoke-failed';
       } else if (bridgeStatus === 'reauth-required' || bridgeStatus === 'auth-cancelled' ||
+        pageAuthenticated = false;
                  bridgeStatus === 'popup-blocked') {
         authStatus = bridgeStatus;
       }
@@ -418,6 +427,7 @@ WML.define({
         slotsError = '';
         message = 'GitHub Pages 정적 인증 팝업을 열었습니다. 보안 핸드셰이크를 기다립니다.';
         bridgeHandshakeTimer = setTimeout(() => {
+            closeAuthSession(true, '인증 페이지 핸드셰이크 시간 초과');
           if (!bridgeReady) {
             authStatus = 'reauth-required';
             message = '정적 인증 페이지와 핸드셰이크가 시간 초과되었습니다. 팝업을 허용하고 다시 시도하세요.';
@@ -464,8 +474,8 @@ WML.define({
           }
         }
         driveSlots = Array.from(slots.values()).sort((a,b) =>
-          Number(a.name.match(/([0-9]+)\\.json$/)[1]) -
-          Number(b.name.match(/([0-9]+)\\.json$/)[1])
+          Number(a.name.match(/([0-9]+)\.json$/)[1]) -
+          Number(b.name.match(/([0-9]+)\.json$/)[1])
         );
         for (const file of driveSlots) {
           try {
@@ -713,6 +723,7 @@ WML.define({
 
     async function logoutGoogleAccount() {
       if (bridgeReady) await requestDrive('logout', {});
+      else clearToken();
       markExplicitLogout(false);
       show({ page: 'home' },
         '로그아웃했습니다. 인증 페이지의 메모리 토큰을 삭제했으며 Google 권한 동의는 유지됩니다.');
