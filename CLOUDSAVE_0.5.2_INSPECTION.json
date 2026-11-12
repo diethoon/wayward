@@ -1,0 +1,127 @@
+{
+  "cloud-save/mod.js": {
+    "bytes": 55945,
+    "sha256": "8277e1fc9df09b0dafeb44f177b13576b5d929d47252469e6388333b19346316",
+    "scannedBytes": 55945,
+    "chunks": [
+      {
+        "offset": 0,
+        "length": 4096,
+        "sha256": "c12ffcf726595833d99a7d9d089456486f22ff5d1ea700e02d55bc3388f25e18"
+      },
+      {
+        "offset": 4096,
+        "length": 4096,
+        "sha256": "aa0fdd9e1a01d3775a8796affed66057bfea98e437f6552af30284bc4655c919"
+      },
+      {
+        "offset": 8192,
+        "length": 4096,
+        "sha256": "4e46669c0a69dea26130ec44786480650d919cf3d209212c3ab3e83682c1c733"
+      },
+      {
+        "offset": 12288,
+        "length": 4096,
+        "sha256": "0914a76dc5231f0856ed2ccf99152230e2614ac2cd25485f0a639a310f0befd5"
+      },
+      {
+        "offset": 16384,
+        "length": 4096,
+        "sha256": "975e617fdec49c8b9a8a34345cb623eb3fd189d40d8017e7a080aaade2da1089"
+      },
+      {
+        "offset": 20480,
+        "length": 4096,
+        "sha256": "73b58c492df4ce25c9749c241a15e85194977a397a1442bba0f21583a7fc36ed"
+      },
+      {
+        "offset": 24576,
+        "length": 4096,
+        "sha256": "9ddf9142d99e20020b9786fcc7ea90ddb0322d9f2eef5582b8efe451b3ac4a2d"
+      },
+      {
+        "offset": 28672,
+        "length": 4096,
+        "sha256": "252b30f41cb0a7f4c0d820d42ddb2b6be6f2ee7979ba2c419e20ddbafefc47e5"
+      },
+      {
+        "offset": 32768,
+        "length": 4096,
+        "sha256": "a8db7bafa4e364dbf53b9d7dfd335dfcd67298900faa1fcb3a20bb82ae37d170"
+      },
+      {
+        "offset": 36864,
+        "length": 4096,
+        "sha256": "e9c5df7f0256a8d5dce04636a47373b5277fcdc942e746015798f2d39f4bdd1c"
+      },
+      {
+        "offset": 40960,
+        "length": 4096,
+        "sha256": "7e73394dea736318e229bff701e27be9bc34f0ef705a2d2d8d639dbee5e4633f"
+      },
+      {
+        "offset": 45056,
+        "length": 4096,
+        "sha256": "d3be50e48dcda5f76c8d679df0a88fc5846d12f1d9b19fbbfe04bfb8c8d1f7d7"
+      },
+      {
+        "offset": 49152,
+        "length": 4096,
+        "sha256": "6a45bfea419f1121c9d00d14308a8d6386411a748f28ed64db06ce1529a47edc"
+      },
+      {
+        "offset": 53248,
+        "length": 2697,
+        "sha256": "bf4bb2470e33d730b976edd954653c81a89b15f00984cb10d5d56f56939c8702"
+      }
+    ]
+  },
+  "cloud-save/crypto.js": {
+    "bytes": 11587,
+    "sha256": "145d4e3a7d3538e569416f20a7594582f49b8bae58c5c9e927241e2a7369d577",
+    "scannedBytes": 11587,
+    "chunks": [
+      {
+        "offset": 0,
+        "length": 4096,
+        "sha256": "c07be9228edd94b07da1dfdd3660996dd13f32f5142d43ecf38b99f838af189d"
+      },
+      {
+        "offset": 4096,
+        "length": 4096,
+        "sha256": "81bd20dfc99ce7b62b8d899ca4d3d1d2a41faf809f264fd866553d144539cc2b"
+      },
+      {
+        "offset": 8192,
+        "length": 3395,
+        "sha256": "9b9b787c446501a6d11a87a6a08a994285abbc0fa2ed44932f0e13536dfa3392"
+      }
+    ]
+  },
+  "auth-page/index.html": {
+    "bytes": 10277,
+    "sha256": "76e3c9b0108c44010f9b50ce8874f9f10056a818727fdf23b9610e403c748a1a",
+    "scannedBytes": 10277,
+    "chunks": [
+      {
+        "offset": 0,
+        "length": 4096,
+        "sha256": "a8e6a14e79c0cf8e213b3287b19c8945d083e0066a68f343a0ddf447dccca5aa"
+      },
+      {
+        "offset": 4096,
+        "length": 4096,
+        "sha256": "8ee5c4820da394d8ac16308cc9884810e327b72090f4656341cc11e1c07e7fe4"
+      },
+      {
+        "offset": 8192,
+        "length": 2085,
+        "sha256": "86bcb24f0875b98260427d6cc94ab2612edc7e862eb615c169cd46e76aa19654"
+      }
+    ]
+  },
+  "originalV044Mod": {
+    "bytes": 47764,
+    "sha256": "59cdca82de35a5993b79cae531fe5b5b9c8b6002638a06fc15c6cc95cb3b3c20"
+  }
+}
