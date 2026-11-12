@@ -30,7 +30,9 @@
       // selection are launcher-owned and are not exposed as game controls.
       const engineButton = root.querySelector("#wwis-generation-settings");
       if (engineButton) {
-        engineButton.textContent = "생성 옵션 (엔진·서버는 런처 관리)";
+        if (engineButton.textContent !== "생성 옵션 (엔진·서버는 런처 관리)") {
+          engineButton.textContent = "생성 옵션 (엔진·서버는 런처 관리)";
+        }
         if (typeof engineButton.setAttribute === "function") {
           engineButton.setAttribute("aria-label", "생성 옵션. 엔진과 서버는 런처에서 관리합니다.");
         }
