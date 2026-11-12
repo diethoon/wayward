@@ -433,12 +433,12 @@ async function launcherGenerate(
                     "force-direct-image-route-through-launcher-selected-engine",
                 ),
                 (
-                    "const WORKFLOWS: readonly WorkflowType[] = ['anima', 'illustrious', 'z-image', 'nai']\\n\\nfunction activeImageWorkflow",
+                    "const WORKFLOWS: readonly WorkflowType[] = ['anima', 'illustrious', 'z-image', 'nai']\n\nfunction activeImageWorkflow",
                     "function activeImageWorkflow",
                     "ignore-game-workflow-enumeration",
                 ),
                 (
-                    "    if (!WORKFLOWS.includes(requestedWorkflow)) {\\n      throw new HttpError(400, `unknown workflow: ${requestedWorkflow}. available: ${WORKFLOWS.join(', ')}`)\\n    }\\n",
+                    "    if (!WORKFLOWS.includes(requestedWorkflow)) {\n      throw new HttpError(400, `unknown workflow: ${requestedWorkflow}. available: ${WORKFLOWS.join(', ')}`)\n    }\n",
                     "",
                     "ignore-game-supplied-workflow-validation",
                 ),
