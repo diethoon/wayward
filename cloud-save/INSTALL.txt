@@ -1,4 +1,4 @@
-Wayward Google Drive CloudSave — WML v0.5.0
+Wayward Google Drive CloudSave — WML v0.5.1
 
 설치
 1. cloud-save 폴더를 게임의 wml/mods/ 안에 복사합니다.
@@ -18,8 +18,8 @@ Wayward Google Drive CloudSave — WML v0.5.0
 OAuth Authorization Code + PKCE, nonce 검증 postMessage 및 Cloudflare Worker WebSocket 릴레이를 사용합니다. 게임의 file://, localhost, 127.0.0.1, LAN HTTP, HTTPS, WebView Origin은 Google OAuth 등록 목록에 각각 추가할 필요가 없습니다. 팝업이 막히면 게임 주소의 팝업을 허용하세요.
 
 로그인 유지
-"로그인 계속 유지"는 refresh token을 현재 게임 Origin의 저장소에 보관하고 만료된 access token을 자동으로 갱신합니다. "새로고침하면 로그아웃"은 현재 열린 게임 탭에서만 유지합니다. 로그아웃은 Google 권한 철회를 요청하고 로컬 토큰을 삭제합니다.
+"로그인 계속 유지"는 refresh token을 게임 Origin과 GitHub 인증 페이지의 공통 저장소에 보관합니다. localhost, 127.0.0.1, file:// 등 게임 주소가 달라도 같은 브라우저 프로필의 GitHub 인증 페이지가 저장된 refresh token으로 자동 로그인합니다. "새로고침하면 로그아웃"을 선택하면 게임 저장소와 인증 페이지 공통 저장소를 지웁니다. 로그아웃은 Google 권한 철회를 요청하고 양쪽 저장소의 로그인 정보를 삭제합니다.
 
-Google refresh token은 사용자의 권한 철회, 장기 미사용, 보안 정책, OAuth 동의 화면의 Testing 상태 등으로 만료될 수 있습니다. 따라서 로그인 유지가 문자 그대로 영원히 보장되지는 않습니다. Testing 상태의 외부 사용자 refresh token은 일반적으로 7일 후 만료되므로 OAuth 동의 화면은 Production으로 게시해야 합니다.
+브라우저 프로필이나 앱/WebView 데이터가 서로 분리되면 저장소도 분리되므로, 각 프로필에서는 최초 1회 인증해야 합니다. Google이 토큰을 취소하거나 OAuth 동의 화면이 Testing 상태이면 영구 유지가 보장되지 않습니다. Testing 상태의 외부 사용자 refresh token은 일반적으로 7일 후 만료되므로 OAuth 동의 화면은 Production으로 게시해야 합니다.
 
 저장 파일은 게임 페이지에서 암호화한 뒤 Google Drive appDataFolder로 직접 업로드합니다. 인증 서버에는 게임 세이브 본문을 보내지 않습니다. 기존 Cloudflare 일회성 공유 저장 자료는 자동 이관되지 않습니다.
