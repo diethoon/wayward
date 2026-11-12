@@ -1,6 +1,7 @@
 /* Personal Google Drive-backed cloud saves for WML.
- * No game-save backend is called by this addon. OAuth tokens stay in memory;
- * save contents are encrypted in the game page before direct upload to Drive.
+ * OAuth is completed on the fixed GitHub Pages callback and returned over a
+ * nonce-bound message/Worker relay. Refresh tokens stay in the game origin.
+ * Save contents are encrypted in the game page before direct upload to Drive.
  */
 WML.define({
   id: 'cloud-save',
@@ -30,6 +31,7 @@ WML.define({
     let drafts = {};
     let busy = false;
     let accessToken = '';
+    let refreshToken = '';
     let tokenExpiresAt = 0;
     let driveSlots = [];
     let slotsStatus = 'not-loaded'; // not-loaded | loading | loaded | error
@@ -38,8 +40,11 @@ WML.define({
     const SESSION_TOKEN_KEY = 'wml-google-drive-session-token-v1';
     let sessionPolicy = 'persistent';
 
-    // Fixed HTTPS bridge avoids per-device Google OAuth origin setup.
-    const AUTH_BRIDGE_URL = 'https://wayward-cloud-auth.vercel.app/';
+    // Fixed GitHub Pages auth UI + Cloudflare token broker. The game origin
+    // itself may be file://, localhost, LAN HTTP, HTTPS, or an embedded WebView.
+    const AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/';
+    const AUTH_API_URL = 'https://wayward-auth-relay.trpgengine1.workers.dev';
+    const AUTH_RELAY_WS_URL = 'wss://wayward-auth-relay.trpgengine1.workers.dev';
     const FILE_PREFIX = 'wayward-cloud-slot-';
     const STYLE_ID = 'wml-google-drive-save-style';
 
@@ -94,15 +99,20 @@ WML.define({
     sessionPolicy = loadSessionPolicy();
 
     function persistSessionToken() {
-      if (sessionPolicy !== 'persistent' || !hasToken()) {
+      if (sessionPolicy !== 'persistent' || !refreshToken) {
         writeStorage(SESSION_TOKEN_KEY, null);
         return;
       }
-      writeStorage(SESSION_TOKEN_KEY, JSON.stringify({ accessToken, expiresAt: tokenExpiresAt }));
+      writeStorage(SESSION_TOKEN_KEY, JSON.stringify({
+        accessToken: hasToken() ? accessToken : '',
+        refreshToken,
+        expiresAt: tokenExpiresAt
+      }));
     }
 
     function clearToken() {
       accessToken = '';
+      refreshToken = '';
       tokenExpiresAt = 0;
       driveSlots = [];
       slotsStatus = 'not-loaded';
@@ -119,8 +129,16 @@ WML.define({
       if (!saved) return;
       try {
         const session = JSON.parse(saved);
-        if (typeof session.accessToken === 'string' && session.accessToken &&
-            Number.isFinite(Number(session.expiresAt)) && Number(session.expiresAt) > Date.now() + 30000) {
+        const validAccess = typeof session.accessToken === 'string' && session.accessToken &&
+          Number.isFinite(Number(session.expiresAt)) && Number(session.expiresAt) > Date.now() + 30000;
+        if (typeof session.refreshToken === 'string' && session.refreshToken) {
+          refreshToken = session.refreshToken;
+          if (validAccess) {
+            accessToken = session.accessToken;
+            tokenExpiresAt = Number(session.expiresAt);
+          }
+        } else if (validAccess) {
+          // Backward compatibility with v0.4.4 access-token-only sessions.
           accessToken = session.accessToken;
           tokenExpiresAt = Number(session.expiresAt);
         } else writeStorage(SESSION_TOKEN_KEY, null);
@@ -128,10 +146,15 @@ WML.define({
     }
     restoreSessionToken();
 
+    function hasLogin() {
+      return hasToken() || !!refreshToken;
+    }
+
     function requestGoogleToken() {
       return new Promise((resolve, reject) => {
-        let bridge;
-        let timeout;
+        let bridge = null;
+        let socket = null;
+        let timeout = null;
         let settled = false;
         const bridgeUrl = new URL(AUTH_BRIDGE_URL);
         const bridgeOrigin = bridgeUrl.origin;
@@ -139,25 +162,22 @@ WML.define({
         try { globalThis.crypto.getRandomValues(nonceBytes); }
         catch (_) { reject(new Error('이 브라우저에서 안전한 로그인 연결을 만들 수 없습니다.')); return; }
         const nonce = Array.from(nonceBytes, byte => byte.toString(16).padStart(2, '0')).join('');
-        // file:// pages have an opaque "null" origin. Google OAuth still runs on
-        // our HTTPS bridge; only the return message needs the opaque-origin fallback.
-        const isFileExecution = window.location.protocol === 'file:';
         const rawOrigin = String(window.location.origin || '');
-        // Some embedded/mobile WebViews expose an empty location.origin even for HTTP(S).
-        // Rebuild that origin from protocol+host before falling back to the opaque file mode.
         const fallbackOrigin = /^(https?):$/.test(window.location.protocol) && window.location.host
           ? window.location.protocol + '//' + window.location.host : '';
-        const targetOrigin = isFileExecution || rawOrigin === 'null'
+        const gameOrigin = window.location.protocol === 'file:' || rawOrigin === 'null'
           ? 'null' : (rawOrigin || fallbackOrigin);
-        if (!targetOrigin || !/^(https?|file):$/.test(window.location.protocol)) {
+        if (!gameOrigin || !/^(https?|file):$/.test(window.location.protocol)) {
           reject(new Error('지원하지 않는 실행 주소입니다. file://, HTTP 또는 HTTPS에서 실행해 주세요.'));
           return;
         }
-        bridgeUrl.searchParams.set('origin', targetOrigin);
+        bridgeUrl.searchParams.set('origin', gameOrigin);
         bridgeUrl.searchParams.set('nonce', nonce);
+
         const cleanup = () => {
           window.removeEventListener('message', onMessage);
           if (timeout) clearTimeout(timeout);
+          try { if (socket && socket.readyState < 2) socket.close(); } catch (_) {}
         };
         const fail = error => {
           if (settled) return;
@@ -166,22 +186,42 @@ WML.define({
           try { if (bridge && !bridge.closed) bridge.close(); } catch (_) {}
           reject(error instanceof Error ? error : new Error(String(error || 'Google 연결에 실패했습니다.')));
         };
-        const onMessage = event => {
-          if (event.origin !== bridgeOrigin || event.source !== bridge || !event.data || event.data.nonce !== nonce) return;
-          if (event.data.type === 'wayward-cloud-auth-error') {
-            fail(new Error(event.data.message || 'Google 로그인이 취소되었거나 실패했습니다.'));
+        const accept = payload => {
+          if (settled || !payload || payload.nonce !== nonce) return;
+          if (payload.type === 'wayward-cloud-auth-error') {
+            fail(new Error(payload.message || 'Google 로그인이 취소되었거나 실패했습니다.'));
             return;
           }
-          if (event.data.type !== 'wayward-cloud-auth-success' || !event.data.accessToken) return;
+          if (payload.type !== 'wayward-cloud-auth-success' ||
+              typeof payload.accessToken !== 'string' || !payload.accessToken ||
+              typeof payload.refreshToken !== 'string' || !payload.refreshToken) return;
           settled = true;
           cleanup();
-          accessToken = String(event.data.accessToken);
-          tokenExpiresAt = Date.now() + Math.max(60, Number(event.data.expiresIn) || 3600) * 1000;
+          accessToken = payload.accessToken;
+          refreshToken = payload.refreshToken;
+          tokenExpiresAt = Date.now() + Math.max(60, Math.min(3600, Number(payload.expiresIn) || 3600)) * 1000;
           persistSessionToken();
           try { if (bridge && !bridge.closed) bridge.close(); } catch (_) {}
           resolve();
         };
+        const onMessage = event => {
+          if (event.origin !== bridgeOrigin || event.source !== bridge || !event.data) return;
+          accept(event.data);
+        };
         window.addEventListener('message', onMessage);
+
+        // Open the popup synchronously from the click. The nonce-bound WebSocket
+        // relay is independent of the game's origin and backs up postMessage in
+        // file://, LAN, and embedded WebView environments.
+        try {
+          socket = new WebSocket(AUTH_RELAY_WS_URL + '/relay/' + nonce + '?role=game');
+          socket.addEventListener('message', event => {
+            let payload;
+            try { payload = JSON.parse(String(event.data)); } catch (_) { return; }
+            accept(payload);
+          });
+        } catch (_) { socket = null; }
+
         bridge = window.open(bridgeUrl.toString(), 'waywardGoogleDriveAuth',
           'popup=yes,width=520,height=720,resizable=yes,scrollbars=yes');
         if (!bridge) {
@@ -193,17 +233,62 @@ WML.define({
       });
     }
 
-    async function driveFetch(path, options) {
-      if (!hasToken()) {
+    async function refreshAccessToken(force) {
+      if (!force && hasToken()) return accessToken;
+      if (!refreshToken) {
+        if (hasToken()) return accessToken;
         clearToken();
-        throw new Error('Google 연결이 만료되었습니다. Google 계정으로 연결 버튼을 다시 눌러 주세요.');
+        throw new Error('Google 로그인이 만료되었습니다. Google 계정으로 다시 연결해 주세요.');
       }
+      let response;
+      let data = {};
+      try {
+        response = await fetch(AUTH_API_URL + '/oauth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XmlHttpRequest' },
+          cache: 'no-store',
+          credentials: 'omit',
+          body: JSON.stringify({ refreshToken })
+        });
+        try { data = await response.json(); } catch (_) {}
+      } catch (_) {
+        throw new Error('Google 로그인 유지 서버에 연결하지 못했습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.');
+      }
+      if (response.status === 401 || data.invalidGrant) {
+        clearToken();
+        throw new Error('Google 로그인 유지 토큰이 폐기되었거나 만료되었습니다. 다시 로그인해 주세요.');
+      }
+      if (!response.ok || !data.accessToken) {
+        throw new Error(data.error || ('Google 로그인 갱신 실패 (' + response.status + ')'));
+      }
+      accessToken = String(data.accessToken);
+      if (typeof data.refreshToken === 'string' && data.refreshToken) refreshToken = data.refreshToken;
+      tokenExpiresAt = Date.now() + Math.max(60, Math.min(3600, Number(data.expiresIn) || 3600)) * 1000;
+      persistSessionToken();
+      return accessToken;
+    }
+
+    async function ensureAccessToken() {
+      if (hasToken()) return accessToken;
+      return refreshAccessToken(false);
+    }
+
+    async function driveFetch(path, options) {
+      await ensureAccessToken();
       const opts = Object.assign({ method: 'GET', headers: {} }, options || {});
-      opts.headers = Object.assign({}, opts.headers || {}, { Authorization: 'Bearer ' + accessToken });
-      const response = await fetch('https://www.googleapis.com' + path, opts);
+      opts.headers = Object.assign({}, opts.headers || {});
+      const send = () => {
+        opts.headers.Authorization = 'Bearer ' + accessToken;
+        return fetch('https://www.googleapis.com' + path, opts);
+      };
+      let response = await send();
+      if (response.status === 401 && refreshToken) {
+        await refreshAccessToken(true);
+        response = await send();
+      }
       if (response.status === 401) {
         clearToken();
-        throw new Error('Google 연결이 만료되었습니다. Google 계정으로 연결 버튼을 다시 눌러 주세요.');
+        throw new Error('Google 연결이 만료되었거나 접근 권한이 취소되었습니다. 다시 로그인해 주세요.');
       }
       if (!response.ok) {
         let detail = '';
@@ -517,6 +602,30 @@ WML.define({
         });
     }
 
+    async function logoutGoogleAccount() {
+      const savedRefreshToken = refreshToken;
+      const savedAccessToken = accessToken;
+      let revoked = false;
+      try {
+        if (savedRefreshToken || savedAccessToken) {
+          const response = await fetch(AUTH_API_URL + '/oauth/revoke', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XmlHttpRequest' },
+            cache: 'no-store',
+            credentials: 'omit',
+            body: JSON.stringify({ refreshToken: savedRefreshToken, accessToken: savedAccessToken })
+          });
+          let data = {};
+          try { data = await response.json(); } catch (_) {}
+          revoked = response.ok && data.revoked === true;
+        }
+      } catch (_) { /* Always clear local credentials even when Google is unreachable. */ }
+      clearToken();
+      show({ page: 'home' }, revoked
+        ? 'Google 연결을 로그아웃하고 이 브라우저의 로그인 토큰도 삭제했습니다.'
+        : '이 브라우저의 로그인 정보는 삭제했습니다. Google 측 권한 철회는 확인되지 않았습니다.');
+    }
+
     async function saveSlot(slot) {
       const snapshot = buildSnapshot();
       snapshot.memo = String(fields.memo && fields.memo.value || '').trim();
@@ -560,7 +669,7 @@ WML.define({
       const title = document.createElement('h3');
       title.textContent = '로그인 유지 설정';
       const description = document.createElement('p');
-      description.textContent = '로그인 최대한 유지는 액세스 토큰이 유효한 동안 새로고침과 브라우저 재실행 후 연결을 복원합니다. Google 액세스 토큰은 보통 약 1시간 후 만료되며, 만료 후에는 다시 로그인해야 합니다.';
+      description.textContent = '로그인 유지를 선택하면 Google refresh token을 이 게임 실행 주소의 브라우저 저장소에 보관하고, 액세스 토큰이 만료될 때 자동 갱신합니다. Google에서 권한을 취소하거나 보안 정책으로 토큰이 폐기되지 않는 동안에는 재실행 후에도 연결을 유지합니다.';
       const actions = document.createElement('div');
       actions.className = 'wml-gd-session-actions';
       const close = () => { if (overlay.open) overlay.close(); overlay.remove(); document.removeEventListener('keydown', onKeyDown, true); };
@@ -577,13 +686,13 @@ WML.define({
           else writeStorage(SESSION_TOKEN_KEY, null);
           close();
           show({ page: 'home' }, policy === 'persistent'
-            ? '로그인 유지 설정을 저장했습니다. 토큰이 만료되면 다시 로그인해야 합니다.'
+            ? '로그인 유지 설정을 저장했습니다. Google 권한이 유효한 동안 만료된 액세스 토큰을 자동 갱신합니다.'
             : '새로고침하면 로그아웃하도록 설정했습니다.');
         });
         actions.append(choice);
       };
-      addChoice('새로고침하면 로그아웃', 'session', '현재 페이지에서만 로그인 유지');
-      addChoice('로그인 최대한 유지', 'persistent', '유효한 액세스 토큰을 저장해 재실행 시 복원');
+      addChoice('새로고침하면 로그아웃', 'session', '현재 열린 게임 탭에서만 refresh token을 메모리에 유지');
+      addChoice('로그인 계속 유지', 'persistent', 'refresh token을 이 실행 주소에 저장하고 액세스 토큰을 자동 갱신');
       const closeActions = document.createElement('div');
       closeActions.className = 'wml-gd-session-actions';
       const closeButton = document.createElement('button');
@@ -654,22 +763,19 @@ WML.define({
         addTitle(root, '개인 Google Drive 세이브');
         addText(root,
           '구글계정으로 연결하면 현재 진행 상황이 암호화되어 드라이브에 직접 저장됩니다.');
-        addButton(root, hasToken() ? '저장 목록 새로고침' : 'Google 계정으로 연결',
-          hasToken() ? () => runAction(async () => {
+        addButton(root, hasLogin() ? '저장 목록 새로고침' : 'Google 계정으로 연결',
+          hasLogin() ? () => runAction(async () => {
             await refreshSlots();
             show({ page: 'home' }, '저장 목록을 새로고침했습니다.');
           }) : connectFromClick, true);
         addButton(root, '로그인 유지 설정', showSessionSettingsPopup);
-        addButton(root, '로그아웃', () => {
-          clearToken();
-          show({ page: 'home' }, '로그아웃했습니다. 저장된 로그인 토큰을 이 브라우저에서 삭제했습니다.');
-        });
-        addText(root, hasToken()
+        addButton(root, '로그아웃', () => runAction(() => logoutGoogleAccount()));
+        addText(root, hasLogin()
           ? (sessionPolicy === 'persistent'
-            ? '상태: 연결됨 (토큰 유효 기간 동안 재실행 시 복원)'
-            : '상태: 연결됨 (새로고침하면 로그아웃)')
+            ? '상태: 연결됨 (Google 권한이 유지되는 동안 자동 로그인 갱신)'
+            : '상태: 연결됨 (현재 게임 탭에서만 유지)')
           : '상태: 연결되지 않음', 'wml-gd-small');
-        if (hasToken()) {
+        if (hasLogin()) {
           if (slotsStatus === 'loaded') {
             renderSlots(root);
           } else if (slotsStatus === 'loading') {
