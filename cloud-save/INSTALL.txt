@@ -1,45 +1,14 @@
-Wayward Google Drive CloudSave — WML v0.6.1
+Wayward Google Drive CloudSave — WML v0.7.0
 
 설치
-1. cloud-save 폴더를 게임의 wml/mods/ 안에 복사합니다.
-2. wml/mods/mods.js의 WML.enable([...])에 "cloud-save"가 있는지 확인합니다. 없을 때만 기존 목록을 보존해 추가합니다.
-3. 게임을 다시 열고 클라우드세이브 (Google Drive)를 엽니다.
+1. cloud-save 폴더 전체를 게임의 wml/mods/ 폴더에 복사합니다.
+2. wml/mods/mods.js의 기존 WML.enable([...]) 배열에 "cloud-save"가 있는지 확인합니다. 없으면 기존 모드 ID를 보존하면서 추가합니다.
+3. 게임을 다시 열고 클라우드세이브 (Google Drive)를 실행합니다.
 
-구성
-- 브라우저 인증: https://jeiky224.github.io/cloud/
-- 브라우저: Google Identity Services Token Model
-- Android: 공식 Wayward Launcher의 Android Google Identity AuthorizationClient
-- Cloudflare, Worker, 개인 서버, WebSocket 인증 중계, OAuth Client Secret을 사용하지 않습니다.
-- Google Drive API는 클라이언트에서 직접 호출합니다.
+구성 파일
+- mod.js: WML.define({ id: 'cloud-save', version: '0.7.0', ... }) 메타데이터 및 게임↔정적 인증 페이지 postMessage bridge
+- crypto.js: 기존 AES-256-GCM / embedded-addon-v2 / PBKDF2 legacy 복호화
+- README.md: 전체 아키텍처 및 저장 호환성 설명
 
-로그인 상태 유지
-- 설정 두 가지: "로그인 상태 유지" / "새로고침할 때마다 로그인 해제". 서로 배타적입니다.
-- 로그인 상태 유지: 토큰을 저장하지 않고 로그인 정책과 이전 로그인 성공 여부만 저장합니다. Android 런처는 과거에 연결한 적이 있을 때만 기존 승인 상태 복구를 시도합니다. 브라우저는 새로고침 후 연결 버튼을 눌러 Google Token Model을 다시 실행해야 합니다.
-- 새로고침할 때마다 로그인 해제: 다음 초기화부터 인증 복구를 시도하지 않고 다음 연결에서 계정 선택을 요청합니다.
-- 웹은 prompt: '' 또는 prompt: 'select_account'를 사용합니다. Android는 AuthorizationRequest.Prompt.SELECT_ACCOUNT로 계정 선택을 요청합니다.
-
-명시적 로그아웃
-- 로컬 액세스 토큰과 Android 캐시 토큰을 삭제합니다.
-- 로그인 상태 유지를 해제하고 명시적 로그아웃 플래그를 저장합니다.
-- 다음 로그인은 반드시 계정 선택 화면을 요청합니다. 다른 Google 계정 선택이 가능합니다.
-- 로그아웃 후 설정을 바꾸어도 계정 선택 잠금은 성공적인 새 인증 전까지 유지됩니다.
-- Google 권한은 자동으로 철회하지 않습니다.
-
-Google 앱 권한 철회
-- 단순 로그아웃과 별도 버튼입니다.
-- 브라우저는 GIS revoke(), Android 공식 런처는 AuthorizationClient.revokeAccess()를 사용합니다.
-- 권한 철회 실패는 별도로 표시합니다. Android API는 해당 앱에 허용된 다른 범위도 함께 철회할 수 있습니다.
-
-토큰과 상태
-- 액세스 토큰/Refresh Token은 브라우저 저장소에 기록하지 않습니다.
-- 만료된 액세스 토큰은 사용자 동작을 통한 재인증이 필요합니다.
-- Google 세션 만료와 Drive 권한 미승인은 별도 상태로 표시합니다.
-
-지원 환경
-- 브라우저: localhost, 127.0.0.1, LAN HTTP, HTTPS
-- file:// 브라우저 직접 실행은 출처 검증 문제로 지원하지 않습니다.
-- Android: 계정 선택 정책과 자동 승인 복구 API가 포함된 최신 공식 Wayward Launcher 사용
-
-세이브
-- 기존 Google Drive appDataFolder 저장, 슬롯, 암복호화, 업로드/다운로드/복원 형식 보존.
-- 자동 암호화 내장 키는 공개 소스에서 추출 가능하므로 강한 기밀성의 근거로 취급하지 마세요.
+Google OAuth 인증과 모든 Google Drive API 요청은 https://jeiky224.github.io/cloud/auth.html 정적 HTTPS 페이지에서만 실행됩니다.
+게임 모드에는 access token이 전달되지 않습니다. 토큰 복사/붙여넣기 수동 우회도 제공하지 않습니다.
