@@ -21,14 +21,25 @@ assert.match(main, /startOrSwitchManagedImageGenServer/);
 assert.match(main, /waitForImageGenStopThenStart/);
 assert.match(main, /ImageGenBackendInstaller\.install\(this,backend\)/);
 assert.match(main, /writeImageGenRuntimeConfig\(backend,mode,requestedUrl,launcherProfileId,launcherProviderId\)/);
+assert.match(main, /new String\[\]\s*\{\s*"imagegen-proxy.js",\s*"imagegen-studio-bridge.js"\s*\}/,
+  "the direct in-game provider bridge must not be injected into WebView");
+assert.doesNotMatch(main, /@JavascriptInterface public void generateImageWithProvider/,
+  "WML must not have a direct provider-generation bypass");
+assert.doesNotMatch(main, /@JavascriptInterface public String listImageProviders/,
+  "WML must not enumerate launcher provider records directly");
 assert.match(main, /zipMods\.open\("wml\/mods\/imagestudio\/mod\.js"\)/,
   "auto-start must detect an Image Studio adapter installed as a WML ZIP mod");
-assert.match(main, /String selectedMode = "novelai"/,
-  "auto-start retains NovelAI as a fallback when no launcher provider is configured");
-assert.match(main, /selectedMode = "launcher"/,
-  "auto-start selects the active profile's registered launcher provider when permitted");
-assert.match(main, /selected\.allowInGame/,
-  "auto-start respects the provider's in-game permission");
+const automaticStart = main.slice(
+  main.indexOf("private void ensureImageGenServer"),
+  main.indexOf("private static boolean sameImageGenVersion")
+);
+assert.ok(automaticStart.length > 0, "session engine policy method exists");
+assert.doesNotMatch(automaticStart, /startImageGenService\(|startManagedImageGenServer\(|ImageGenBackendInstaller\.install/,
+  "opening a game session must never start or install a generation engine");
+assert.match(automaticStart, /서버가 꺼져 있습니다.*기존 이미지팩만 사용합니다/,
+  "when no server is running, session startup must leave image packs as the only source");
+assert.doesNotMatch(main, /String selectedMode = "novelai"/,
+  "session startup must not silently select NovelAI as a fallback");
 assert.match(main, /PC 주소 미설정 · 연결 대기 중/);
 assert.match(main, /런처 내장 ImageGen /);
 

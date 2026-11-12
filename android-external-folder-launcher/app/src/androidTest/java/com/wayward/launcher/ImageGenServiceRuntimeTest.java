@@ -825,58 +825,56 @@ public final class ImageGenServiceRuntimeTest {
 
             String bridgeType = awaitJsString(instrumentation, gameWeb,
                     "typeof window.WaywardImageProviders", 30_000L);
-            assertEquals("The document-start image provider bridge is not installed in the game WebView.",
-                    "object", bridgeType);
+            assertEquals("The in-game WebView must not expose the launcher's provider registry.",
+                    "undefined", bridgeType);
+            String nativeProviderMethod = awaitJsString(instrumentation, gameWeb,
+                    "typeof window.WMLHost.generateImageWithProvider", 10_000L);
+            assertEquals("The in-game WebView must not bypass the launcher server through a native provider call.",
+                    "undefined", nativeProviderMethod);
 
-            String providersJson = awaitJsString(instrumentation, gameWeb,
-                    "JSON.stringify(window.WaywardImageProviders.list())", 10_000L);
-            JSONObject providers = new JSONObject(providersJson);
-            assertEquals("The Cloudflare provider was not selected for the test game profile.",
-                    FLUX_PROVIDER_ID, providers.optString("defaultProviderId", ""));
-            assertTrue("The Cloudflare provider is not listed as enabled.",
-                    providers.optJSONArray("providers") != null
-                            && providers.optJSONArray("providers").length() > 0);
-
-            // Save the test-only NovelAI token through the exact WebView fetch
-            // path used by Image Studio. This must pass through ImageGenProxy,
-            // write to Android Keystore, and never remain in anima-settings.json.
+            // A malicious or stale in-game settings panel must not change the
+            // launcher-selected image engine, ComfyUI address, or NAI credential.
             String saveDispatch = "(function(){"
-                    + "window.__waywardCiNaiSave={state:'pending'};"
+                    + "window.__waywardCiEngineOverride={state:'pending'};"
                     + "fetch('http://127.0.0.1:8189/api/generation/settings',{"
                     + "method:'PUT',headers:{'Content-Type':'application/json'},"
-                    + "body:JSON.stringify({imageProvider:'nai',naiToken:'ci-smoke-token-not-valid'})"
+                    + "body:JSON.stringify({imageProvider:'nai',comfyUrl:'https://attacker.invalid:8188',naiToken:'ci-must-not-be-stored',naiTokenClear:true})"
                     + "}).then(async function(response){"
                     + "var body=await response.json().catch(function(){return {};});"
-                    + "window.__waywardCiNaiSave={state:'done',status:response.status,"
-                    + "configured:!!(body.settings&&body.settings.naiTokenConfigured),"
-                    + "model:body.settings&&body.settings.naiModel};"
-                    + "}).catch(function(error){window.__waywardCiNaiSave={state:'error',message:String(error).slice(0,160)};});"
+                    + "window.__waywardCiEngineOverride={state:'done',status:response.status,"
+                    + "provider:body.settings&&body.settings.imageProvider,"
+                    + "comfyUrl:body.settings&&body.settings.comfyUrl,"
+                    + "naiTokenConfigured:body.settings&&body.settings.naiTokenConfigured};"
+                    + "}).catch(function(error){window.__waywardCiEngineOverride={state:'error',message:String(error).slice(0,160)};});"
                     + "return 'dispatched';})()";
-            assertEquals("The Android WebView did not dispatch the NovelAI settings save.",
+            assertEquals("The Android WebView did not dispatch the engine-override attempt.",
                     "dispatched", awaitJsString(instrumentation, gameWeb, saveDispatch, 10_000L));
-            JSONObject naiSave = new JSONObject();
-            long naiSaveDeadline = System.currentTimeMillis() + 30_000L;
-            while (System.currentTimeMillis() < naiSaveDeadline) {
-                naiSave = new JSONObject(awaitJsString(instrumentation, gameWeb,
-                        "JSON.stringify(window.__waywardCiNaiSave||{state:'pending'})", 10_000L));
-                if (!"pending".equals(naiSave.optString("state", ""))) break;
+            JSONObject overrideResult = new JSONObject();
+            long overrideDeadline = System.currentTimeMillis() + 30_000L;
+            while (System.currentTimeMillis() < overrideDeadline) {
+                overrideResult = new JSONObject(awaitJsString(instrumentation, gameWeb,
+                        "JSON.stringify(window.__waywardCiEngineOverride||{state:'pending'})", 10_000L));
+                if (!"pending".equals(overrideResult.optString("state", ""))) break;
                 Thread.sleep(100L);
             }
-            assertEquals("NovelAI settings were not saved through the Android WebView proxy: " + naiSave,
-                    "done", naiSave.optString("state", ""));
-            assertEquals("NovelAI settings API returned an unexpected status: " + naiSave,
-                    200, naiSave.optInt("status", -1));
-            assertTrue("The NovelAI settings response did not mark the token as configured: " + naiSave,
-                    naiSave.optBoolean("configured", false));
-            assertEquals("The test must use the launcher's V4.5 Full default.",
-                    "nai-diffusion-4-5-full", naiSave.optString("model", ""));
-            assertEquals("The WebView proxy did not store the NovelAI token in Android Keystore.",
-                    "ci-smoke-token-not-valid", ImageProviderStore.readNovelAiToken(context));
+            assertEquals("The in-game engine override request did not complete: " + overrideResult,
+                    "done", overrideResult.optString("state", ""));
+            assertEquals("The Image Studio settings route rejected an otherwise valid prompt settings update.",
+                    200, overrideResult.optInt("status", -1));
+            assertEquals("The in-game request changed the launcher's selected provider.",
+                    "launcher", overrideResult.optString("provider", ""));
+            assertEquals("The in-game request changed the launcher's ComfyUI address.",
+                    "http://127.0.0.1:8188", overrideResult.optString("comfyUrl", ""));
+            assertTrue("The game request must not create or replace an NAI token.",
+                    !overrideResult.optBoolean("naiTokenConfigured", true));
+            assertEquals("The in-game request must not write credentials to Android Keystore.",
+                    "", ImageProviderStore.readNovelAiToken(context));
             File naiSettingsFile = new File(context.getFilesDir(), "imagegen/state/anima-settings.json");
             String naiSettingsOnDisk = readText(naiSettingsFile);
-            assertTrue("The NovelAI token was written in plaintext to anima-settings.json.",
-                    !naiSettingsOnDisk.contains("ci-smoke-token-not-valid"));
-            assertEquals("ImageGen did not become generation-ready after the settings save.",
+            assertTrue("The in-game request wrote its token into anima-settings.json.",
+                    !naiSettingsOnDisk.contains("ci-must-not-be-stored"));
+
+            assertEquals("ImageGen did not remain ready after the ignored engine override.",
                     200, awaitStatus(200, 30_000L));
 
             // Exercise the actual WW_ImageStudioBridge registered by the
@@ -1028,6 +1026,34 @@ public final class ImageGenServiceRuntimeTest {
             }
             assertEquals("The real Image Studio generation settings did not finish loading.",
                     "true", settingsReady);
+
+            String launcherOwnedSettingsUi = awaitJsString(instrumentation, gameWeb,
+                    "(function(){"
+                            + "var hidden=function(e){return !!e&&(e.hidden||getComputedStyle(e).display==='none');};"
+                            + "var engine=document.querySelector('#wwis-overlay input[name=\\\"wwis-provider\\\"]');"
+                            + "var token=document.querySelector('#wwis-overlay #wwis-nai-token');"
+                            + "var tokenClear=document.querySelector('#wwis-overlay #wwis-nai-token-clear');"
+                            + "var title=document.querySelector('#wwis-overlay .wwis-generation-toolbar strong');"
+                            + "return JSON.stringify({title:title&&title.textContent,"
+                            + "engineSelectorHidden:hidden(engine&&engine.closest('.wwis-card')),"
+                            + "comfySettingsHidden:hidden(document.querySelector('#wwis-overlay #wwis-comfy-settings')),"
+                            + "naiTokenHidden:hidden(token&&token.closest('label')),"
+                            + "naiTokenClearHidden:hidden(tokenClear&&tokenClear.closest('label')),"
+                            + "naiCredentialNote:!!document.querySelector('#wwis-overlay #wwis-launcher-nai-credential-note')});})()",
+                    10_000L);
+            JSONObject lockedUi = new JSONObject(launcherOwnedSettingsUi);
+            assertEquals("생성 옵션 · 엔진/서버는 런처 관리",
+                    lockedUi.optString("title", ""));
+            assertTrue("The in-game engine selector remained visible: " + lockedUi,
+                    lockedUi.optBoolean("engineSelectorHidden", false));
+            assertTrue("The in-game ComfyUI URL/models panel remained visible: " + lockedUi,
+                    lockedUi.optBoolean("comfySettingsHidden", false));
+            assertTrue("The in-game NAI token input remained visible: " + lockedUi,
+                    lockedUi.optBoolean("naiTokenHidden", false));
+            assertTrue("The in-game NAI token-clear checkbox remained visible: " + lockedUi,
+                    lockedUi.optBoolean("naiTokenClearHidden", false));
+            assertTrue("The launcher-only credential notice is missing: " + lockedUi,
+                    lockedUi.optBoolean("naiCredentialNote", false));
             String settingsClosed = awaitJsString(instrumentation, gameWeb,
                     "(function(){var close=document.querySelector('#wwis-overlay #wwis-close');"
                             + "if(!close)return 'close_button_missing';close.click();"
@@ -1439,6 +1465,12 @@ public final class ImageGenServiceRuntimeTest {
         });
         assertTrue("ImageGen did not stop before the Keystore persistence restart test.",
                 awaitServerDown(45_000L));
+
+        // Simulate saving the credential through the launcher's ImageProviderActivity.
+        // The game WebView is deliberately not involved in credential management.
+        ImageProviderStore.Snapshot launcherSettings = new ImageProviderStore(context).load();
+        launcherSettings.novelAiToken = "ci-smoke-token-not-valid";
+        new ImageProviderStore(context).save(launcherSettings);
 
         Method startAction = MainActivity.class.getDeclaredMethod("startNovelAiServer");
         startAction.setAccessible(true);

@@ -20,10 +20,48 @@ const batchQueueSource = readBackend("batch/queue.ts");
 const comfyJobRunnerSource = readBackend("comfy/jobRunner.ts");
 const naiClientSource = readBackend("nai/client.ts");
 const generationSettingsSource = readBackend("routes/generationSettings.ts");
+const directImageRouteSource = readBackend("routes/image.ts");
 
 assert.match(batchRoutesSource,
   /typeof item\.talentId !== 'string' \|\| typeof item\.prompt !== 'string'/,
   "the production batch API requires talentId and prompt on every item");
+assert.equal(directImageRouteSource.includes("WORKFLOWS.includes(requestedWorkflow)"), false,
+  "the direct image endpoint must not reject a request because of a game-selected engine name");
+assert.equal(directImageRouteSource.includes("unknown workflow:"), false,
+  "the direct image endpoint must not validate game-selected engine names");
+assert.match(directImageRouteSource,
+  /function activeImageWorkflow\(_requested: WorkflowType, config: Config\)[\s\S]*?return config\.imageProvider === 'nai' \|\| config\.imageProvider === 'launcher'[\s\S]*?config\.imageProvider === 'anima' \? 'anima' : 'illustrious'/,
+  "the direct /api/image/generate route must ignore the game's requested workflow and use the launcher's configured engine");
+assert.match(batchQueueSource,
+  /private workflowFor\(_item: BatchItem\)[\s\S]*?return this\.config\.imageProvider === 'nai' \|\| this\.config\.imageProvider === 'launcher'[\s\S]*?this\.config\.imageProvider === 'anima' \? 'anima' : 'illustrious'/,
+  "the batch generation route must ignore a workflow selected by the game");
+assert.match(directImageRouteSource,
+  /if \(reference && workflow === 'nai'\)[\s\S]*?기준 이미지 입력을 지원하지 않습니다/,
+  "NAI mode must not upload a reference image to ComfyUI");
+assert.match(generationSettingsSource, /imageProvider: base\.imageProvider,/,
+  "in-game settings PUT must not change the launcher-selected provider");
+assert.match(generationSettingsSource, /naiToken: base\.naiToken,/,
+  "in-game settings PUT must not replace the launcher's NAI credential");
+assert.match(generationSettingsSource, /comfyUrl: base\.comfyUrl,/,
+  "in-game settings PUT must not change the launcher's ComfyUI endpoint");
+assert.doesNotMatch(generationSettingsSource, /config\.imageProvider = settings\.imageProvider|comfy\.setBaseUrl\(settings\.comfyUrl\)/,
+  "runtime config must never be mutated by game-selected engine or ComfyUI URL");
+assert.match(proxyJava,
+  /if \("POST"\.equals\(safeMethod\) && isGenerationEndpoint\(requestPath\)\)[\s\S]*?if \(!engine\.isReady\(\)\)[\s\S]*?launcher_generation_blocked_server_not_ready/,
+  "the native proxy must reject generation when no launcher-selected engine is ready");
+assert.match(mainActivitySource, /new String\[\]\s*\{\s*"imagegen-proxy\.js",\s*"imagegen-studio-bridge\.js"\s*\}/,
+  "the direct in-game provider bridge must not be loaded");
+assert.doesNotMatch(mainActivitySource, /@JavascriptInterface public void generateImageWithProvider|@JavascriptInterface public String listImageProviders/,
+  "the WebView must not expose a direct provider-generation bypass");
+assert.match(bridgeSource, /installLauncherOwnedSettingsUi/);
+assert.match(bridgeSource, /생성 옵션 \(엔진·서버는 런처 관리\)/,
+  "the in-game settings entry must no longer pretend to own the engine");
+assert.match(bridgeSource, /input\[name="wwis-provider"\]/,
+  "the in-game engine selector must be hidden");
+assert.match(bridgeSource, /#wwis-comfy-settings/,
+  "the game-side Comfy endpoint/models panel must be hidden");
+assert.match(bridgeSource, /#wwis-nai-token-clear/,
+  "the game-side NAI credential controls must be hidden");
 assert.match(batchQueueSource, /negativePrompt\?: string/,
   "the production batch item accepts a separate negative prompt");
 assert.match(batchQueueSource,
@@ -321,7 +359,7 @@ async function exerciseEngine(engine) {
 
 assert.match(mainActivitySource, /@JavascriptInterface public void imageGenProxyFetch\(String requestId,String method,String path,String headersJson,String bodyBase64\)\{\s*ImageGenProxy\.dispatch\(web,requestId,method,path,headersJson,bodyBase64\);\s*\}/,
   "the real WebView JavaScript interface must dispatch intercepted Image Studio requests to ImageGenProxy");
-assert.match(mainActivitySource, /version\s*=\s*"launcher-imagegen:"\s*\+\s*ImageGenBackendInstaller\.VERSION\s*\+\s*":"\s*\+\s*providerMode/,
+assert.match(mainActivitySource, /String launchVersion\s*=\s*"launcher-imagegen:"\s*\+\s*ImageGenBackendInstaller\.VERSION\s*\+\s*":"\s*\+\s*mode/,
   "the active NovelAI or ComfyUI engine mode must be present in the runtime identity");
 assert.match(proxyJava, /new URL\("http:\/\/127\.0\.0\.1:8189" \+ safePath\)/,
   "the native WebView proxy must target only the launcher-managed loopback server");

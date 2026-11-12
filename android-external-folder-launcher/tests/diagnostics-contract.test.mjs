@@ -81,10 +81,15 @@ assert.ok(main.includes("imageGenRuntimeStatus"));
 assert.ok(main.includes("nai-diffusion-4-5-full"));
 assert.ok(main.includes("WaywardLauncherImageStudio"));
 assert.match(imageProviderStore, /static void saveNovelAiToken/);
-assert.match(proxy, /novelai_token_saved_keystore/);
+assert.doesNotMatch(proxy, /novelai_token_saved_keystore|novelai_token_cleared_keystore|saveNovelAiToken/,
+  "game-side settings requests must never store or clear launcher NAI credentials");
+
 assert.match(service, /migrateLegacyNovelAiToken/);
 assert.match(service, /legacy_novelai_token_migrated_to_keystore/);
-assert.match(runtimeSmokeTest, /Save the test-only NovelAI token/);
+assert.match(runtimeSmokeTest, /launcherSettings\.novelAiToken = "ci-smoke-token-not-valid"/);
+assert.match(runtimeSmokeTest, /new ImageProviderStore\(context\)\.save\(launcherSettings\)/,
+  "the NAI token used in the restart test must be stored by launcher settings, not the game WebView");
+
 assert.match(runtimeSmokeTest, /ImageProviderStore\.readNovelAiToken/);
 assert.match(runtimeSmokeTest, /restartImageGenServerWithKeystoreToken/);
 assert.match(runtimeSmokeTest, /anima-settings\.json/);
