@@ -269,6 +269,29 @@ final class ImageProviderStore {
         return null;
     }
 
+    /** Explicitly activates a saved provider for game-originated generation. */
+    static Provider enableForGame(Snapshot snapshot, String providerId) {
+        if (snapshot == null) throw new IllegalArgumentException("이미지 서비스 설정이 없습니다.");
+        Provider provider = find(snapshot, providerId);
+        if (provider == null) throw new IllegalArgumentException("게임에서 사용할 이미지 서비스를 찾지 못했습니다.");
+        provider.enabled = true;
+        provider.allowInGame = true;
+        return provider;
+    }
+
+    /** Selecting a profile's primary provider is the explicit in-game opt-in. */
+    static Provider setDefaultForGame(Snapshot snapshot, String profileId, String providerId) {
+        if (snapshot == null || profileId == null || !profileId.matches("[a-f0-9]{32}")) {
+            throw new IllegalArgumentException("게임 프로필 ID가 올바르지 않습니다.");
+        }
+        Provider provider = enableForGame(snapshot, providerId);
+        snapshot.defaults.put(profileId, provider.id);
+        if (provider.id.equals(snapshot.fallbacks.get(profileId))) {
+            snapshot.fallbacks.remove(profileId);
+        }
+        return provider;
+    }
+
     static void validateProvider(Provider provider) {
         if (provider == null) throw new IllegalArgumentException("이미지 서비스 설정이 없습니다.");
         if (provider.id == null || !provider.id.matches("[a-f0-9]{32}")) {
