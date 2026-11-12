@@ -37,6 +37,16 @@ final class ImageGenProxy {
             return;
         }
         final android.content.Context appContext=web.getContext().getApplicationContext();
+        final String requestPath = Uri.parse(safePath).getPath();
+        if ("POST".equals(safeMethod) && isGenerationEndpoint(requestPath)) {
+            ImageGenStatusStore.State engine = ImageGenStatusStore.read(appContext.getFilesDir());
+            if (!engine.isReady()) {
+                ImagePipelineDiagnostics.record(appContext, "launcher_generation_blocked_server_not_ready", new JSONObject());
+                deliver(web, requestId, errorResponse(503,
+                        "런처 이미지 생성 서버가 실행 중이 아니거나 준비되지 않았습니다. 현재는 기존 이미지팩만 사용할 수 있습니다."));
+                return;
+            }
+        }
         final long startedAt=System.currentTimeMillis();
         final String diagnosticPath=Uri.parse("http://127.0.0.1" + safePath).getPath();
         JSONObject receivedDiagnostic=new JSONObject();
@@ -51,30 +61,6 @@ final class ImageGenProxy {
                     deliver(web, requestId, errorResponse(413, "ImageGen 요청 본문이 너무 큽니다."));
                     return;
                 }
-                if ("PUT".equals(safeMethod) && "/api/generation/settings".equals(Uri.parse(safePath).getPath())
-                        && requestBody.length > 0) {
-                    try {
-                        JSONObject settings = new JSONObject(new String(requestBody, StandardCharsets.UTF_8));
-                        if (settings.optBoolean("naiTokenClear", false)) {
-                            ImageProviderStore.saveNovelAiToken(appContext, "");
-                            DiagnosticsLogger.event(appContext, "INFO", "imagegen_proxy",
-                                    "novelai_token_cleared_keystore", null);
-                        } else {
-                            String token = settings.optString("naiToken", "");
-                            if (!token.trim().isEmpty()) {
-                                ImageProviderStore.saveNovelAiToken(appContext, token);
-                                DiagnosticsLogger.event(appContext, "INFO", "imagegen_proxy",
-                                        "novelai_token_saved_keystore", null);
-                            }
-                        }
-                    } catch (Exception secureStoreError) {
-                        DiagnosticsLogger.error(appContext, "imagegen_proxy",
-                                "novelai_token_keystore_write_failed", secureStoreError);
-                        deliver(web, requestId, errorResponse(500, "NovelAI 인증 정보를 Android 보안 저장소에 저장하지 못했습니다."));
-                        return;
-                    }
-                }
-
                 URL url = new URL("http://127.0.0.1:8189" + safePath);
                 connection = (HttpURLConnection) url.openConnection();
                 connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
@@ -139,6 +125,15 @@ final class ImageGenProxy {
                 if (connection != null) connection.disconnect();
             }
         }, "wayward-imagegen-proxy").start();
+    }
+
+    private static boolean isGenerationEndpoint(String path) {
+        if (path == null) return false;
+        return path.equals("/api/image/generate") || path.startsWith("/api/image/generate/")
+                || path.equals("/api/images/generate") || path.startsWith("/api/images/generate/")
+                || path.equals("/api/batch/enqueue") || path.startsWith("/api/batch/enqueue/")
+                || path.equals("/api/generation/generate") || path.startsWith("/api/generation/generate/")
+                || path.equals("/api/generation/enqueue") || path.startsWith("/api/generation/enqueue/");
     }
 
     private static String validatePath(String raw) {
