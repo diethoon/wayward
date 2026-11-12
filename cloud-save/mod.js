@@ -887,7 +887,11 @@ WML.define({
         const onMessage = event => {
           if (event.origin !== AUTH_BRIDGE_ORIGIN || event.source !== popup ||
               !event.data || event.data.nonce !== nonce) return;
-          if (event.data.type === 'wayward-cloud-revoke-ready') {
+          if (event.data.type === 'wayward-cloud-auth-page-ready') {
+            try {
+              popup.postMessage({ type: 'wayward-cloud-auth-hello', nonce }, AUTH_BRIDGE_ORIGIN);
+            } catch (_) { finish(false); }
+          } else if (event.data.type === 'wayward-cloud-revoke-ready') {
             try {
               popup.postMessage({
                 type: 'wayward-cloud-revoke',
@@ -903,9 +907,6 @@ WML.define({
         popup = window.open(revokeUrl.toString(), 'waywardGoogleDriveRevoke',
           'popup=yes,width=520,height=520,resizable=yes,scrollbars=yes');
         if (!popup) { finish(false); return; }
-        try {
-          popup.postMessage({ type: 'wayward-cloud-auth-hello', nonce }, AUTH_BRIDGE_ORIGIN);
-        } catch (_) {}
         timer = setTimeout(() => finish(false), 30000);
       });
     }
