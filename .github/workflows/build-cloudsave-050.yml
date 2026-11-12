@@ -62,12 +62,12 @@ jobs:
             assert.equal(extract(newSource, start, end), extract(oldSource, start, end),
               'protected game save/load logic changed: ' + start);
           }
-          assert.match(newSource, /version: '0\.5\.0'/);
-          assert.doesNotMatch(newSource, /wayward-cloud-auth\.vercel\.app/i);
-          assert.match(newSource, /refreshToken/);
-          assert.match(newSource, /\/oauth\/refresh/);
-          assert.match(newSource, /\/oauth\/revoke/);
-          assert.match(newSource, /wss:\/\/wayward-auth-relay\.trpgengine1\.workers\.dev/);
+          assert.ok(newSource.includes("version: '0.5.0'"));
+          assert.ok(!newSource.includes('wayward-cloud-auth.vercel.app'));
+          assert.ok(newSource.includes('refreshToken'));
+          assert.ok(newSource.includes('/oauth/refresh'));
+          assert.ok(newSource.includes('/oauth/revoke'));
+          assert.ok(newSource.includes('wss://wayward-auth-relay.trpgengine1.workers.dev'));
           console.log('Protected save/load functions are byte-for-byte unchanged.');
           NODE
 
@@ -80,9 +80,10 @@ jobs:
           node <<'NODE'
           const fs = require('node:fs');
           const html = fs.readFileSync('auth-page/index.html', 'utf8');
-          const match = html.match(/<script>([\s\S]*?)<\/script>/i);
-          if (!match) throw new Error('GitHub Pages script block missing');
-          fs.writeFileSync('/tmp/cloudsave-auth-page.js', match[1]);
+          const open = html.indexOf('<script>');
+          const close = html.indexOf('</script>', open + 8);
+          if (open < 0 || close < 0) throw new Error('GitHub Pages script block missing');
+          fs.writeFileSync('/tmp/cloudsave-auth-page.js', html.slice(open + 8, close));
           if (!html.includes('code_challenge_method') ||
               !html.includes('https://www.googleapis.com/auth/drive.appdata') ||
               !html.includes('wayward-auth-relay.trpgengine1.workers.dev')) {
