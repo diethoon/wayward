@@ -530,7 +530,7 @@ WML.define({
       } else openWindow();
       // A restored token does not imply that the Drive file list has been restored.
       // Fetch it on first open and never render an unverified empty list as empty slots.
-      if (hasToken() && slotsStatus !== 'loaded' && slotsStatus !== 'loading') {
+      if (hasLogin() && slotsStatus !== 'loaded' && slotsStatus !== 'loading') {
         runAction(() => refreshSlots());
       }
     }
