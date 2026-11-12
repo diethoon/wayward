@@ -21,7 +21,7 @@ assert.match(main, /startOrSwitchManagedImageGenServer/);
 assert.match(main, /waitForImageGenStopThenStart/);
 assert.match(main, /ImageGenBackendInstaller\.install\(this,backend\)/);
 assert.match(main, /writeImageGenRuntimeConfig\(backend,mode,requestedUrl,launcherProfileId,launcherProviderId\)/);
-assert.match(main, /new String\\[\\] \\{ "imagegen-proxy.js", "imagegen-studio-bridge.js" \\}/,
+assert.match(main, /new String\[\] \{ "imagegen-proxy.js", "imagegen-studio-bridge.js" \}/,
   "the direct in-game provider bridge must not be injected into WebView");
 assert.doesNotMatch(main, /@JavascriptInterface public void generateImageWithProvider/,
   "WML must not have a direct provider-generation bypass");
@@ -34,7 +34,7 @@ const automaticStart = main.slice(
   main.indexOf("private static boolean sameImageGenVersion")
 );
 assert.ok(automaticStart.length > 0, "session engine policy method exists");
-assert.doesNotMatch(automaticStart, /startImageGenService\\(|startManagedImageGenServer\\(|ImageGenBackendInstaller\\.install/,
+assert.doesNotMatch(automaticStart, /startImageGenService\(|startManagedImageGenServer\(|ImageGenBackendInstaller\.install/,
   "opening a game session must never start or install a generation engine");
 assert.match(automaticStart, /서버가 꺼져 있습니다.*기존 이미지팩만 사용합니다/,
   "when no server is running, session startup must leave image packs as the only source");
