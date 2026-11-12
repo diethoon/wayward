@@ -153,8 +153,13 @@ async function exerciseEngine(engine) {
   const probe = await api.fn("imageBackendProbe")({
     mode: "custom", url: "https://game-configured.example:8189"
   }, true);
-  assert.equal(probe.baseUrl, "http://127.0.0.1:8189");
-  assert.equal(probe.engine, engine);
+  assert.equal(probe.baseUrl, "https://game-configured.example:8189",
+    "the original probe result must remain unmodified");
+  assert.equal(probe.comfyui, false);
+  const effectiveBackend = api.fn("imageBackend")();
+  assert.equal(effectiveBackend.baseUrl, "http://127.0.0.1:8189",
+    "the launcher facade must expose its ready local endpoint");
+  assert.equal(effectiveBackend.comfyui, true);
   const imageServerUrl = api.fn("imageServerUrl");
   assert.equal(imageServerUrl("/api/batch/status"),
     "http://127.0.0.1:8189/api/batch/status");
