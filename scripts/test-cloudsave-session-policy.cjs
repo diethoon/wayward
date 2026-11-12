@@ -23,7 +23,7 @@ for (const required of [
   "function attemptNativeSessionRestore()",
   "function requestNativeGoogleRevoke()",
   "async function revokeGooglePermission()",
-  "authStatus = 'explicit-logout'",
+  "authStatus = permissionRevoked ? 'permission-revoked' : 'explicit-logout'",
   "authStatus = 'google-session-expired'",
   "authStatus = 'permission-revoked'"
 ]) assert.ok(mod.includes(required), 'missing WML auth policy contract: ' + required);
