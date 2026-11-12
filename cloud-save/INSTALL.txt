@@ -1,4 +1,4 @@
-Wayward Google Drive CloudSave — WML v0.5.1
+Wayward Google Drive CloudSave — WML v0.5.2
 
 설치
 1. cloud-save 폴더를 게임의 wml/mods/ 안에 복사합니다.
@@ -15,7 +15,7 @@ Wayward Google Drive CloudSave — WML v0.5.1
 - GitHub Pages는 jeiky224/cloud 저장소의 main 브랜치 루트에서 게시해야 합니다.
 
 인증 동작
-OAuth Authorization Code + PKCE, nonce 검증 postMessage 및 Cloudflare Worker WebSocket 릴레이를 사용합니다. 게임의 file://, localhost, 127.0.0.1, LAN HTTP, HTTPS, WebView Origin은 Google OAuth 등록 목록에 각각 추가할 필요가 없습니다. 팝업이 막히면 게임 주소의 팝업을 허용하세요.
+OAuth Authorization Code + PKCE, nonce 검증 postMessage 및 Cloudflare Worker WebSocket 릴레이를 사용합니다. 게임의 file://, localhost, 127.0.0.1, LAN HTTP, HTTPS, WebView Origin은 Google OAuth 등록 목록에 각각 추가할 필요가 없습니다. WebView가 팝업을 차단하면 모드가 표시하는 외부 브라우저 로그인 링크를 사용하세요. 이때 게임 화면을 닫지 않아야 임시 WebSocket 중계로 인증 결과가 돌아옵니다. 팝업과 WebSocket을 모두 막는 실행기는 지원되지 않습니다.
 
 로그인 유지
 "로그인 계속 유지"는 refresh token을 게임 Origin과 GitHub 인증 페이지의 공통 저장소에 보관합니다. localhost, 127.0.0.1, file:// 등 게임 주소가 달라도 같은 브라우저 프로필의 GitHub 인증 페이지가 저장된 refresh token으로 자동 로그인합니다. "새로고침하면 로그아웃"을 선택하면 게임 저장소와 인증 페이지 공통 저장소를 지웁니다. 로그아웃은 Google 권한 철회를 요청하고 양쪽 저장소의 로그인 정보를 삭제합니다.
