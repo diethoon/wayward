@@ -62,12 +62,12 @@ jobs:
             assert.equal(extract(newSource, start, end), extract(oldSource, start, end),
               'protected game save/load logic changed: ' + start);
           }
-          assert.match(newSource, /version: '0\\.5\\.0'/);
-          assert.doesNotMatch(newSource, /wayward-cloud-auth\\.vercel\\.app/i);
+          assert.match(newSource, /version: '0\.5\.0'/);
+          assert.doesNotMatch(newSource, /wayward-cloud-auth\.vercel\.app/i);
           assert.match(newSource, /refreshToken/);
-          assert.match(newSource, /\\/oauth\\/refresh/);
-          assert.match(newSource, /\\/oauth\\/revoke/);
-          assert.match(newSource, /wss:\\/\\/wayward-auth-relay\\.trpgengine1\\.workers\\.dev/);
+          assert.match(newSource, /\/oauth\/refresh/);
+          assert.match(newSource, /\/oauth\/revoke/);
+          assert.match(newSource, /wss:\/\/wayward-auth-relay\.trpgengine1\.workers\.dev/);
           console.log('Protected save/load functions are byte-for-byte unchanged.');
           NODE
 
@@ -80,7 +80,7 @@ jobs:
           node <<'NODE'
           const fs = require('node:fs');
           const html = fs.readFileSync('auth-page/index.html', 'utf8');
-          const match = html.match(/<script>([\\s\\S]*?)<\\/script>/i);
+          const match = html.match(/<script>([\s\S]*?)<\/script>/i);
           if (!match) throw new Error('GitHub Pages script block missing');
           fs.writeFileSync('/tmp/cloudsave-auth-page.js', match[1]);
           if (!html.includes('code_challenge_method') ||
@@ -100,11 +100,7 @@ jobs:
           node <<'NODE'
           const fs = require('node:fs');
           const crypto = require('node:crypto');
-          const files = [
-            'cloud-save/mod.js',
-            'cloud-save/crypto.js',
-            'auth-page/index.html'
-          ];
+          const files = ['cloud-save/mod.js', 'cloud-save/crypto.js', 'auth-page/index.html'];
           const result = {};
           for (const file of files) {
             const bytes = fs.readFileSync(file);
@@ -113,11 +109,7 @@ jobs:
             while (offset < bytes.length) {
               const end = Math.min(offset + 4096, bytes.length);
               const chunk = bytes.subarray(offset, end);
-              chunks.push({
-                offset,
-                length: chunk.length,
-                sha256: crypto.createHash('sha256').update(chunk).digest('hex')
-              });
+              chunks.push({ offset, length: chunk.length, sha256: crypto.createHash('sha256').update(chunk).digest('hex') });
               offset = end;
             }
             if (offset !== bytes.length || chunks.reduce((sum, chunk) => sum + chunk.length, 0) !== bytes.length) {
@@ -135,9 +127,8 @@ jobs:
             bytes: original.length,
             sha256: crypto.createHash('sha256').update(original).digest('hex')
           };
-          fs.writeFileSync('CLOUDSAVE_0.5.0_INSPECTION.json', JSON.stringify(result, null, 2) + '\\n');
+          fs.writeFileSync('CLOUDSAVE_0.5.0_INSPECTION.json', JSON.stringify(result, null, 2) + '\n');
           NODE
-          rm -f Wayward_Google_Drive_CloudSave_v0.5.0.zip
           zip -qr Wayward_Google_Drive_CloudSave_v0.5.0.zip cloud-save
           unzip -t Wayward_Google_Drive_CloudSave_v0.5.0.zip
           sha256sum Wayward_Google_Drive_CloudSave_v0.5.0.zip
