@@ -17,24 +17,24 @@ assert.match(main, /zipMods\.open\("wml\/mods\/imagestudio\/mod\.js"\)/,
   "active-session detection must include the app-private ZIP overlay");
 assert.doesNotMatch(main, /wml\/mods\/imagestudio\/backend\//,
   "the game folder must not be required to contain the bundled server source");
-assert.match(main, /ImageGenBackendInstaller\.install\(this, imageGenBackendRoot\(\)\)/,
-  "the embedded backend is installed from APK assets, not copied from the game folder");
 const automaticStartup = main.slice(main.indexOf("private void ensureImageGenServer"), main.indexOf("private static boolean sameImageGenVersion"));
-assert.doesNotMatch(automaticStartup, /extractDirectory\(/,
-  "automatic Image Studio startup must not extract the original WML ZIP mod");
-assert.match(automaticStartup, /String selectedMode = "novelai"/,
-  "automatic startup must retain NovelAI as the fallback provider mode");
-assert.match(automaticStartup, /selectedMode = "launcher"/,
-  "automatic startup must select the configured launcher provider for the active profile");
-assert.match(automaticStartup, /selected\.allowInGame/,
-  "automatic startup must respect the profile provider's in-game permission");
-assert.match(main, /ImageGenBackendInstaller\.install\(this,backend\)/,
-  "manual startup must install the server embedded in the launcher APK");
+assert.doesNotMatch(automaticStartup, /extractDirectory\\(/,
+  "session startup must not extract the original WML ZIP mod");
+assert.doesNotMatch(automaticStartup, /startImageGenService\\(|startManagedImageGenServer\\(|ImageGenBackendInstaller\\.install/,
+  "session startup must never start or install an engine implicitly");
+assert.match(automaticStartup, /서버가 꺼져 있습니다.*기존 이미지팩만 사용합니다/,
+  "with no launcher server, the game must remain image-pack-only");
+assert.doesNotMatch(automaticStartup, /selectedMode|selectedProvider/,
+  "session startup must not select a default provider or fallback engine");
 assert.match(main, /launcher-imagegen:/,
   "server version identity must identify the bundled launcher backend");
 assert.match(main, /writeImageGenRuntimeConfig\(backend,mode,requestedUrl,launcherProfileId,launcherProviderId\)/,
   "the selected profile/provider and ComfyUI endpoint must be configured in app-private storage");
 assert.match(main, /launcherProviderToken/ ,
+assert.doesNotMatch(main, /@JavascriptInterface public void generateImageWithProvider/,
+  "the WebView must not expose direct provider generation");
+assert.doesNotMatch(main, /@JavascriptInterface public String listImageProviders/,
+  "the WebView must not expose provider records directly");
   "launcher provider IPC token must be represented in the private backend configuration");
 assert.match(service, /new ImageGenLocalProviderServer\(/,
   "the native provider adapter must be started by the isolated ImageGen service");
