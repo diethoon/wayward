@@ -94,6 +94,7 @@ jobs:
           if (!html.includes('https://accounts.google.com/gsi/client') ||
               !html.includes('google.accounts.oauth2.initTokenClient') ||
               !html.includes('google.accounts.oauth2.revoke') ||
+              !html.includes('google.accounts.oauth2.hasGrantedAllScopes') ||
               !html.includes('https://www.googleapis.com/auth/drive.appdata') ||
               !html.includes('wayward-cloud-auth-success') ||
               !html.includes('event.source') ||
