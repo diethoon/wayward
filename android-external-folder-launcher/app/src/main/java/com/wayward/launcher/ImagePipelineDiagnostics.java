@@ -47,6 +47,10 @@ final class ImagePipelineDiagnostics {
             "provider_http_error", "provider_http_request_failed", "webview_image_network_error",
             "native_image_decode_bounds_succeeded", "native_image_decode_bounds_failed", "webview_image_http_error",
             "webview_image_resource_error", "webview_image_resource_slow",
+            "launcher_imagegen_request_blocked", "launcher_imagegen_request_forced_to_launcher",
+            "launcher_imagegen_request_intercepted", "launcher_imagegen_request_dispatched",
+            "launcher_imagegen_request_dispatch_failed", "launcher_api_request_received",
+            "launcher_api_response", "launcher_api_transport_error",
             "saf_image_open_timing", "saf_directory_query_timing", "saf_image_cache_completed"
     ));
     private static final Set<String> ALLOWED = new HashSet<>(Arrays.asList(
@@ -62,7 +66,7 @@ final class ImagePipelineDiagnostics {
             "resolveImageMs", "imageAccessMs", "openInputStreamMs", "sourceReadMs",
             "cacheWriteMs", "cacheFinalizeMs", "cacheWaitMs", "cacheOpenMs",
             "directoryWaitMs", "directoryQueryMs",
-            "directoryChildCount", "imageSizeBytes", "cacheState"
+            "directoryChildCount", "imageSizeBytes", "cacheState", "method", "path", "status"
     ));
 
     private ImagePipelineDiagnostics() {}
@@ -161,6 +165,10 @@ final class ImagePipelineDiagnostics {
                         || "invalid_prompt_length".equals(value);
             case "errorType":
                 return value.matches("[A-Za-z0-9_.$-]{1,80}");
+            case "method":
+                return value.matches("GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS");
+            case "path":
+                return value.matches("/api/[A-Za-z0-9._~!()+,;=:@%/-]{1,114}");
             case "cacheState":
                 return "hit".equals(value) || "loaded".equals(value) || "shared".equals(value)
                         || "loading".equals(value) || "cached".equals(value) || "failed".equals(value)

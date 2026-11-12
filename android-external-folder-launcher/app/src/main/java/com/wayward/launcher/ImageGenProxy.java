@@ -38,6 +38,10 @@ final class ImageGenProxy {
         }
         final android.content.Context appContext=web.getContext().getApplicationContext();
         final long startedAt=System.currentTimeMillis();
+        final String diagnosticPath=Uri.parse("http://127.0.0.1" + safePath).getPath();
+        JSONObject receivedDiagnostic=new JSONObject();
+        try{receivedDiagnostic.put("method",safeMethod);receivedDiagnostic.put("path",diagnosticPath);}catch(Exception ignored){}
+        ImagePipelineDiagnostics.record(appContext,"launcher_api_request_received",receivedDiagnostic);
         new Thread(() -> {
             HttpURLConnection connection = null;
             try {
@@ -108,6 +112,9 @@ final class ImageGenProxy {
                 JSONObject diagnostic=new JSONObject();
                 try{diagnostic.put("method",safeMethod);diagnostic.put("path",Uri.parse(safePath).getPath());diagnostic.put("status",status);diagnostic.put("elapsedMs",System.currentTimeMillis()-startedAt);}catch(Exception ignored){}
                 DiagnosticsLogger.event(appContext,status>=400?"WARN":"INFO","imagegen_proxy","api_response",diagnostic);
+                JSONObject pipelineResponse=new JSONObject();
+                try{pipelineResponse.put("method",safeMethod);pipelineResponse.put("path",diagnosticPath);pipelineResponse.put("status",status);pipelineResponse.put("elapsedMs",System.currentTimeMillis()-startedAt);}catch(Exception ignored){}
+                ImagePipelineDiagnostics.record(appContext,"launcher_api_response",pipelineResponse);
                 InputStream responseStream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
                 byte[] responseBody = responseStream == null ? new byte[0]
                         : readLimited(responseStream, MAX_RESPONSE_BYTES);
@@ -123,6 +130,9 @@ final class ImageGenProxy {
                 JSONObject diagnostic=new JSONObject();
                 try{diagnostic.put("method",safeMethod);diagnostic.put("exception",e.getClass().getSimpleName());diagnostic.put("elapsedMs",System.currentTimeMillis()-startedAt);}catch(Exception ignored){}
                 DiagnosticsLogger.event(appContext,"ERROR","imagegen_proxy","api_transport_error",diagnostic);
+                JSONObject pipelineError=new JSONObject();
+                try{pipelineError.put("method",safeMethod);pipelineError.put("path",diagnosticPath);pipelineError.put("errorType",e.getClass().getSimpleName());pipelineError.put("elapsedMs",System.currentTimeMillis()-startedAt);}catch(Exception ignored){}
+                ImagePipelineDiagnostics.record(appContext,"launcher_api_transport_error",pipelineError);
                 deliver(web, requestId, errorResponse(502, e.getMessage() == null
                         ? "ImageGen 서버에 연결하지 못했습니다." : e.getMessage()));
             } finally {
