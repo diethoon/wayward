@@ -53,6 +53,15 @@ assert.match(mainActivitySource, /new String\[\]\s*\{\s*"imagegen-proxy\.js",\s*
   "the direct in-game provider bridge must not be loaded");
 assert.doesNotMatch(mainActivitySource, /@JavascriptInterface public void generateImageWithProvider|@JavascriptInterface public String listImageProviders/,
   "the WebView must not expose a direct provider-generation bypass");
+assert.match(bridgeSource, /installLauncherOwnedSettingsUi/);
+assert.match(bridgeSource, /생성 옵션 \(엔진·서버는 런처 관리\)/,
+  "the in-game settings entry must no longer pretend to own the engine");
+assert.match(bridgeSource, /input\[name="wwis-provider"\]/,
+  "the in-game engine selector must be hidden");
+assert.match(bridgeSource, /#wwis-comfy-settings/,
+  "the game-side Comfy endpoint/models panel must be hidden");
+assert.match(bridgeSource, /#wwis-nai-token-clear/,
+  "the game-side NAI credential controls must be hidden");
 assert.match(batchQueueSource, /negativePrompt\?: string/,
   "the production batch item accepts a separate negative prompt");
 assert.match(batchQueueSource,
