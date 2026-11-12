@@ -53,7 +53,7 @@ WML.define({
     let bridgeHandshakeTimer = null;
     const pendingDriveRequests = new Map();
     const usedDriveRequestIds = new Set();
-    const MAX_BRIDGE_REQUESTS = 2048;
+    const MAX_BRIDGE_REQUESTS = 65536;
     const MAX_BRIDGE_PAYLOAD_CHARS = 12 * 1024 * 1024;
     const AUTH_PAGE_URL = 'https://jeiky224.github.io/cloud/auth.html';
     const AUTH_PAGE_ORIGIN = 'https://jeiky224.github.io';
@@ -273,8 +273,8 @@ WML.define({
         pageAuthenticated = false;
         authStatus = 'revoke-failed';
       } else if (bridgeStatus === 'reauth-required' || bridgeStatus === 'auth-cancelled' ||
-        pageAuthenticated = false;
                  bridgeStatus === 'popup-blocked') {
+        pageAuthenticated = false;
         authStatus = bridgeStatus;
       }
       if (isConnected()) render();
