@@ -121,7 +121,7 @@ jobs:
           SRC="$GITHUB_WORKSPACE/android-external-folder-launcher/app/src/main/assets/imagegen-backend/wayward-imagegen/src"
           OUT="$RUNNER_TEMP/launcher-imagegen-source"
           mkdir -p "$OUT"
-          for file in routes/image.ts comfy/jobRunner.ts nai/client.ts config.ts routes/generationSettings.ts batch/queue.ts; do
+          for file in routes/image.ts comfy/jobRunner.ts nai/client.ts config.ts routes/generationSettings.ts batch/queue.ts routes/catalogue.ts server.ts ui/index.html; do
             mkdir -p "$OUT/$(dirname "$file")"
             cp "$SRC/$file" "$OUT/$file"
           done
