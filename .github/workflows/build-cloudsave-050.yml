@@ -1,0 +1,159 @@
+name: Build and verify CloudSave 0.5.0
+
+on:
+  push:
+    branches:
+      - work/cloudsave-auth-universal-20261113
+    paths:
+      - '_cloudsave_inspect/cloud-save/**'
+      - 'auth-page/index.html'
+      - '.github/workflows/build-cloudsave-050.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  verify-package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct package source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p cloud-save
+          cp -a _cloudsave_inspect/cloud-save/. cloud-save/
+          test -s cloud-save/mod.js
+          test -s cloud-save/crypto.js
+          test -s cloud-save/README.md
+          test -s cloud-save/INSTALL.txt
+
+      - name: Verify original-to-current save logic is unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 26d6c32e0b0abbb886e3029efd548b7ca6774401:Wayward_Google_Drive_CloudSave_v0.4.4_pre7.zip > /tmp/cloudsave-original.zip
+          mkdir -p /tmp/cloudsave-original
+          unzip -q /tmp/cloudsave-original.zip cloud-save/mod.js -d /tmp/cloudsave-original
+          node <<'NODE'
+          const fs = require('node:fs');
+          const assert = require('node:assert/strict');
+          const oldSource = fs.readFileSync('/tmp/cloudsave-original/cloud-save/mod.js', 'utf8');
+          const newSource = fs.readFileSync('cloud-save/mod.js', 'utf8');
+          const spans = [
+            ['function buildSnapshot()', 'function firstValue(root'],
+            ['function applySnapshot(snapshot)', 'function isConnected()'],
+            ['async function writeSlotEnvelope(slot, envelope)', 'async function deleteSlot(slot)'],
+            ['async function saveSlot(slot)', 'async function prepareLoadSlot(slot)'],
+            ['async function loadSlot(slot)', 'async function removeSlot(slot)'],
+            ['async function removeSlot(slot)', 'function showSessionSettingsPopup()']
+          ];
+          function extract(text, start, end) {
+            const from = text.indexOf(start);
+            const to = text.indexOf(end, from + start.length);
+            assert.ok(from >= 0 && to > from, 'missing source boundary: ' + start);
+            return text.slice(from, to);
+          }
+          for (const [start, end] of spans) {
+            assert.equal(extract(newSource, start, end), extract(oldSource, start, end),
+              'protected game save/load logic changed: ' + start);
+          }
+          assert.match(newSource, /version: '0\\.5\\.0'/);
+          assert.doesNotMatch(newSource, /wayward-cloud-auth\\.vercel\\.app/i);
+          assert.match(newSource, /refreshToken/);
+          assert.match(newSource, /\\/oauth\\/refresh/);
+          assert.match(newSource, /\\/oauth\\/revoke/);
+          assert.match(newSource, /wss:\\/\\/wayward-auth-relay\\.trpgengine1\\.workers\\.dev/);
+          console.log('Protected save/load functions are byte-for-byte unchanged.');
+          NODE
+
+      - name: Validate JavaScript and Git whitespace
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check cloud-save/mod.js
+          node --check cloud-save/crypto.js
+          node <<'NODE'
+          const fs = require('node:fs');
+          const html = fs.readFileSync('auth-page/index.html', 'utf8');
+          const match = html.match(/<script>([\\s\\S]*?)<\\/script>/i);
+          if (!match) throw new Error('GitHub Pages script block missing');
+          fs.writeFileSync('/tmp/cloudsave-auth-page.js', match[1]);
+          if (!html.includes('code_challenge_method') ||
+              !html.includes('https://www.googleapis.com/auth/drive.appdata') ||
+              !html.includes('wayward-auth-relay.trpgengine1.workers.dev')) {
+            throw new Error('GitHub Pages OAuth configuration is incomplete');
+          }
+          NODE
+          node --check /tmp/cloudsave-auth-page.js
+          git add -A
+          git diff --cached --check
+
+      - name: Scan all source bytes in 4096-byte chunks and build ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const files = [
+            'cloud-save/mod.js',
+            'cloud-save/crypto.js',
+            'auth-page/index.html'
+          ];
+          const result = {};
+          for (const file of files) {
+            const bytes = fs.readFileSync(file);
+            const chunks = [];
+            let offset = 0;
+            while (offset < bytes.length) {
+              const end = Math.min(offset + 4096, bytes.length);
+              const chunk = bytes.subarray(offset, end);
+              chunks.push({
+                offset,
+                length: chunk.length,
+                sha256: crypto.createHash('sha256').update(chunk).digest('hex')
+              });
+              offset = end;
+            }
+            if (offset !== bytes.length || chunks.reduce((sum, chunk) => sum + chunk.length, 0) !== bytes.length) {
+              throw new Error('Incomplete byte scan: ' + file);
+            }
+            result[file] = {
+              bytes: bytes.length,
+              sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+              scannedBytes: offset,
+              chunks
+            };
+          }
+          const original = fs.readFileSync('/tmp/cloudsave-original/cloud-save/mod.js');
+          result.originalV044Mod = {
+            bytes: original.length,
+            sha256: crypto.createHash('sha256').update(original).digest('hex')
+          };
+          fs.writeFileSync('CLOUDSAVE_0.5.0_INSPECTION.json', JSON.stringify(result, null, 2) + '\\n');
+          NODE
+          rm -f Wayward_Google_Drive_CloudSave_v0.5.0.zip
+          zip -qr Wayward_Google_Drive_CloudSave_v0.5.0.zip cloud-save
+          unzip -t Wayward_Google_Drive_CloudSave_v0.5.0.zip
+          sha256sum Wayward_Google_Drive_CloudSave_v0.5.0.zip
+          git add -A
+          git diff --cached --check
+          git status --short
+
+      - name: Commit verified package
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf _cloudsave_inspect
+          rm -f .github/workflows/extract-cloudsave-source.yml
+          git add -A
+          git diff --cached --check
+          if ! git diff --cached --quiet; then
+            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "build: package verified CloudSave 0.5.0"
+            git push origin HEAD:refs/heads/work/cloudsave-auth-universal-20261113
+          fi
