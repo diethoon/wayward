@@ -46,10 +46,18 @@ WML.define({
     let hadPreviousAuth = false;
     let authStatus = 'restore-pending';
     let startupRestoreAttempted = false;
+    let pendingAuthNonce = '';
+    let pendingAuthUrl = '';
+    let pendingAuthWindow = null;
+    let pendingAuthResolve = null;
+    let pendingAuthReject = null;
+    let pendingAuthMessageHandler = null;
+    let pendingAuthOpen = null;
 
     // Browser auth is hosted by GitHub Pages. The official Android launcher
     // obtains its access token through the platform Google Identity bridge.
-    const AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/';
+    const AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/auth.html';
+    const AUTH_BRIDGE_ORIGIN = 'https://jeiky224.github.io';
     const FILE_PREFIX = 'wayward-cloud-slot-';
     const STYLE_ID = 'wml-google-drive-save-style';
 
@@ -193,14 +201,18 @@ WML.define({
         } else authStatus = 'reauth-required';
         throw new Error(payload.message || 'Google 로그인이 취소되었거나 실패했습니다.');
       }
+      const expiresIn = Number(payload.expiresIn);
       if (payload.type !== 'wayward-cloud-auth-success' ||
-          typeof payload.accessToken !== 'string' || !payload.accessToken) {
+          typeof payload.accessToken !== 'string' ||
+          !payload.accessToken ||
+          payload.accessToken.length > 4096 ||
+          !String(payload.scope || '').split(/\s+/).includes('https://www.googleapis.com/auth/drive.appdata') ||
+          !Number.isFinite(expiresIn) || expiresIn < 60 || expiresIn > 3600) {
         authStatus = 'reauth-required';
-        throw new Error('Google에서 유효한 액세스 토큰을 반환하지 않았습니다.');
+        throw new Error('Google 인증 응답의 토큰·scope·만료 시간이 올바르지 않습니다.');
       }
       accessToken = payload.accessToken;
-      tokenExpiresAt = Date.now() +
-        Math.max(60, Math.min(3600, Number(payload.expiresIn) || 3600)) * 1000;
+      tokenExpiresAt = Date.now() + expiresIn * 1000;
       explicitLogout = false;
       permissionRevoked = false;
       hadPreviousAuth = true;
@@ -216,12 +228,8 @@ WML.define({
         typeof host.startGoogleDriveAuth === 'function'
       );
       if (!hasNativeStart || typeof host.takePendingStateForNonce !== 'function') {
-        if (host && typeof host.openGoogleAuthPage === 'function') {
-          return Promise.reject(new Error(
-            '이 Android WebView에는 계정 선택 정책을 전달하는 인증 브리지가 없습니다. ' +
-            '최신 공식 Wayward Launcher가 필요합니다.'
-          ));
-        }
+        // A launcher that only exposes an external browser opener can still use
+        // the static Pages flow with an explicit copy/paste return.
         return null;
       }
       if (forceSelectAccount && typeof host.startGoogleDriveAuthWithPolicy !== 'function') {
@@ -276,69 +284,192 @@ WML.define({
       });
     }
 
+    function clearPendingAuth() {
+      pendingAuthNonce = '';
+      pendingAuthUrl = '';
+      pendingAuthWindow = null;
+      pendingAuthResolve = null;
+      pendingAuthReject = null;
+      pendingAuthOpen = null;
+      if (pendingAuthMessageHandler) {
+        window.removeEventListener('message', pendingAuthMessageHandler);
+        pendingAuthMessageHandler = null;
+      }
+    }
+
     function requestGoogleToken(forceSelectAccount) {
       const nonce = createAuthNonce();
       const nativeTask = requestNativeGoogleToken(nonce, !!forceSelectAccount);
       if (nativeTask) return nativeTask;
 
       return new Promise((resolve, reject) => {
+        const protocol = String(window.location.protocol || '');
         const rawOrigin = String(window.location.origin || '');
-        const gameOrigin = window.location.protocol === 'file:' || rawOrigin === 'null'
-          ? 'null' : rawOrigin;
-        if (!gameOrigin || !/^https?:$/.test(window.location.protocol)) {
-          authStatus = 'reauth-required';
-          reject(new Error(
-            '이 브라우저 주소는 안전한 인증 응답 전달을 지원하지 않습니다. ' +
-            'file:// 대신 http://127.0.0.1 또는 LAN HTTP/HTTPS 주소로 게임을 여세요.'
-          ));
+        const isFileExecution = protocol === 'file:' || rawOrigin === 'null';
+        const gameOrigin = isFileExecution ? 'null' : rawOrigin;
+        if ((!isFileExecution && !/^https?:$/.test(protocol)) ||
+            (isFileExecution && protocol !== 'file:')) {
+          reject(new Error('지원하지 않는 실행 주소입니다. file://, HTTP 또는 HTTPS에서 실행해 주세요.'));
           return;
         }
+        if (!isFileExecution) {
+          try {
+            const parsedOrigin = new URL(gameOrigin);
+            if (parsedOrigin.origin !== gameOrigin || parsedOrigin.username || parsedOrigin.password) {
+              throw new Error('invalid origin');
+            }
+          } catch (_) {
+            reject(new Error('게임 실행 origin을 검증할 수 없습니다.'));
+            return;
+          }
+        }
+
         const bridgeUrl = new URL(AUTH_BRIDGE_URL);
-        const bridgeOrigin = bridgeUrl.origin;
         bridgeUrl.searchParams.set('origin', gameOrigin);
         bridgeUrl.searchParams.set('nonce', nonce);
         bridgeUrl.searchParams.set('login', forceSelectAccount ? 'select_account' : 'remember');
-        let bridge = null, timeout = null, settled = false;
+        pendingAuthNonce = nonce;
+        pendingAuthUrl = bridgeUrl.toString();
+
+        let timeout = null;
+        let settled = false;
         const cleanup = () => {
-          window.removeEventListener('message', onMessage);
           if (timeout) clearTimeout(timeout);
+          if (pendingAuthMessageHandler) {
+            window.removeEventListener('message', pendingAuthMessageHandler);
+            pendingAuthMessageHandler = null;
+          }
         };
         const fail = error => {
           if (settled) return;
-          settled = true; cleanup();
-          try { if (bridge && !bridge.closed) bridge.close(); } catch (_) {}
-          if (!['permission-revoked','google-session-expired'].includes(authStatus)) {
-            authStatus = 'reauth-required';
-          }
+          settled = true;
+          cleanup();
+          const failedWindow = pendingAuthWindow;
+          clearPendingAuth();
+          try { if (failedWindow && !failedWindow.closed) failedWindow.close(); } catch (_) {}
           reject(error instanceof Error ? error : new Error(String(error || 'Google 연결에 실패했습니다.')));
         };
-        const onMessage = event => {
-          if (event.origin !== bridgeOrigin || event.source !== bridge || !event.data) return;
+        const finish = payload => {
+          if (settled) return false;
+          try { acceptAccessToken(payload, nonce); }
+          catch (error) {
+            message = String(error && error.message || error);
+            if (isConnected()) render();
+            return false;
+          }
+          settled = true;
+          cleanup();
+          pendingAuthNonce = '';
+          pendingAuthUrl = '';
+          pendingAuthWindow = null;
+          pendingAuthResolve = null;
+          pendingAuthReject = null;
+          pendingAuthOpen = null;
+          resolve();
+          return true;
+        };
+        pendingAuthResolve = finish;
+        pendingAuthReject = fail;
+
+        pendingAuthMessageHandler = event => {
+          if (event.origin !== AUTH_BRIDGE_ORIGIN ||
+              event.source !== pendingAuthWindow ||
+              !event.data || event.data.nonce !== nonce) return;
           const payload = event.data;
-          if (payload.nonce !== nonce) return;
+          if (payload.type === 'wayward-cloud-auth-page-ready') {
+            try {
+              pendingAuthWindow.postMessage(
+                { type: 'wayward-cloud-auth-hello', nonce },
+                AUTH_BRIDGE_ORIGIN
+              );
+            } catch (_) {}
+            return;
+          }
+          if (payload.type === 'wayward-cloud-auth-ready') return;
           if (payload.type === 'wayward-cloud-auth-error') {
-            try { acceptAccessToken(payload, nonce); } catch (error) { fail(error); }
+            fail(new Error(payload.message || 'Google 로그인이 취소되었거나 실패했습니다.'));
             return;
           }
           if (payload.type !== 'wayward-cloud-auth-success' ||
-              typeof payload.accessToken !== 'string' || !payload.accessToken) return;
-          try { acceptAccessToken(payload, nonce); }
-          catch (error) { fail(error); return; }
-          settled = true; cleanup();
-          try { if (bridge && !bridge.closed) bridge.close(); } catch (_) {}
-          resolve();
+              typeof payload.accessToken !== 'string' ||
+              !payload.accessToken || payload.accessToken.length > 4096) return;
+          finish(payload);
         };
-        window.addEventListener('message', onMessage);
-        bridge = window.open(bridgeUrl.toString(), 'waywardGoogleDriveAuth',
-          'popup=yes,width=520,height=720,resizable=yes,scrollbars=yes');
-        if (!bridge) {
-          fail(new Error('Google 로그인 팝업이 차단되었습니다. 게임 사이트의 팝업을 허용한 뒤 다시 시도하세요.'));
-          return;
+        window.addEventListener('message', pendingAuthMessageHandler);
+
+        const sendHello = child => {
+          if (!child) return false;
+          try {
+            child.postMessage({ type: 'wayward-cloud-auth-hello', nonce }, AUTH_BRIDGE_ORIGIN);
+            return true;
+          } catch (_) { return false; }
+        };
+        const enterManualMode = notice => {
+          if (settled || view.page === 'manual-auth') return;
+          show({ page: 'manual-auth' }, notice ||
+            '팝업 자동 전달을 사용할 수 없습니다. 인증 페이지에서 응답을 복사해 이 화면에 붙여 넣으세요.');
+        };
+        pendingAuthOpen = () => {
+          try {
+            pendingAuthWindow = window.open(pendingAuthUrl,
+              'waywardGoogleDriveAuth', 'popup=yes,width=520,height=720,resizable=yes,scrollbars=yes');
+            if (pendingAuthWindow) {
+              sendHello(pendingAuthWindow);
+              message = '정적 Google 인증 페이지를 열었습니다. 자동 복귀 또는 수동 응답을 기다립니다.';
+            } else {
+              message = '팝업이 차단되었습니다. 아래 인증 주소를 복사하거나 외부 브라우저에서 여세요.';
+            }
+            if (isConnected()) render();
+            return !!pendingAuthWindow;
+          } catch (error) {
+            message = String(error && error.message || error);
+            if (isConnected()) render();
+            return false;
+          }
+        };
+
+        const host = window.WMLHost;
+        if (host && typeof host.openGoogleAuthPage === 'function') {
+          try {
+            if (host.openGoogleAuthPage(pendingAuthUrl)) {
+              enterManualMode('Android 런처가 정적 인증 페이지를 외부 브라우저에서 열었습니다. 완료 후 JSON 응답을 복사해 이 화면에 붙여 넣으세요.');
+              return;
+            }
+          } catch (_) { /* continue with the browser popup path */ }
         }
-        timeout = setTimeout(() => fail(new Error(
-          'Google 로그인 시간이 초과되었습니다. 인증 페이지에서 승인을 마쳤는지 확인하세요.'
-        )), 180000);
+
+        pendingAuthOpen();
+        if (!pendingAuthWindow) {
+          enterManualMode('인증 페이지를 자동으로 열지 못했습니다. 아래 버튼이나 인증 주소 복사 기능을 사용하세요.');
+        } else {
+          // Keep listening while the manual recovery screen is shown. If the
+          // popup later returns normally, the same nonce-bound handler wins.
+          timeout = setTimeout(() => enterManualMode(
+            '자동 복귀가 확인되지 않았습니다. 외부 브라우저 인증 결과를 복사해 붙여 넣거나 팝업을 다시 여세요.'
+          ), 25000);
+        }
       });
+    }
+
+    function submitManualAuthResponse() {
+      if (!pendingAuthNonce) {
+        throw new Error('진행 중인 Google 인증 요청이 없습니다. 연결을 다시 시작해 주세요.');
+      }
+      const raw = String(fields.authResponse && fields.authResponse.value || '').trim();
+      if (!raw) throw new Error('Google 인증 페이지의 JSON 응답을 붙여 넣어 주세요.');
+      let payload;
+      try { payload = JSON.parse(raw); }
+      catch (_) { throw new Error('인증 응답 JSON 형식이 올바르지 않습니다.'); }
+      if (!payload || payload.nonce !== pendingAuthNonce) {
+        throw new Error('인증 응답 nonce가 현재 요청과 일치하지 않습니다. 게임에서 새 인증 요청을 시작하세요.');
+      }
+      if (payload.type === 'wayward-cloud-auth-error') {
+        throw new Error(payload.message || 'Google 인증이 실패했습니다.');
+      }
+      if (typeof pendingAuthResolve !== 'function' || pendingAuthResolve(payload) !== true) {
+        throw new Error('인증 응답을 확인하지 못했습니다. 요청이 만료되었거나 토큰 형식이 올바르지 않습니다.');
+      }
+      return true;
     }
 
     function attemptNativeSessionRestore() {
@@ -728,21 +859,19 @@ WML.define({
       const host = window.WMLHost;
       if (host && typeof host.clearGoogleAccessToken === 'function') {
         try { host.clearGoogleAccessToken(token); } catch (_) {}
-        // Android Identity clears its token cache but does not report grant revocation.
         return Promise.resolve(false);
       }
       if (!token) return Promise.resolve(false);
       return new Promise(resolve => {
-        const nonceBytes = new Uint8Array(24);
-        try { globalThis.crypto.getRandomValues(nonceBytes); }
-        catch (_) { resolve(false); return; }
-        const nonce = Array.from(nonceBytes, byte => byte.toString(16).padStart(2, '0')).join('');
-        const gameOrigin = String(window.location.origin || '');
-        if (!gameOrigin || gameOrigin === 'null' || !/^https?:$/.test(window.location.protocol)) {
-          resolve(false); return;
+        const nonce = createAuthNonce();
+        const isFileExecution = window.location.protocol === 'file:' ||
+          String(window.location.origin || '') === 'null';
+        const gameOrigin = isFileExecution ? 'null' : String(window.location.origin || '');
+        if (!isFileExecution && !/^https?:$/.test(window.location.protocol)) {
+          resolve(false);
+          return;
         }
         const revokeUrl = new URL(AUTH_BRIDGE_URL);
-        const bridgeOrigin = revokeUrl.origin;
         revokeUrl.searchParams.set('mode', 'revoke');
         revokeUrl.searchParams.set('origin', gameOrigin);
         revokeUrl.searchParams.set('nonce', nonce);
@@ -756,11 +885,19 @@ WML.define({
           resolve(result === true);
         };
         const onMessage = event => {
-          if (event.origin !== bridgeOrigin || event.source !== popup || !event.data ||
-              event.data.nonce !== nonce) return;
-          if (event.data.type === 'wayward-cloud-revoke-ready') {
+          if (event.origin !== AUTH_BRIDGE_ORIGIN || event.source !== popup ||
+              !event.data || event.data.nonce !== nonce) return;
+          if (event.data.type === 'wayward-cloud-auth-page-ready') {
             try {
-              popup.postMessage({type:'wayward-cloud-revoke',nonce,accessToken:token},bridgeOrigin);
+              popup.postMessage({ type: 'wayward-cloud-auth-hello', nonce }, AUTH_BRIDGE_ORIGIN);
+            } catch (_) { finish(false); }
+          } else if (event.data.type === 'wayward-cloud-revoke-ready') {
+            try {
+              popup.postMessage({
+                type: 'wayward-cloud-revoke',
+                nonce,
+                accessToken: token
+              }, AUTH_BRIDGE_ORIGIN);
             } catch (_) { finish(false); }
           } else if (event.data.type === 'wayward-cloud-revoke-result') {
             finish(event.data.revoked === true);
@@ -776,6 +913,7 @@ WML.define({
 
     function logoutGoogleAccount() {
       const savedAccessToken = accessToken;
+      clearPendingAuth();
       const host = window.WMLHost;
       if (savedAccessToken && host && typeof host.clearGoogleAccessToken === 'function') {
         try { host.clearGoogleAccessToken(savedAccessToken); } catch (_) {}
@@ -1032,6 +1170,57 @@ WML.define({
             addButton(root, '저장목록 새로고침', () => runAction(() => refreshSlots()), true);
           }
         } else addText(root, '로그인 창에서 Google 계정을 선택해 주세요.');
+        addMessage(root);
+      } else if (view.page === 'manual-auth') {
+        addTitle(root, 'Google 인증 결과 수동 전달');
+        addText(root, '원래 게임 화면을 열어 둔 상태에서 외부 브라우저 인증을 완료하세요. 인증 페이지의 일회성 JSON 응답을 복사해 아래에 붙여 넣으면 기존 CloudSave 연결이 이어집니다.');
+        addButton(root, '정적 인증 페이지 다시 열기', () => {
+          if (typeof pendingAuthOpen === 'function') pendingAuthOpen();
+          else message = '진행 중인 인증 요청이 없습니다. Google 연결을 다시 시작하세요.';
+          render();
+        }, true);
+        addButton(root, '인증 주소 복사', async () => {
+          try {
+            if (!pendingAuthUrl) throw new Error('인증 주소가 없습니다.');
+            if (!navigator.clipboard || !navigator.clipboard.writeText) {
+              throw new Error('이 실행 환경은 자동 복사를 지원하지 않습니다. 인증 페이지 다시 열기를 사용하세요.');
+            }
+            await navigator.clipboard.writeText(pendingAuthUrl);
+            message = '정적 인증 주소를 복사했습니다. 외부 브라우저 주소창에서 여세요.';
+          } catch (error) {
+            message = String(error && error.message || error);
+          }
+          render();
+        });
+        const responseWrap = h('label', { class: 'wml-gd-field' }, 'Google 인증 응답 JSON');
+        const responseInput = document.createElement('textarea');
+        responseInput.className = 'wml-gd-memo-area';
+        responseInput.style.minHeight = '150px';
+        responseInput.maxLength = 12000;
+        responseInput.autocomplete = 'off';
+        responseInput.spellcheck = false;
+        responseInput.placeholder = '{ "type": "wayward-cloud-auth-success", ... }';
+        responseInput.addEventListener('input', () => { fields.authResponse = responseInput; });
+        responseInput.setAttribute('data-wml-ui', 'true');
+        responseWrap.append(responseInput);
+        root.append(responseWrap);
+        fields.authResponse = responseInput;
+        addButton(root, '응답 확인 및 Google Drive 연결', () => {
+          try {
+            submitManualAuthResponse();
+          } catch (error) {
+            message = String(error && error.message || error);
+            render();
+          }
+        }, true);
+        addButton(root, '인증 취소', () => {
+          if (typeof pendingAuthReject === 'function') {
+            pendingAuthReject(new Error('Google 인증을 취소했습니다.'));
+          } else {
+            clearPendingAuth();
+            show({ page: 'home' }, 'Google 인증 요청을 취소했습니다.');
+          }
+        });
         addMessage(root);
       } else if (view.page === 'save') {
         addTitle(root, '저장 슬롯 ' + view.slot + ' 저장');
