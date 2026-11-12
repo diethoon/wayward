@@ -29,6 +29,7 @@ Google Drive `appDataFolder`에 개인 세이브를 저장하는 WML 모드입�
 
 - 설정값만 게임 Origin의 localStorage에 저장합니다. 액세스 토큰이나 Refresh Token은 저장하지 않습니다.
 - CloudSave 화면을 다시 열면 Android 공식 런처는 저장된 Google 권한을 `AuthorizationClient.authorize()`로 복구합니다. Google에 기존 권한이 남아 있으면 보통 사용자 입력 없이 새 액세스 토큰을 받습니다.
+- 자동 복구는 이 기기/게임 Origin에서 이전 CloudSave 인증이 성공한 기록이 있는 경우에만 시도합니다. 최초 실행에서는 사용자가 Google 연결 버튼을 누르기 전까지 자동 인증 창을 띄우지 않습니다. 이 기록은 토큰이 아닌 단순 boolean 상태입니다.
 - 일반 브라우저의 GIS Token Model은 페이지 재실행/새로고침 후 토큰을 자동 복원하거나 자동 갱신하지 않습니다. Google은 액세스 토큰 요청마다 사용자 동작을 요구합니다. 따라서 페이지를 다시 연 뒤 CloudSave의 **기존 Google 계정 인증 상태 복구** 버튼을 누르고, GitHub Pages 인증 화면에서 연결을 확인해야 합니다.
 - 브라우저 연결은 Google의 기존 세션과 승인 상태를 재사용하도록 `prompt: ''`를 사용합니다. 최초 승인 또는 Google 세션 만료 시 Google 로그인 화면이 표시될 수 있습니다.
 
