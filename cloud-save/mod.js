@@ -298,6 +298,15 @@ WML.define({
           driveSlots = [];
           slotsStatus = 'not-loaded';
           slotsError = '';
+          if (bridgeHandshakeTimer !== null) clearTimeout(bridgeHandshakeTimer);
+          bridgeHandshakeTimer = setTimeout(() => {
+            if (!bridgeReady) {
+              closeAuthSession(true, '인증 페이지 재연결 시간 초과');
+              authStatus = 'reauth-required';
+              message = '인증 페이지 새로고침 후 30초 안에 핸드셰이크가 완료되지 않아 연결을 종료했습니다.';
+              if (isConnected()) render();
+            }
+          }, 30000);
         }
         if (!sendBridgeHello()) {
           message = '정적 인증 페이지와 핸드셰이크를 시작하지 못했습니다.';
