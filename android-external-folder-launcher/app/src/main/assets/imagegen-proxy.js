@@ -20,12 +20,18 @@
     return runtime && typeof runtime.engine === "string" ? runtime.engine : "unknown";
   }
 
-  function runtimeReady() {
+  function runtimeStatus() {
     try {
       const raw = window.WMLHost.imageGenRuntimeStatus();
       const status = typeof raw === "string" ? JSON.parse(raw) : raw;
-      return !!(status && status.available === true && status.ready === true);
-    } catch (_) { return false; }
+      return {
+        available: status && status.available === true,
+        starting: status && status.starting === true,
+        ready: status && status.ready === true
+      };
+    } catch (_) {
+      return { available: false, starting: false, ready: false };
+    }
   }
 
   function isGenerationEndpoint(pathname) {
@@ -83,8 +89,9 @@
     try { url = new URL(request.url, window.location.href); }
     catch (_) { return nativeFetch(input, init); }
 
-    if (url.pathname.startsWith("/api/") && isGenerationEndpoint(url.pathname)) {
-      if (!runtimeReady()) {
+    if (isGenerationEndpoint(url.pathname)) {
+      const state = runtimeStatus();
+      if (!state.available && !state.starting || !state.ready) {
         report("launcher_imagegen_request_blocked", {
           method: request.method.toUpperCase(),
           path: url.pathname,
