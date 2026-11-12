@@ -1,7 +1,7 @@
-# 클라우드세이브 — Google Drive (WML / v0.5.1)
+# 클라우드세이브 — Google Drive (WML / v0.5.2)
 
 **대상:** Wayward WML
-**모드 버전:** 0.5.1
+**모드 버전:** 0.5.2
 
 Google Drive `appDataFolder`에 개인 세이브를 저장하는 WML 모드입니다. 세이브 본문은 게임 페이지에서 AES-256-GCM으로 암호화한 뒤 Google Drive에 직접 전송합니다. 인증 서버는 세이브 본문을 받지 않습니다.
 
@@ -18,6 +18,7 @@ Google Drive `appDataFolder`에 개인 세이브를 저장하는 WML 모드입�
 - 인증은 OAuth Authorization Code + PKCE 방식입니다. Google Client Secret은 Cloudflare Worker의 `GOOGLE_CLIENT_SECRET` Secret에만 보관하며 모드 파일이나 GitHub Pages에 넣지 않습니다.
 - 게임 페이지와 GitHub 인증 페이지 사이에는 192-bit 임시 nonce가 붙은 `postMessage`를 사용하고, Worker WebSocket 릴레이를 보조 경로로 사용합니다. 게임 주소 자체를 Google OAuth 허용 원본으로 등록할 필요가 없습니다.
 - `file://`, `localhost`, `127.0.0.1`, LAN HTTP, HTTPS 및 WebView처럼 게임 Origin이 달라도 동일한 고정 인증 페이지를 사용합니다. 브라우저에서 팝업을 막으면 해당 게임 주소의 팝업을 허용해야 합니다.
+- 일부 WebView가 팝업을 차단하면 모드가 게임 화면에 외부 브라우저용 로그인 링크를 표시합니다. 게임 화면을 닫지 않은 상태로 그 링크를 열면 Worker의 nonce 기반 WebSocket 중계가 로그인 결과를 게임에 전달합니다. 팝업과 WebSocket을 모두 막는 실행기는 지원되지 않습니다.
 
 ### Google Cloud / Cloudflare 사전 설정
 
