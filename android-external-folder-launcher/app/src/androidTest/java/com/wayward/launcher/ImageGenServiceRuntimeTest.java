@@ -1026,6 +1026,34 @@ public final class ImageGenServiceRuntimeTest {
             }
             assertEquals("The real Image Studio generation settings did not finish loading.",
                     "true", settingsReady);
+
+            String launcherOwnedSettingsUi = awaitJsString(instrumentation, gameWeb,
+                    "(function(){"
+                            + "var hidden=function(e){return !!e&&(e.hidden||getComputedStyle(e).display==='none');};"
+                            + "var engine=document.querySelector('#wwis-overlay input[name=\\\"wwis-provider\\\"]');"
+                            + "var token=document.querySelector('#wwis-overlay #wwis-nai-token');"
+                            + "var tokenClear=document.querySelector('#wwis-overlay #wwis-nai-token-clear');"
+                            + "var title=document.querySelector('#wwis-overlay .wwis-generation-toolbar strong');"
+                            + "return JSON.stringify({title:title&&title.textContent,"
+                            + "engineSelectorHidden:hidden(engine&&engine.closest('.wwis-card')),"
+                            + "comfySettingsHidden:hidden(document.querySelector('#wwis-overlay #wwis-comfy-settings')),"
+                            + "naiTokenHidden:hidden(token&&token.closest('label')),"
+                            + "naiTokenClearHidden:hidden(tokenClear&&tokenClear.closest('label')),"
+                            + "naiCredentialNote:!!document.querySelector('#wwis-overlay #wwis-launcher-nai-credential-note')});})()",
+                    10_000L);
+            JSONObject lockedUi = new JSONObject(launcherOwnedSettingsUi);
+            assertEquals("생성 옵션 · 엔진/서버는 런처 관리",
+                    lockedUi.optString("title", ""));
+            assertTrue("The in-game engine selector remained visible: " + lockedUi,
+                    lockedUi.optBoolean("engineSelectorHidden", false));
+            assertTrue("The in-game ComfyUI URL/models panel remained visible: " + lockedUi,
+                    lockedUi.optBoolean("comfySettingsHidden", false));
+            assertTrue("The in-game NAI token input remained visible: " + lockedUi,
+                    lockedUi.optBoolean("naiTokenHidden", false));
+            assertTrue("The in-game NAI token-clear checkbox remained visible: " + lockedUi,
+                    lockedUi.optBoolean("naiTokenClearHidden", false));
+            assertTrue("The launcher-only credential notice is missing: " + lockedUi,
+                    lockedUi.optBoolean("naiCredentialNote", false));
             String settingsClosed = awaitJsString(instrumentation, gameWeb,
                     "(function(){var close=document.querySelector('#wwis-overlay #wwis-close');"
                             + "if(!close)return 'close_button_missing';close.click();"
