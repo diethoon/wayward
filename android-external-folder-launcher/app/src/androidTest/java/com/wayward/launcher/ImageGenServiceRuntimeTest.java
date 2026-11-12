@@ -1077,26 +1077,59 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("The real Elena character is missing from the launcher image index: "
                     + characterCounts, characterCounts.has("elena"));
 
+            ImagePipelineDiagnostics.clear(context);
             String trigger = "(function(){"
-                    + "window.__waywardCiImage={state:'enqueue'};"
+                    + "window.__waywardCiImage={state:'studio_open'};"
                     + "(async function(){"
                     + "var key='elena__task-idle__outfit-modest__room-taproom__v-0';"
-                    + "var prompt='Portrait illustration of an adult woman named Elena, fully clothed in a modest tavern outfit, warm indoor light, clean detailed digital painting, single character, no text';"
-                    + "var enqueueResponse=await window.fetch('http://127.0.0.1:8189/api/batch/enqueue',{"
-                    + "method:'POST',headers:{'Content-Type':'application/json'},"
-                    + "body:JSON.stringify({jobId:'launcher-native-provider-real-portrait-smoke',start:true,items:[{"
-                    + "talentId:key,imageType:'portrait',prompt:prompt,negativePrompt:'blurry, low quality, extra limbs, text',weight:100"
-                    + "}]})});"
-                    + "var enqueueBody=await enqueueResponse.json().catch(function(){return {};});"
-                    + "if(!enqueueResponse.ok)throw new Error('batch enqueue HTTP '+enqueueResponse.status+': '+JSON.stringify(enqueueBody).slice(0,240));"
-                    + "window.__waywardCiImage={state:'queued',accepted:enqueueBody.accepted||0,alreadyCached:enqueueBody.alreadyCached||0};"
+                    + "var isVisible=function(element){var rect=element.getBoundingClientRect(),style=getComputedStyle(element);return element.getClientRects().length>0&&rect.width>0&&rect.height>0&&style.display!=='none'&&style.visibility!=='hidden'&&Number(style.opacity)>0;};"
+                    + "var wait=function(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});};"
+                    + "localStorage.setItem('wml.dev','true');"
+                    + "var dev=WML.dev();if(!dev)throw new Error('WML development bridge is unavailable before generation');"
+                    + "var launcherSettings=JSON.parse(localStorage.getItem('tavern-settings')||'{}');"
+                    + "if(!launcherSettings||typeof launcherSettings!=='object')launcherSettings={};"
+                    + "launcherSettings.state=Object.assign({},launcherSettings.state||{},{imageBackendMode:'custom',imageBackendUrl:'http://127.0.0.1:8189'});"
+                    + "localStorage.setItem('tavern-settings',JSON.stringify(launcherSettings));"
+                    + "dev.fn('settingsStore').getState().set({imageBackendMode:'custom',imageBackendUrl:'http://127.0.0.1:8189',ageAffirmed:true,contentAcknowledged:true});"
+                    + "if(!window.WaywardLauncherImageStudio||!window.WaywardLauncherImageStudio.refreshBackendProbe)throw new Error('launcher image backend probe is unavailable before generation');"
+                    + "var backendProbeDeadline=Date.now()+15000,backendProbe=null;"
+                    + "while(Date.now()<backendProbeDeadline){backendProbe=await window.WaywardLauncherImageStudio.refreshBackendProbe('ci-real-generate-button');if(backendProbe&&backendProbe.ok&&backendProbe.baseUrl==='http://127.0.0.1:8189')break;await wait(200);}"
+                    + "if(!backendProbe||!backendProbe.ok||backendProbe.baseUrl!=='http://127.0.0.1:8189')throw new Error('WML did not select the launcher-local image backend before the generate click: '+JSON.stringify(backendProbe));"
+                    + "if(!window.WW_ImageStudio||typeof window.WW_ImageStudio.open!=='function')throw new Error('real Image Studio open action is unavailable');"
+                    + "window.WW_ImageStudio.open();"
+                    + "var peopleDeadline=Date.now()+15000,people=null;"
+                    + "while(Date.now()<peopleDeadline){people=document.querySelector('#wwis-overlay #wwis-people');if(people&&isVisible(people))break;await wait(100);}"
+                    + "if(!people)throw new Error('real Image Studio character picker did not appear');"
+                    + "var elenaButton=Array.from(people.querySelectorAll('button')).find(function(button){return String(button.textContent||'').includes('엘레나')&&isVisible(button);});"
+                    + "if(!elenaButton)throw new Error('real Image Studio character picker has no Elena button: '+String(people.innerText||'').slice(0,500));"
+                    + "elenaButton.click();"
+                    + "var conditionalDeadline=Date.now()+15000,conditionalButton=null;"
+                    + "while(Date.now()<conditionalDeadline){conditionalButton=document.querySelector('#wwis-overlay #wwis-conditional');if(conditionalButton&&isVisible(conditionalButton))break;await wait(100);}"
+                    + "if(!conditionalButton)throw new Error('real Image Studio conditional-generation button did not appear after selecting Elena');"
+                    + "conditionalButton.click();"
+                    + "var enqueueDeadline=Date.now()+25000,enqueueButton=null;"
+                    + "while(Date.now()<enqueueDeadline){enqueueButton=document.querySelector('#wwis-overlay #wwis-enqueue-random');if(enqueueButton&&isVisible(enqueueButton)&&!enqueueButton.disabled)break;await wait(100);}"
+                    + "if(!enqueueButton)throw new Error('real Image Studio random enqueue button did not appear');"
+                    + "var selectOnly=function(axis,value){var inputs=Array.from(document.querySelectorAll('#wwis-overlay #wwis-axes input[type=checkbox]')).filter(function(input){return input.dataset.axis===axis;});var target=inputs.find(function(input){return input.dataset.value===value;});if(!target)throw new Error('Image Studio condition missing '+axis+'='+value+'; available='+inputs.map(function(input){return input.dataset.value;}).join(','));inputs.forEach(function(input){if(input.checked!==(input===target))input.click();});if(!target.checked||inputs.filter(function(input){return input.checked;}).length!==1)throw new Error('Could not select exactly '+axis+'='+value);};"
+                    + "[['character','elena'],['situation','idle'],['outfit','modest'],['room','taproom'],['mood','default'],['men','0'],['exposure','none'],['aftermath','none'],['variant','0']].forEach(function(pair){selectOnly(pair[0],pair[1]);});"
+                    + "var randomCount=document.querySelector('#wwis-overlay #wwis-random-count');if(!randomCount)throw new Error('Image Studio random quantity input is missing');randomCount.value='1';randomCount.dispatchEvent(new Event('change',{bubbles:true}));"
+                    + "window.__waywardCiActualGenerateButtonClicks=0;"
+                    + "document.addEventListener('click',function(event){var target=event.target&&event.target.closest?event.target.closest('#wwis-overlay #wwis-enqueue-random'):null;if(target)window.__waywardCiActualGenerateButtonClicks++;},true);"
+                    + "enqueueButton.click();"
+                    + "if(window.__waywardCiActualGenerateButtonClicks!==1)throw new Error('actual Image Studio generate button click was not observed');"
+                    + "if(!enqueueButton.disabled)throw new Error('actual Image Studio generate button handler did not enter its planning/busy state');"
+                    + "window.__waywardCiImage={state:'button_clicked',button:'wwis-enqueue-random',actualGenerateButtonClicks:window.__waywardCiActualGenerateButtonClicks};"
+                    + "var uiDeadline=Date.now()+240000,uiMessage='';"
+                    + "while(Date.now()<uiDeadline){uiMessage=String(document.querySelector('#wwis-overlay #wwis-message')&&document.querySelector('#wwis-overlay #wwis-message').textContent||'');if(!enqueueButton.disabled){if(uiMessage.indexOf('대기열에 추가했습니다.')>=0)break;throw new Error('real Image Studio generate-button handler ended without successful queue acceptance: '+uiMessage);}await wait(200);}"
+                    + "if(enqueueButton.disabled||uiMessage.indexOf('대기열에 추가했습니다.')<0)throw new Error('real Image Studio generate-button handler timed out: '+uiMessage);"
+                    + "window.__waywardCiImage={state:'queued',button:'wwis-enqueue-random',actualGenerateButtonClicks:window.__waywardCiActualGenerateButtonClicks,message:uiMessage};"
                     + "var batchDeadline=Date.now()+240000;var batchStatus=null;"
                     + "while(Date.now()<batchDeadline){"
                     + "var statusResponse=await window.fetch('http://127.0.0.1:8189/api/batch/status');"
                     + "batchStatus=await statusResponse.json();"
-                    + "window.__waywardCiImage={state:'processing',done:batchStatus.done||0,total:batchStatus.total||0,completed:batchStatus.completed||0,cached:batchStatus.cached||0,errored:batchStatus.errored||0,lastError:batchStatus.lastError||''};"
-                    + "if((batchStatus.done||0)>=(batchStatus.total||0)&&!batchStatus.running)break;"
-                    + "await new Promise(function(resolve){setTimeout(resolve,500);});"
+                    + "window.__waywardCiImage={state:'processing',button:'wwis-enqueue-random',actualGenerateButtonClicks:window.__waywardCiActualGenerateButtonClicks,done:batchStatus.done||0,total:batchStatus.total||0,completed:batchStatus.completed||0,cached:batchStatus.cached||0,errored:batchStatus.errored||0,lastError:batchStatus.lastError||''};"
+                    + "if((batchStatus.total||0)>=1&&(batchStatus.done||0)>=(batchStatus.total||0)&&!batchStatus.running)break;"
+                    + "await wait(500);"
                     + "}"
                     + "if(!batchStatus||(batchStatus.total||0)<1||(batchStatus.done||0)<(batchStatus.total||0))throw new Error('batch job timed out: '+JSON.stringify(batchStatus));"
                     + "if((batchStatus.completed||0)!==1||(batchStatus.errored||0)!==0)throw new Error('Image Studio batch failed: '+JSON.stringify(batchStatus));"
@@ -1173,7 +1206,7 @@ public final class ImageGenServiceRuntimeTest {
                     + "window.__waywardCiImage={state:'loaded',displayedInPortraitHook:true,portraitHook:'imageUsagePortraitPanel',"
                     + "imageAlt:portrait.alt,naturalWidth:portrait.naturalWidth,naturalHeight:portrait.naturalHeight,visible:visible,portraitPanelCalls:portraitPanelCalls,domRewritten:portrait.src===imageUrl,serverImageUrl:serverImageUrl,"
                     + "mimeType:blob.type||'',imagePath:entry.imagePath,imageUrl:portrait.currentSrc||portrait.src,imageOrigin:new URL(portrait.currentSrc||portrait.src).origin,gameOrigin:window.location.origin,sameOriginResource:new URL(portrait.currentSrc||portrait.src).origin===window.location.origin,entryCount:pack.entryCount||Object.keys(pack.entries||{}).length,"
-                    + "cacheCompleted:batchStatus.completed,cacheCount:batchStatus.cached||0};"
+                    + "cacheCompleted:batchStatus.completed,cacheCount:batchStatus.cached||0,actualGenerateButton:'wwis-enqueue-random',actualGenerateButtonClicks:window.__waywardCiActualGenerateButtonClicks||0};"
                     + "})().catch(function(error){window.__waywardCiImage={state:'error',errorType:error&&error.name?String(error.name):'Error',message:error&&error.message?String(error.message).slice(0,5000):'unknown'};});"
                     + "return 'dispatched';})()";
             String dispatch = awaitJsString(instrumentation, gameWeb, trigger, 10_000L);
@@ -1189,6 +1222,38 @@ public final class ImageGenServiceRuntimeTest {
                 if ("loaded".equals(state) || "error".equals(state) || "img_error".equals(state)) break;
                 Thread.sleep(500L);
             }
+            assertEquals("The test did not click the real Image Studio generation button exactly once: " + imageState,
+                    1, imageState.optInt("actualGenerateButtonClicks", 0));
+            assertEquals("The test bypassed the actual Image Studio generate control.",
+                    "wwis-enqueue-random", imageState.optString("actualGenerateButton", ""));
+            org.json.JSONArray imageGenRequests = ImagePipelineDiagnostics.readRecent(context, 200);
+            boolean nativeEnqueueReceived = false;
+            boolean nativeEnqueueSucceeded = false;
+            boolean jsRequestIntercepted = false;
+            for (int index = 0; index < imageGenRequests.length(); index++) {
+                JSONObject event = imageGenRequests.optJSONObject(index);
+                if (event == null) continue;
+                JSONObject details = event.optJSONObject("details");
+                String eventName = event.optString("event", "");
+                if ("launcher_imagegen_request_intercepted".equals(eventName)
+                        && "POST".equals(details == null ? "" : details.optString("method", ""))
+                        && "/api/batch/enqueue".equals(details == null ? "" : details.optString("path", ""))) {
+                    jsRequestIntercepted = true;
+                }
+                if (details == null || !"POST".equals(details.optString("method", ""))
+                        || !"/api/batch/enqueue".equals(details.optString("path", ""))) continue;
+                if ("launcher_api_request_received".equals(eventName)) {
+                    nativeEnqueueReceived = true;
+                } else if ("launcher_api_response".equals(eventName) && details.optInt("status", 0) == 200) {
+                    nativeEnqueueSucceeded = true;
+                }
+            }
+            assertTrue("The actual button click did not pass through the production fetch interceptor.",
+                    jsRequestIntercepted);
+            assertTrue("The actual generation-button click did not reach the native WebView-to-8189 proxy.",
+                    nativeEnqueueReceived);
+            assertTrue("The actual generation-button POST did not receive HTTP 200 from the local ImageGen server.",
+                    nativeEnqueueSucceeded);
             assertEquals("Cloudflare image did not render in the production WML portrait hook. "
                     + imageState + "; pipeline=" + ImagePipelineDiagnostics.readRecent(context, 120),
                     "loaded", imageState.optString("state", ""));
@@ -1206,7 +1271,9 @@ public final class ImageGenServiceRuntimeTest {
                     imageState.optBoolean("domRewritten", false));
             assertEquals("Generated image route did not use the active game origin: " + imageState,
                     GAME_ORIGIN, imageState.optString("imageOrigin", ""));
-            resultSummary = "state=loaded\nportraitHook=imageUsagePortraitPanel\nportraitPanelCalls=" + imageState.optInt("portraitPanelCalls") + "\ndisplayedInPortraitHook=true\nvisibleOnScreen=true\nsameOriginImageRoute=true\nimageOrigin=" + imageState.optString("imageOrigin") + "\n"
+            resultSummary = "state=loaded\ngenerateButton=wwis-enqueue-random\ngenerateButtonClicks="
+                    + imageState.optInt("actualGenerateButtonClicks") + "\njsFetchIntercepted=true\nnativeBatchEnqueueReceived=true\nloopbackServerHttp200=true\n"
+                    + "portraitHook=imageUsagePortraitPanel\nportraitPanelCalls=" + imageState.optInt("portraitPanelCalls") + "\ndisplayedInPortraitHook=true\nvisibleOnScreen=true\nsameOriginImageRoute=true\nimageOrigin=" + imageState.optString("imageOrigin") + "\n"
                     + "gameHtmlBytes=" + gameHtml.length + "\n"
                     + "gameHtmlSourceCommit=26d6c32e0b0abbb886e3029efd548b7ca6774401\n"
                     + "gameHtmlBlob=d198eacfc127c55dc44bd5d1b8e29ff2bb7d08e6\n"
