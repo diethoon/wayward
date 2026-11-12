@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex,nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; connect-src https://wayward-auth-relay.trpgengine1.workers.dev wss://wayward-auth-relay.trpgengine1.workers.dev; style-src 'unsafe-inline'; base-uri 'none'; form-action https://accounts.google.com">
+<title>Wayward CloudSave · Google 로그인</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#111827;color:#f3f4f6}
+*{box-sizing:border-box}
+body{margin:0;min-height:100svh;display:grid;place-items:center;padding:24px}
+main{width:min(100%,460px);padding:26px;border:1px solid #374151;border-radius:18px;background:#1f2937;box-shadow:0 18px 60px #0006}
+h1{font-size:1.35rem;margin:0 0 12px}
+p{line-height:1.55;color:#d1d5db}
+#status{padding:14px;border-radius:10px;background:#111827;overflow-wrap:anywhere}
+small{color:#9ca3af}
+</style>
+</head>
+<body>
+<main>
+<h1>Wayward CloudSave Google 로그인</h1>
+<p id="status" role="status" aria-live="polite">인증 요청을 확인하고 있습니다.</p>
+<p><small>이 페이지는 Google 로그인만 중계합니다. 게임 세이브 파일은 이 페이지나 인증 서버에 업로드되지 않습니다.</small></p>
+</main>
+<script>
+(() => {
+'use strict';
+const CLIENT_ID='35944231952-p82giir62o28bo001j9uvmqo3kgp9c99.apps.googleusercontent.com';
+const REDIRECT_URI='https://jeiky224.github.io/cloud/';
+const OAUTH_API='https://wayward-auth-relay.trpgengine1.workers.dev';
+const RELAY_WS='wss://wayward-auth-relay.trpgengine1.workers.dev';
+const statusNode=document.getElementById('status');
+const params=new URLSearchParams(location.search);
+const nonceFromUrl=params.get('nonce')||'';
+const originFromUrl=params.get('origin')||'';
+function status(message){statusNode.textContent=message;}
+function randomBytes(size){const value=new Uint8Array(size);crypto.getRandomValues(value);return value;}
+function base64url(bytes){let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,'');}
+function validOrigin(value){
+ if(value==='null')return true;
+ try{const parsed=new URL(value);return(parsed.protocol==='http:'||parsed.protocol==='https:')&&parsed.origin===value&&!parsed.username&&!parsed.password;}
+ catch(_){return false;}
+}
+function notifyParent(payload,gameOrigin){
+ try{
+  if(!window.opener||window.opener.closed)return false;
+  window.opener.postMessage(payload,gameOrigin==='null'?'*':gameOrigin);
+  return true;
+ }catch(_){return false;}
+}
+function relay(payload){
+ return new Promise(resolve=>{
+  if(!/^[a-f0-9]{48}$/.test(payload.nonce||''))return resolve(false);
+  let socket,done=false,timer;
+  const finish=ok=>{if(done)return;done=true;if(timer)clearTimeout(timer);try{if(socket)socket.close();}catch(_){}resolve(ok);};
+  try{
+   socket=new WebSocket(RELAY_WS+'/relay/'+payload.nonce+'?role=auth');
+   socket.addEventListener('message',event=>{
+    let message;try{message=JSON.parse(String(event.data));}catch(_){return;}
+    if(message.nonce!==payload.nonce)return;
+    if(message.type==='wayward-auth-relay-ready'&&message.role==='auth'){
+     try{socket.send(JSON.stringify(payload));}catch(_){finish(false);}
+    }else if(message.type==='wayward-auth-relay-error')finish(false);
+   });
+   socket.addEventListener('close',()=>finish(false));
+   socket.addEventListener('error',()=>finish(false));
+   timer=setTimeout(()=>finish(false),8000);
+  }catch(_){finish(false);}
+ });
+}
+async function exchangeCode(code,verifier){
+ const response=await fetch(OAUTH_API+'/oauth/exchange',{
+  method:'POST',
+  headers:{'Content-Type':'application/json','X-Requested-With':'XmlHttpRequest'},
+  cache:'no-store',
+  credentials:'omit',
+  body:JSON.stringify({code,codeVerifier:verifier})
+ });
+ let data={};try{data=await response.json();}catch(_){}
+ if(!response.ok||!data.accessToken||!data.refreshToken)throw new Error(data.error||('Google 인증 교환 실패 ('+response.status+')'));
+ return data;
+}
+async function begin(){
+ if(!/^[a-f0-9]{48}$/.test(nonceFromUrl)||!validOrigin(originFromUrl)){
+  status('잘못된 로그인 요청입니다. Wayward 게임으로 돌아가 다시 시도해 주세요.');
+  return;
+ }
+ const state=base64url(randomBytes(24));
+ const verifier=base64url(randomBytes(32));
+ const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier));
+ const challenge=base64url(new Uint8Array(digest));
+ sessionStorage.setItem('wayward-cloud-oauth:'+state,JSON.stringify({nonce:nonceFromUrl,gameOrigin:originFromUrl,verifier,createdAt:Date.now()}));
+ const authorize=new URL('https://accounts.google.com/o/oauth2/v2/auth');
+ authorize.search=new URLSearchParams({
+  client_id:CLIENT_ID,
+  redirect_uri:REDIRECT_URI,
+  response_type:'code',
+  scope:'https://www.googleapis.com/auth/drive.appdata',
+  access_type:'offline',
+  prompt:'consent select_account',
+  include_granted_scopes:'true',
+  state,
+  code_challenge:challenge,
+  code_challenge_method:'S256'
+ }).toString();
+ status('Google 계정 선택 화면으로 이동합니다.');
+ location.replace(authorize.toString());
+}
+async function finishCallback(){
+ const state=params.get('state')||'',code=params.get('code')||'',oauthError=params.get('error')||'';
+ if(!state)return false;
+ let saved;try{saved=JSON.parse(sessionStorage.getItem('wayward-cloud-oauth:'+state)||'null');}catch(_){}
+ sessionStorage.removeItem('wayward-cloud-oauth:'+state);
+ history.replaceState(null,'',REDIRECT_URI);
+ if(!saved||Date.now()-Number(saved.createdAt)>10*60*1000||!/^[a-f0-9]{48}$/.test(saved.nonce||'')||!validOrigin(saved.gameOrigin)){
+  status('로그인 요청이 만료되었거나 검증에 실패했습니다. 게임에서 다시 시도해 주세요.');
+  return true;
+ }
+ const nonce=saved.nonce,gameOrigin=saved.gameOrigin;
+ const fail=async message=>{
+  const payload={type:'wayward-cloud-auth-error',nonce,message:String(message||'Google 로그인에 실패했습니다.')};
+  notifyParent(payload,gameOrigin);
+  await relay(payload);
+  status(payload.message+' 이 창을 닫고 게임에서 다시 시도해 주세요.');
+ };
+ if(oauthError){
+  await fail(oauthError==='access_denied'?'Google 로그인이 취소되었습니다.':'Google 로그인 오류: '+oauthError);
+  return true;
+ }
+ if(!code){await fail('Google 인증 코드가 반환되지 않았습니다.');return true;}
+ try{
+  status('Google 계정을 확인하고 로그인 토큰을 안전하게 교환하고 있습니다.');
+  const tokens=await exchangeCode(code,saved.verifier);
+  const payload={
+   type:'wayward-cloud-auth-success',nonce,
+   accessToken:tokens.accessToken,
+   refreshToken:tokens.refreshToken,
+   expiresIn:Math.max(60,Math.min(3600,Number(tokens.expiresIn)||3600))
+  };
+  const parentSent=notifyParent(payload,gameOrigin);
+  const relaySent=await relay(payload);
+  if(!parentSent&&!relaySent){
+   status('인증은 완료했지만 게임 연결이 끊어졌습니다. 게임으로 돌아가 다시 연결해 주세요.');
+   return true;
+  }
+  status('Google 로그인이 완료되었습니다. Wayward 게임으로 돌아가세요.');
+  setTimeout(()=>{try{window.close();}catch(_){}},1000);
+  return true;
+ }catch(error){
+  await fail(error&&error.message||error);
+  return true;
+ }
+}
+(async()=>{try{if(await finishCallback())return;await begin();}catch(error){status('로그인을 시작하지 못했습니다: '+String(error&&error.message||error));}})();
+})();
+</script>
+</body>
+</html>
