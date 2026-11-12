@@ -114,6 +114,23 @@ jobs:
               report.write("TOTAL" + chr(9) + "files=" + str(count) + chr(9) + "bytes=" + str(total) + chr(10))
           PY
           python3 android-external-folder-launcher/scripts/embed_imagegen_backend.py "$RUNNER_TEMP/wayward-mods.zip"
+      - name: Export pinned ImageGen server route source for launcher audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$GITHUB_WORKSPACE/android-external-folder-launcher/app/src/main/assets/imagegen-backend/wayward-imagegen/src"
+          OUT="$RUNNER_TEMP/launcher-imagegen-source"
+          mkdir -p "$OUT"
+          for file in routes/image.ts comfy/jobRunner.ts nai/client.ts config.ts routes/generationSettings.ts batch/queue.ts; do
+            mkdir -p "$OUT/$(dirname "$file")"
+            cp "$SRC/$file" "$OUT/$file"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launcher-imagegen-pinned-0.8.4-source
+          path: ${{ runner.temp }}/launcher-imagegen-source/
+          if-no-files-found: error
+          retention-days: 2
       - name: Index every WML mod entrypoint in the pinned archive
         shell: bash
         run: |
