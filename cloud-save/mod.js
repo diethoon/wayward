@@ -155,6 +155,7 @@ WML.define({
         let bridge = null;
         let socket = null;
         let timeout = null;
+        let fallbackNode = null;
         let settled = false;
         const bridgeUrl = new URL(AUTH_BRIDGE_URL);
         const bridgeOrigin = bridgeUrl.origin;
@@ -178,6 +179,10 @@ WML.define({
         const cleanup = () => {
           window.removeEventListener('message', onMessage);
           if (timeout) clearTimeout(timeout);
+          if (fallbackNode) {
+            try { fallbackNode.remove(); } catch (_) {}
+            fallbackNode = null;
+          }
           try { if (socket && socket.readyState < 2) socket.close(); } catch (_) {}
         };
         const fail = error => {
@@ -226,9 +231,50 @@ WML.define({
         bridge = window.open(bridgeUrl.toString(), 'waywardGoogleDriveAuth',
           'popup=yes,width=520,height=720,resizable=yes,scrollbars=yes');
         if (!bridge) {
-          cleanup();
-          reject(new Error('로그인 창이 차단되었습니다. 팝업을 허용한 뒤 다시 눌러 주세요.'));
-          return;
+          if (!socket) {
+            cleanup();
+            reject(new Error('이 WebView에서 팝업과 보조 연결을 모두 사용할 수 없습니다. 외부 브라우저에서 게임을 열거나 앱의 팝업/WebSocket 지원을 켜 주세요.'));
+            return;
+          }
+          // Some Android WebViews cannot create window.open() popups. Keep the
+          // game WebSocket alive and let the user open the auth page as a normal
+          // link in the system browser; the nonce-bound relay returns the result.
+          fallbackNode = document.createElement('div');
+          fallbackNode.setAttribute('role', 'dialog');
+          fallbackNode.setAttribute('aria-modal', 'true');
+          fallbackNode.setAttribute('data-wml-ui', 'true');
+          fallbackNode.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.72);font:16px system-ui,sans-serif;color:#fff';
+          const panel = document.createElement('div');
+          panel.style.cssText = 'box-sizing:border-box;width:min(100%,420px);padding:20px;border-radius:12px;background:#202733;border:1px solid #667085;box-shadow:0 12px 40px #0008';
+          const title = document.createElement('strong');
+          title.textContent = 'Google 로그인 창을 직접 열어 주세요';
+          const detail = document.createElement('p');
+          detail.textContent = '이 실행 환경은 팝업을 차단했습니다. 아래 링크를 눌러 외부 브라우저에서 인증하세요. 인증이 끝날 때까지 이 게임 화면을 닫지 마세요.';
+          detail.style.cssText = 'line-height:1.5;font-size:14px';
+          const link = document.createElement('a');
+          link.href = bridgeUrl.toString();
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = '외부 브라우저에서 Google 로그인';
+          link.style.cssText = 'display:block;padding:12px;margin:14px 0;border-radius:8px;background:#3b82f6;color:#fff;text-align:center;text-decoration:none;font-weight:600';
+          link.setAttribute('aria-disabled', 'true');
+          link.style.pointerEvents = 'none';
+          link.style.opacity = '.55';
+          const enableLink = () => {
+            link.removeAttribute('aria-disabled');
+            link.style.pointerEvents = 'auto';
+            link.style.opacity = '1';
+          };
+          if (socket.readyState === WebSocket.OPEN) enableLink();
+          else socket.addEventListener('open', enableLink, { once: true });
+          const cancel = document.createElement('button');
+          cancel.type = 'button';
+          cancel.textContent = '취소';
+          cancel.style.cssText = 'width:100%;padding:10px;border:1px solid #98a2b3;border-radius:8px;background:transparent;color:#fff';
+          cancel.addEventListener('click', () => fail(new Error('Google 로그인을 취소했습니다.')));
+          panel.append(title, detail, link, cancel);
+          fallbackNode.append(panel);
+          document.body.append(fallbackNode);
         }
         timeout = setTimeout(() => fail(new Error('Google 연결 시간이 초과되었습니다. 로그인 창에서 승인을 완료했는지 확인해 주세요.')), 180000);
       });
@@ -1057,3 +1103,5 @@ WML.define({
     });
   }
 });
+
+
