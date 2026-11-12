@@ -287,7 +287,18 @@ WML.define({
           data.nonce !== authNonce) return;
 
       if (data.type === 'wayward-cloudsave-page-ready') {
-        if (bridgeReady) return;
+        if (bridgeReady) {
+          rejectPendingDriveRequests('정적 인증 페이지가 새로고침되어 이전 Drive 요청을 종료했습니다.');
+          authSessionId = '';
+          bridgeReady = false;
+          pageAuthenticated = false;
+          bridgeStatus = 'reopening';
+          authStatus = 'reauth-required';
+          usedDriveRequestIds.clear();
+          driveSlots = [];
+          slotsStatus = 'not-loaded';
+          slotsError = '';
+        }
         if (!sendBridgeHello()) {
           message = '정적 인증 페이지와 핸드셰이크를 시작하지 못했습니다.';
           if (isConnected()) render();
@@ -296,10 +307,11 @@ WML.define({
       }
 
       if (data.type === 'wayward-cloudsave-ready') {
-        if (bridgeReady || typeof data.sessionId !== 'string' ||
-            !/^[a-f0-9]{48}$/.test(data.sessionId)) return;
+        if (typeof data.sessionId !== 'string' || !/^[a-f0-9]{48}$/.test(data.sessionId)) return;
+        if (bridgeReady && data.sessionId === authSessionId) return;
         authSessionId = data.sessionId;
         bridgeReady = true;
+        pageAuthenticated = false;
         bridgeStatus = 'awaiting-google';
         authStatus = 'awaiting-google';
         message = '인증 페이지 연결이 확인되었습니다. 팝업에서 Google 계정을 연결하세요.';
