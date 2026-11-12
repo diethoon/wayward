@@ -295,8 +295,11 @@ async function exerciseEngine(engine) {
   window.WaywardLauncherImageStudio.getRuntimeStatus();
   assert.equal(api.fn("settingsStore").getState().imageBackendMode, "off",
     "without a ready launcher server, preserve the game's normal off setting");
-  assert.equal(imageServerUrl("/api/batch/enqueue"), null,
-    "without a launcher server, do not route to an external game backend");
+  assert.equal(imageServerUrl("/api/batch/enqueue"),
+    "https://game-configured.example:8189/api/batch/enqueue",
+    "without a ready launcher server, preserve the game's original backend URL");
+  assert.notEqual(imageServerUrl("/api/batch/enqueue"), "http://127.0.0.1:8189/api/batch/enqueue",
+    "without a ready launcher server, do not route requests to the launcher's loopback engine");
 
   return { engine, calls: forwarded.length };
 }
