@@ -523,7 +523,7 @@ async function launcherGenerate(
       sendJson(ctx.res, 200, { reachable: false, supported: false, maxPrompts: MAX_PROMPT_BATCH_SIZE })
       return
     }
-    const info = await _comfy.objectInfo()
+    const info = await comfy.objectInfo()
     sendJson(ctx.res, 200, { reachable: info !== null, supported: Boolean(info?.[PROMPT_BATCH_NODE]), maxPrompts: MAX_PROMPT_BATCH_SIZE })
   })""",
                     "prevent-game-selected-comfy-probes-when-nai-engine-active",
