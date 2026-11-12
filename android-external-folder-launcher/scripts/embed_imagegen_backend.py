@@ -486,17 +486,17 @@ async function launcherGenerate(
                     "remove-game-comfy-client-mutation-parameter",
                 ),
                 (
-                    "  config.imageProvider = settings.imageProvider\\n",
-                    "  // The launcher-selected image engine is immutable while this server is running.\\n",
+                    "  config.imageProvider = settings.imageProvider\n",
+                    "  // The launcher-selected image engine is immutable while this server is running.\n",
                     "keep-launcher-image-engine-immutable",
                 ),
                 (
-                    "  config.comfyUrl = settings.comfyUrl\\n  config.promptBatchSize = settings.promptBatchSize\\n  comfy.setBaseUrl(settings.comfyUrl)\\n",
-                    "  // ComfyUI endpoint remains the launcher-selected runtime destination.\\n  config.promptBatchSize = settings.promptBatchSize\\n",
+                    "  config.comfyUrl = settings.comfyUrl\n  config.promptBatchSize = settings.promptBatchSize\n  comfy.setBaseUrl(settings.comfyUrl)\n",
+                    "  // ComfyUI endpoint remains the launcher-selected runtime destination.\n  config.promptBatchSize = settings.promptBatchSize\n",
                     "keep-launcher-comfy-endpoint-immutable",
                 ),
                 (
-                    "    if (raw.naiTokenClear === true) settings.naiToken = ''\\n",
+                    "    if (raw.naiTokenClear === true) settings.naiToken = ''\n",
                     "",
                     "ignore-in-game-novelai-token-clear",
                 ),
