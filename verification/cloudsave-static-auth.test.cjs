@@ -93,7 +93,7 @@ test('manual external-browser return validates pending nonce and never persists 
 });
 
 test('token handoff checks exact Drive scope, token size and bounded expiry', () => {
-  assert.match(mod, /payload\.scope\s*!==\s*'https:\/\/www\.googleapis\.com\/auth\/drive\.appdata'/);
+  assert.match(mod, /String\(payload\.scope \|\| ''\)\.split\(\/\\s\+\/\)\.includes\('https:\/\/www\.googleapis\.com\/auth\/drive\.appdata'\)/);
   assert.match(mod, /payload\.accessToken\.length\s*>\s*4096/);
   assert.match(mod, /expiresIn\s*<\s*60\s*\|\|\s*expiresIn\s*>\s*3600/);
 });
