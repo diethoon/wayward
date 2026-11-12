@@ -35,6 +35,7 @@ for (const required of [
   "google.accounts.oauth2.hasGrantedAllScopes(response,DRIVE_SCOPE)",
   "code:'scope_missing'",
   "google.accounts.oauth2.revoke"
+  '<meta name="referrer" content="strict-origin-when-cross-origin">',
 ]) assert.ok(page.includes(required), 'missing Pages auth policy contract: ' + required);
 
 for (const forbidden of [
