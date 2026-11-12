@@ -11,7 +11,7 @@ on:
       - 'scripts/test-cloudsave-session-policy.cjs'
 
 concurrency:
-  group: cloudsave-package-${{ github.ref }}
+  group: cloudsave-session-policy-final-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
