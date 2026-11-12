@@ -1,0 +1,80 @@
+name: Verify CloudSave static-only integration
+
+on:
+  push:
+    branches:
+      - work/cloudsave-drive-bridge-20261113
+    paths:
+      - 'cloud-save/**'
+      - 'verification/**'
+      - '.github/workflows/cloudsave-static-auth.yml'
+  pull_request:
+    paths:
+      - 'cloud-save/**'
+      - 'verification/**'
+      - '.github/workflows/cloudsave-static-auth.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository history for preservation comparison
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch exact v0.6.1 preservation base
+        run: git fetch origin refs/heads/work/cloudsave-session-policy-20261113:refs/remotes/origin/work/cloudsave-session-policy-20261113
+      - name: Verify JavaScript syntax
+        run: |
+          node --check cloud-save/mod.js
+          node --check cloud-save/crypto.js
+      - name: Verify static-only auth and protected save behavior
+        run: node --test verification/cloudsave-static-auth.test.cjs
+      - name: Verify patch hygiene and forbidden hosts
+        run: |
+          git diff --check origin/work/cloudsave-session-policy-20261113...HEAD
+          ! grep -niE 'vercel\.app|vercel\.com|workers\.dev|cloudflare|render\.com|AUTH_API_URL|AUTH_RELAY|token_endpoint|oauth/refresh|refreshToken|client_secret|www\.googleapis\.com|WMLHost|Authorization.*Bearer|accessToken' cloud-save/mod.js
+      - name: Build and verify WML distribution ZIP
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist/cloud-save
+          cp cloud-save/mod.js cloud-save/crypto.js cloud-save/README.md dist/cloud-save/
+          cat > dist/cloud-save/INSTALL.txt <<'EOF'
+          Wayward Google Drive CloudSave — WML v0.7.0
+
+          1. Copy this cloud-save folder into the game's wml/mods/ directory.
+          2. Add "cloud-save" to the existing WML.enable([...]) list in wml/mods/mods.js if it is not already present. Preserve all existing IDs.
+          3. Restart Wayward and open 클라우드세이브 (Google Drive).
+
+          WML metadata is declared by WML.define({ id: 'cloud-save', ... }) in mod.js.
+          Google OAuth and Google Drive API traffic run only in the GitHub Pages HTTPS popup.
+          The game receives no access token.
+          EOF
+          node -e "const fs=require('fs');const s=fs.readFileSync('cloud-save/mod.js','utf8');for(const token of ['WML.define({',\"id: 'cloud-save'\",\"version: '0.7.0'\",\"api.loadScript('crypto.js')\"])if(!s.includes(token))throw new Error('missing WML metadata: '+token)"
+          (cd dist && zip -qr ../Wayward_Google_Drive_CloudSave_v0.7.0.zip cloud-save)
+          unzip -t Wayward_Google_Drive_CloudSave_v0.7.0.zip
+          unzip -Z1 Wayward_Google_Drive_CloudSave_v0.7.0.zip | sort > dist/package-files.txt
+          cat > dist/expected-files.txt <<'EOF'
+          cloud-save/
+          cloud-save/INSTALL.txt
+          cloud-save/README.md
+          cloud-save/crypto.js
+          cloud-save/mod.js
+          EOF
+          sort -o dist/expected-files.txt dist/expected-files.txt
+          diff -u dist/expected-files.txt dist/package-files.txt
+          sha256sum Wayward_Google_Drive_CloudSave_v0.7.0.zip | tee dist/SHA256SUMS.txt
+          node -e "const fs=require('fs'),c=require('crypto');for(const f of ['cloud-save/mod.js','cloud-save/crypto.js','cloud-save/README.md']){const b=fs.readFileSync(f);const chunks=[];for(let o=0;o<b.length;o+=4096)chunks.push({offset:o,length:Math.min(4096,b.length-o),sha256:c.createHash('sha256').update(b.subarray(o,o+4096)).digest('hex')});console.log(JSON.stringify({file:f,bytes:b.length,sha256:c.createHash('sha256').update(b).digest('hex'),chunks}));}" > dist/CHUNK_SHA256.jsonl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wayward-cloudsave-static-v0.7.0
+          path: |
+            Wayward_Google_Drive_CloudSave_v0.7.0.zip
+            dist/SHA256SUMS.txt
+            dist/CHUNK_SHA256.jsonl
+          if-no-files-found: error
