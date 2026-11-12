@@ -33,7 +33,7 @@ assert.match(batchQueueSource,
   /negativePrompt: \[this\.config\.sdxlNegativePrompt\.trim\(\), item\.negativePrompt\?\.trim\(\)\]/,
   "the Comfy/Illustrious path retains the Image Studio negative prompt and adds its configured negative prompt");
 assert.match(batchQueueSource,
-  /if \(workflow === 'nai'\) return NovelAI_프롬프트만들기\(this\.config, item\.prompt, item\.negativePrompt\)/,
+  /if \(workflow === 'nai'\) return this\.config\.imageProvider === 'launcher'[\s\S]*\? \{ prompt: item\.prompt, negativePrompt: item\.negativePrompt\?\.trim\(\) \?\? '' \}[\s\S]*: NovelAI_프롬프트만들기\(this\.config, item\.prompt, item\.negativePrompt\)/,
   "the NAI path receives both Image Studio prompt fields");
 assert.match(comfyJobRunnerSource,
   /buildComfyPrompt\(\s*this\.config,\s*args\.prompt,\s*args\.negativePrompt,/,
@@ -243,7 +243,7 @@ async function exerciseEngine(engine) {
       talentId: "fixture-character-task",
       prompt: "fixture edited positive prompt: silver hair, blue coat, rainy street",
       negativePrompt: "fixture edited negative prompt: blurry, low quality",
-      workflow: "illustrious",
+      workflow: engine === "novelai" ? "nai" : "illustrious",
       imageType: "portrait",
       steps: 32,
       cfg: 6.5,
