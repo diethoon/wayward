@@ -340,8 +340,9 @@ WML.define({
           if (settled) return;
           settled = true;
           cleanup();
+          const failedWindow = pendingAuthWindow;
           clearPendingAuth();
-          try { if (pendingAuthWindow && !pendingAuthWindow.closed) pendingAuthWindow.close(); } catch (_) {}
+          try { if (failedWindow && !failedWindow.closed) failedWindow.close(); } catch (_) {}
           reject(error instanceof Error ? error : new Error(String(error || 'Google 연결에 실패했습니다.')));
         };
         const finish = payload => {
@@ -371,6 +372,15 @@ WML.define({
               event.source !== pendingAuthWindow ||
               !event.data || event.data.nonce !== nonce) return;
           const payload = event.data;
+          if (payload.type === 'wayward-cloud-auth-page-ready') {
+            try {
+              pendingAuthWindow.postMessage(
+                { type: 'wayward-cloud-auth-hello', nonce },
+                AUTH_BRIDGE_ORIGIN
+              );
+            } catch (_) {}
+            return;
+          }
           if (payload.type === 'wayward-cloud-auth-ready') return;
           if (payload.type === 'wayward-cloud-auth-error') {
             fail(new Error(payload.message || 'Google 로그인이 취소되었거나 실패했습니다.'));
