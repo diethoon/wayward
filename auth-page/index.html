@@ -110,6 +110,16 @@ function beginLogin(){
      loginButton.disabled=false;
      return;
     }
+    if(!google.accounts.oauth2.hasGrantedAllScopes(response,DRIVE_SCOPE)){
+     postToParent({
+      type:'wayward-cloud-auth-error',
+      nonce,
+      message:'Google Drive 앱 데이터(appDataFolder) 접근 권한이 승인되지 않았습니다.'
+     });
+     status('Drive 저장 권한이 승인되지 않아 연결하지 않았습니다. 권한을 허용한 뒤 다시 연결하세요.');
+     loginButton.disabled=false;
+     return;
+    }
     const delivered=postToParent({
      type:'wayward-cloud-auth-success',
      nonce,
