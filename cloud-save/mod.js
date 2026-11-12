@@ -201,14 +201,18 @@ WML.define({
         } else authStatus = 'reauth-required';
         throw new Error(payload.message || 'Google 로그인이 취소되었거나 실패했습니다.');
       }
+      const expiresIn = Number(payload.expiresIn);
       if (payload.type !== 'wayward-cloud-auth-success' ||
-          typeof payload.accessToken !== 'string' || !payload.accessToken) {
+          typeof payload.accessToken !== 'string' ||
+          !payload.accessToken ||
+          payload.accessToken.length > 4096 ||
+          payload.scope !== 'https://www.googleapis.com/auth/drive.appdata' ||
+          !Number.isFinite(expiresIn) || expiresIn < 60 || expiresIn > 3600) {
         authStatus = 'reauth-required';
-        throw new Error('Google에서 유효한 액세스 토큰을 반환하지 않았습니다.');
+        throw new Error('Google 인증 응답의 토큰·scope·만료 시간이 올바르지 않습니다.');
       }
       accessToken = payload.accessToken;
-      tokenExpiresAt = Date.now() +
-        Math.max(60, Math.min(3600, Number(payload.expiresIn) || 3600)) * 1000;
+      tokenExpiresAt = Date.now() + expiresIn * 1000;
       explicitLogout = false;
       permissionRevoked = false;
       hadPreviousAuth = true;
