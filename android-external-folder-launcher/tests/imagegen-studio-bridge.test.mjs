@@ -235,9 +235,8 @@ const readyDiscovery = await window.WaywardLauncherImageStudio.discoverNow();
 assert.equal(readyDiscovery.ok, true);
 runtime = { available: false, starting: false, ready: false, backendVersion: "" };
 assert.equal(api.fn("settingsStore").getState().imageBackendMode, "off",
-  "when the launcher engine is stopped, preserve the game's off preference");
-assert.equal(api.fn("imageBackend")().baseUrl, null,
-  "a stopped launcher must not expose a game-configured remote URL");
+  "when the launcher engine is stopped, preserve the game's saved off preference");
+assert.equal(api.fn("imageBackend")().baseUrl, null);
 assert.equal(api.fn("imageServerUrl")("https://remote.example:8189/api/batch/enqueue"), null,
   "a stopped launcher must never fall back to a custom external URL");
 assert.equal(window.__WW_STUDIO_OFFLINE_ONLY__, true);
