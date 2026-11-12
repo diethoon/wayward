@@ -21,7 +21,7 @@ assert.match(main, /startOrSwitchManagedImageGenServer/);
 assert.match(main, /waitForImageGenStopThenStart/);
 assert.match(main, /ImageGenBackendInstaller\.install\(this,backend\)/);
 assert.match(main, /writeImageGenRuntimeConfig\(backend,mode,requestedUrl,launcherProfileId,launcherProviderId\)/);
-assert.match(main, /new String\[\] \{ "imagegen-proxy.js", "imagegen-studio-bridge.js" \}/,
+assert.match(main, /new String\[\]\s*\{\s*"imagegen-proxy.js",\s*"imagegen-studio-bridge.js"\s*\}/,
   "the direct in-game provider bridge must not be injected into WebView");
 assert.doesNotMatch(main, /@JavascriptInterface public void generateImageWithProvider/,
   "WML must not have a direct provider-generation bypass");
