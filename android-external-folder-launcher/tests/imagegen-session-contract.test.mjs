@@ -18,9 +18,9 @@ assert.match(main, /zipMods\.open\("wml\/mods\/imagestudio\/mod\.js"\)/,
 assert.doesNotMatch(main, /wml\/mods\/imagestudio\/backend\//,
   "the game folder must not be required to contain the bundled server source");
 const automaticStartup = main.slice(main.indexOf("private void ensureImageGenServer"), main.indexOf("private static boolean sameImageGenVersion"));
-assert.doesNotMatch(automaticStartup, /extractDirectory\\(/,
+assert.doesNotMatch(automaticStartup, /extractDirectory\(/,
   "session startup must not extract the original WML ZIP mod");
-assert.doesNotMatch(automaticStartup, /startImageGenService\\(|startManagedImageGenServer\\(|ImageGenBackendInstaller\\.install/,
+assert.doesNotMatch(automaticStartup, /startImageGenService\(|startManagedImageGenServer\(|ImageGenBackendInstaller\.install/,
   "session startup must never start or install an engine implicitly");
 assert.match(automaticStartup, /서버가 꺼져 있습니다.*기존 이미지팩만 사용합니다/,
   "with no launcher server, the game must remain image-pack-only");
@@ -30,12 +30,12 @@ assert.match(main, /launcher-imagegen:/,
   "server version identity must identify the bundled launcher backend");
 assert.match(main, /writeImageGenRuntimeConfig\(backend,mode,requestedUrl,launcherProfileId,launcherProviderId\)/,
   "the selected profile/provider and ComfyUI endpoint must be configured in app-private storage");
-assert.match(main, /launcherProviderToken/ ,
+assert.match(main, /launcherProviderToken/,
+  "launcher provider IPC token must be represented in the private backend configuration");
 assert.doesNotMatch(main, /@JavascriptInterface public void generateImageWithProvider/,
   "the WebView must not expose direct provider generation");
 assert.doesNotMatch(main, /@JavascriptInterface public String listImageProviders/,
   "the WebView must not expose provider records directly");
-  "launcher provider IPC token must be represented in the private backend configuration");
 assert.match(service, /new ImageGenLocalProviderServer\(/,
   "the native provider adapter must be started by the isolated ImageGen service");
 const manualStartup = main.slice(main.indexOf("private void startManagedImageGenServer"), main.indexOf("private void writeImageGenRuntimeConfig"));
