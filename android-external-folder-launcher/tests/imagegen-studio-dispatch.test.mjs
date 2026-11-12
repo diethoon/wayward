@@ -47,7 +47,7 @@ assert.doesNotMatch(generationSettingsSource, /config\.imageProvider = settings\
 assert.match(proxyJava,
   /if \("POST"\.equals\(safeMethod\) && isGenerationEndpoint\(requestPath\)\)[\s\S]*?if \(!engine\.isReady\(\)\)[\s\S]*?launcher_generation_blocked_server_not_ready/,
   "the native proxy must reject generation when no launcher-selected engine is ready");
-assert.match(mainActivitySource, /new String\[\]\s*\{\s*"imagegen-proxy\.js", "imagegen-studio-bridge\.js" \}/,
+assert.match(mainActivitySource, /new String\[\]\s*\{\s*"imagegen-proxy\.js",\s*"imagegen-studio-bridge\.js"\s*\}/,
   "the direct in-game provider bridge must not be loaded");
 assert.doesNotMatch(mainActivitySource, /@JavascriptInterface public void generateImageWithProvider|@JavascriptInterface public String listImageProviders/,
   "the WebView must not expose a direct provider-generation bypass");
