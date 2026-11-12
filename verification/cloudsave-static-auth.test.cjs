@@ -101,7 +101,7 @@ test('protected Drive, snapshot, restore, save/load functions are byte-identical
 
 test('the candidate docs identify Token Model re-auth rather than claiming silent refresh', () => {
   assert.match(readme, /Token Model/);
-  assert.match(readme, /사용자 동작/);
+  assert.match(readme, /사용자가 CloudSave의 연결 버튼을 눌러 Google에 직접 재인증/);
   assert.match(readme, /무인 갱신/);
   assert.match(readme, /file:\/\//);
   assert.match(readme, /0\.0\.0\.0/);
