@@ -70,6 +70,13 @@ test('popup bridge binds exact Pages origin, popup WindowProxy, nonce, session a
   assert.doesNotMatch(mod, /authPopup\.postMessage[\s\S]{0,220}'\*'/);
 });
 
+test('the game distinguishes a generic Drive permission denial from an explicit confirmed revoke', () => {
+  assert.match(mod, /bridgeStatus === 'permission-revoked'[\s\S]{0,180}markPermissionRevoked\(\)/);
+  assert.match(mod, /'permission-denied': 'Google Drive API가 권한을 거부했습니다/);
+  assert.match(mod, /bridgeStatus === 'revoke-failed'[\s\S]{0,160}authStatus = 'revoke-failed'/);
+  assert.doesNotMatch(mod, /permission-denied'[\s\S]{0,100}markPermissionRevoked/);
+});
+
 test('the game sends only encrypted envelopes and slot commands; no manual token or JSON return UI remains', () => {
   assert.match(mod, /function requestDrive\(action, payload\)/);
   assert.match(mod, /requestDrive\('list'/);
