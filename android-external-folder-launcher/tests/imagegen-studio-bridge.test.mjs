@@ -189,6 +189,8 @@ runtime = {
 gameImageBackendMode = "off";
 const effectiveSettings = api.fn("settingsStore").getState();
 assert.equal(effectiveSettings.imageBackendMode, "auto",
+assert.equal(effectiveSettings.imageBackendUrl, "http://127.0.0.1:8189",
+  "a running launcher engine must replace the game-side endpoint in the settings view");
   "a ready launcher engine must override the in-memory off selector");
 assert.equal(effectiveSettings.retainUnrelatedSetting, "unchanged");
 assert.equal(persistedSettings.imageBackendMode, "off",
@@ -235,6 +237,8 @@ const readyDiscovery = await window.WaywardLauncherImageStudio.discoverNow();
 assert.equal(readyDiscovery.ok, true);
 runtime = { available: false, starting: false, ready: false, backendVersion: "" };
 assert.equal(api.fn("settingsStore").getState().imageBackendMode, "off",
+assert.equal(api.fn("settingsStore").getState().imageBackendUrl, "",
+  "with the launcher engine stopped, no game-side remote generation URL may remain active");
   "when the launcher engine is stopped, preserve the game's saved off preference");
 assert.equal(api.fn("imageBackend")().baseUrl, null);
 assert.equal(api.fn("imageServerUrl")("https://remote.example:8189/api/batch/enqueue"), null,
