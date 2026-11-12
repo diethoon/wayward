@@ -91,6 +91,15 @@ WML.define({
       document.head.appendChild(style);
     }
 
+    function createAuthNonce() {
+      const bytes = new Uint8Array(24);
+      if (!globalThis.crypto || typeof globalThis.crypto.getRandomValues !== 'function') {
+        throw new Error('보안 난수를 사용할 수 없어 인증 요청을 만들 수 없습니다.');
+      }
+      globalThis.crypto.getRandomValues(bytes);
+      return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
     function readStorage(key) {
       try { return window.localStorage.getItem(key); } catch (_) { return null; }
     }
@@ -1207,7 +1216,6 @@ WML.define({
     });
   }
 });
-
 
 
 
