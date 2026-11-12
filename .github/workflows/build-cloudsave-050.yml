@@ -1,4 +1,4 @@
-name: Build and verify CloudSave 0.5.0
+name: Build and verify CloudSave 0.5.1
 
 on:
   push:
@@ -61,7 +61,7 @@ jobs:
             assert.equal(extract(newSource, start, end), extract(oldSource, start, end),
               'protected game save/load logic changed: ' + start);
           }
-          assert.ok(newSource.includes("version: '0.5.0'"));
+          assert.ok(newSource.includes("version: '0.5.1'"));
           assert.ok(!newSource.includes('wayward-cloud-auth.vercel.app'));
           assert.ok(newSource.includes('refreshToken'));
           assert.ok(newSource.includes('/oauth/refresh'));
@@ -84,6 +84,10 @@ jobs:
           if (open < 0 || close < 0) throw new Error('GitHub Pages script block missing');
           fs.writeFileSync('/tmp/cloudsave-auth-page.js', html.slice(open + 8, close));
           if (!html.includes('code_challenge_method') ||
+              !html.includes('CENTRAL_SESSION_KEY') ||
+              !html.includes('tryCentralSession') ||
+              !html.includes("params.get('logout')==='1'") ||
+              !html.includes("params.get('remember')==='1'") ||
               !html.includes('https://www.googleapis.com/auth/drive.appdata') ||
               !html.includes('wayward-auth-relay.trpgengine1.workers.dev')) {
             throw new Error('GitHub Pages OAuth configuration is incomplete');
@@ -127,11 +131,11 @@ jobs:
             bytes: original.length,
             sha256: crypto.createHash('sha256').update(original).digest('hex')
           };
-          fs.writeFileSync('CLOUDSAVE_0.5.0_INSPECTION.json', JSON.stringify(result, null, 2) + '\n');
+          fs.writeFileSync('CLOUDSAVE_0.5.1_INSPECTION.json', JSON.stringify(result, null, 2) + '\n');
           NODE
-          zip -qr Wayward_Google_Drive_CloudSave_v0.5.0.zip cloud-save
-          unzip -t Wayward_Google_Drive_CloudSave_v0.5.0.zip
-          sha256sum Wayward_Google_Drive_CloudSave_v0.5.0.zip
+          zip -qr Wayward_Google_Drive_CloudSave_v0.5.1.zip cloud-save
+          unzip -t Wayward_Google_Drive_CloudSave_v0.5.1.zip
+          sha256sum Wayward_Google_Drive_CloudSave_v0.5.1.zip
           git add -A
           git diff --cached --check
           git status --short
@@ -145,6 +149,6 @@ jobs:
           git add -A
           git diff --cached --check
           if ! git diff --cached --quiet; then
-            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "build: package verified CloudSave 0.5.0"
+            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "build: package verified CloudSave 0.5.1"
             git push origin HEAD:refs/heads/work/cloudsave-auth-universal-20261113
           fi
