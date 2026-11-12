@@ -37,7 +37,7 @@ const params=new URLSearchParams(location.search);
 const mode=params.get('mode')||'login';
 const nonce=params.get('nonce')||'';
 const gameOrigin=params.get('origin')||'';
-const remember=params.get('remember')==='1';
+const loginPolicy=params.get('login')==='select_account'?'select_account':'remember';
 const statusNode=document.getElementById('status');
 const loginButton=document.getElementById('login');
 const LEGACY_CENTRAL_KEY='wayward-cloud-auth-session-v1';
@@ -99,7 +99,7 @@ function beginLogin(){
    callback:response=>{
     if(!response||response.error||!response.access_token){
      const reason=response&&response.error_description||response&&response.error||'Google 액세스 토큰을 받지 못했습니다.';
-     postToParent({type:'wayward-cloud-auth-error',nonce,message:String(reason)});
+     postToParent({type:'wayward-cloud-auth-error',nonce,code:String(response&&response.error||''),message:String(reason)});
      status('Google 인증 실패: '+String(reason));
      loginButton.disabled=false;
      return;
@@ -114,6 +114,7 @@ function beginLogin(){
      postToParent({
       type:'wayward-cloud-auth-error',
       nonce,
+      code:'scope_missing',
       message:'Google Drive 앱 데이터(appDataFolder) 접근 권한이 승인되지 않았습니다.'
      });
      status('Drive 저장 권한이 승인되지 않아 연결하지 않았습니다. 권한을 허용한 뒤 다시 연결하세요.');
@@ -137,16 +138,16 @@ function beginLogin(){
    },
    error_callback:error=>{
     const reason=error&&error.type||'Google 인증 팝업을 시작하지 못했습니다.';
-    postToParent({type:'wayward-cloud-auth-error',nonce,message:String(reason)});
+    postToParent({type:'wayward-cloud-auth-error',nonce,code:String(error&&error.type||''),message:String(reason)});
     status('Google 인증을 시작하지 못했습니다: '+String(reason));
     loginButton.disabled=false;
    }
   });
   // Keep this call directly in the click handler: Google requires a user gesture.
-  client.requestAccessToken({prompt:remember?'':'select_account',state:nonce});
+  client.requestAccessToken({prompt:loginPolicy==='select_account'?'select_account':'',state:nonce});
  }catch(error){
   const reason=String(error&&error.message||error);
-  postToParent({type:'wayward-cloud-auth-error',nonce,message:reason});
+  postToParent({type:'wayward-cloud-auth-error',nonce,code:'request_failed',message:reason});
   status('Google 인증을 시작하지 못했습니다: '+reason);
   loginButton.disabled=false;
  }
@@ -192,7 +193,10 @@ function beginRevoke(){
 waitForGIS(Date.now()+15000).then(()=>{
  if(mode==='revoke'){beginRevoke();return;}
  loginButton.disabled=false;
- status('Google 계정으로 연결을 누르면 권한 요청을 시작합니다.');
+ loginButton.textContent=loginPolicy==='select_account'?'Google 계정 선택':'기존 Google 계정으로 다시 연결';
+ status(loginPolicy==='select_account'
+  ? '명시적 로그아웃 또는 새로고침 로그인 해제 설정에 따라 계정 선택 화면을 표시합니다.'
+  : '기존 Google 계정의 로그인 및 승인 상태를 재사용하도록 시도합니다. 이 요청은 사용자 동작이 필요합니다.');
  loginButton.addEventListener('click',beginLogin);
 }).catch(error=>{
  status(String(error&&error.message||error));
