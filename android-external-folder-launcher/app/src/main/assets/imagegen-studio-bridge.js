@@ -199,6 +199,7 @@
       selectedLocal: !!state.baseUrl,
       engine: state.engine
     });
+    // Never invoke the original probe: it honors the game-configured URL.
     return Promise.resolve({
       ok,
       retry: !ok,
