@@ -665,6 +665,9 @@ jobs:
           test "$save_code" = "200"
           after_code="$(curl --silent --show-error --output "$SMOKE/health-after.json" --write-out '%{http_code}' http://127.0.0.1:8189/api/image/health)"
           test "$after_code" = "503"
+          echo "health-before=$(cat "$SMOKE/health-before.json")"
+          echo "settings-save=$(cat "$SMOKE/save.json")"
+          echo "health-after=$(cat "$SMOKE/health-after.json")"
           node --input-type=module <<'JS'
           import fs from 'node:fs';
           const root = process.env.RUNNER_TEMP + '/imagegen-runtime-smoke';
