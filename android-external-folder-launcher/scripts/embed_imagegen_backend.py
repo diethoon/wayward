@@ -403,6 +403,144 @@ async function launcherGenerate(
             ],
         )
 
+        patch_backend_text(
+            "wayward-imagegen/src/routes/image.ts",
+            [
+                (
+                    """function activeImageWorkflow(requested: WorkflowType, config: Config): WorkflowType {
+  // Image Studio and the stock game identify ordinary stills as illustrious.
+  // The saved provider setting is authoritative for those normal requests.
+  if (requested !== 'anima' && requested !== 'illustrious') return requested
+  return config.imageProvider === 'nai' ? 'nai' : config.imageProvider === 'anima' ? 'anima' : 'illustrious'
+}""",
+                    """function activeImageWorkflow(_requested: WorkflowType, config: Config): WorkflowType {
+  // The running server mode is selected by the launcher. Ignore the game's workflow selector.
+  return config.imageProvider === 'nai' || config.imageProvider === 'launcher'
+    ? 'nai'
+    : config.imageProvider === 'anima' ? 'anima' : 'illustrious'
+}""",
+                    "force-direct-image-route-through-launcher-selected-engine",
+                ),
+                (
+                    """    if(reference){
+      if(!deps.comfy)throw new HttpError(501,'img2img를 지원하는 공통 서버가 필요합니다.')
+      const uploaded=await deps.comfy.upload(fs.readFileSync(reference.path),'wwis-reference-'+derivePromptHash(reference.identity,'')+path.extname(reference.path))
+      if(!uploaded)throw new HttpError(502,'ComfyUI에 기준 이미지를 전송하지 못했습니다.')
+      img2imgSource=uploaded
+    }""",
+                    """    if (reference && workflow === 'nai') {
+      throw new HttpError(400, '런처에서 선택한 NAI 엔진은 기준 이미지 입력을 지원하지 않습니다.')
+    }
+    if(reference){
+      if(!deps.comfy)throw new HttpError(501,'img2img를 지원하는 공통 서버가 필요합니다.')
+      const uploaded=await deps.comfy.upload(fs.readFileSync(reference.path),'wwis-reference-'+derivePromptHash(reference.identity,'')+path.extname(reference.path))
+      if(!uploaded)throw new HttpError(502,'ComfyUI에 기준 이미지를 전송하지 못했습니다.')
+      img2imgSource=uploaded
+    }""",
+                    "never-upload-reference-images-to-comfy-when-launcher-selected-nai",
+                ),
+            ],
+        )
+
+        patch_backend_text(
+            "wayward-imagegen/src/batch/queue.ts",
+            [
+                (
+                    """  private workflowFor(item: BatchItem): WorkflowType {
+    const requested = item.workflow ?? 'illustrious'
+    if (requested !== 'anima' && requested !== 'illustrious') return requested
+    return this.config.imageProvider === 'nai' || this.config.imageProvider === 'launcher' ? 'nai' : this.config.imageProvider === 'anima' ? 'anima' : 'illustrious'
+  }""",
+                    """  private workflowFor(_item: BatchItem): WorkflowType {
+    // Ignore workflow requests from the game. Only the launcher's active server mode selects the engine.
+    return this.config.imageProvider === 'nai' || this.config.imageProvider === 'launcher'
+      ? 'nai'
+      : this.config.imageProvider === 'anima' ? 'anima' : 'illustrious'
+  }""",
+                    "force-batch-queue-through-launcher-selected-engine",
+                ),
+            ],
+        )
+
+        patch_backend_text(
+            "wayward-imagegen/src/routes/generationSettings.ts",
+            [
+                (
+                    "    imageProvider: base.imageProvider === 'launcher' ? 'launcher' : raw.imageProvider === 'nai' ? 'nai' : raw.imageProvider === 'anima' ? 'anima' : 'sdxl',",
+                    "    imageProvider: base.imageProvider,",
+                    "lock-image-provider-to-launcher-server-mode",
+                ),
+                (
+                    "    naiToken: raw.naiToken === undefined || raw.naiToken === '' ? base.naiToken : String(raw.naiToken).trim(),",
+                    "    naiToken: base.naiToken,",
+                    "lock-novelai-credential-to-launcher-keystore",
+                ),
+                (
+                    "    comfyUrl: String(raw.comfyUrl || base.comfyUrl).trim().replace(/\\/+$/, ''),",
+                    "    comfyUrl: base.comfyUrl,",
+                    "lock-comfy-endpoint-to-launcher-server-mode",
+                ),
+                (
+                    "function applyRuntime(config: Config, comfy: ComfyClient, settings: GenerationSettings): void {",
+                    "function applyRuntime(config: Config, _comfy: ComfyClient, settings: GenerationSettings): void {",
+                    "remove-game-comfy-client-mutation-parameter",
+                ),
+                (
+                    "  config.imageProvider = settings.imageProvider\\n",
+                    "  // The launcher-selected image engine is immutable while this server is running.\\n",
+                    "keep-launcher-image-engine-immutable",
+                ),
+                (
+                    "  config.comfyUrl = settings.comfyUrl\\n  config.promptBatchSize = settings.promptBatchSize\\n  comfy.setBaseUrl(settings.comfyUrl)\\n",
+                    "  // ComfyUI endpoint remains the launcher-selected runtime destination.\\n  config.promptBatchSize = settings.promptBatchSize\\n",
+                    "keep-launcher-comfy-endpoint-immutable",
+                ),
+                (
+                    "    if (raw.naiTokenClear === true) settings.naiToken = ''\\n",
+                    "",
+                    "ignore-in-game-novelai-token-clear",
+                ),
+                (
+                    """  router.post('/api/nai/check', async ctx => {
+    try { sendJson(ctx.res, 200, await NovelAI_연결확인하기(config)) }
+    catch (error) { throw new HttpError(502, (error as Error).message) }
+  })""",
+                    """  router.post('/api/nai/check', async ctx => {
+    if (config.imageProvider !== 'nai') throw new HttpError(409, 'NAI 서버는 런처에서 선택해야 합니다.')
+    try { sendJson(ctx.res, 200, await NovelAI_연결확인하기(config)) }
+    catch (error) { throw new HttpError(502, (error as Error).message) }
+  })""",
+                    "only-check-nai-when-launcher-selected-nai-engine",
+                ),
+                (
+                    """  router.get('/api/generation/prompt-batch-support', async ctx => {
+    const url = ctx.query.get('comfyUrl')?.trim() || config.comfyUrl
+    const info = await new ComfyClient(url).objectInfo()
+    sendJson(ctx.res, 200, { reachable: info !== null, supported: Boolean(info?.[PROMPT_BATCH_NODE]), maxPrompts: MAX_PROMPT_BATCH_SIZE })
+  })""",
+                    """  router.get('/api/generation/prompt-batch-support', async ctx => {
+    if (config.imageProvider === 'nai' || config.imageProvider === 'launcher') {
+      sendJson(ctx.res, 200, { reachable: false, supported: false, maxPrompts: MAX_PROMPT_BATCH_SIZE })
+      return
+    }
+    const info = await _comfy.objectInfo()
+    sendJson(ctx.res, 200, { reachable: info !== null, supported: Boolean(info?.[PROMPT_BATCH_NODE]), maxPrompts: MAX_PROMPT_BATCH_SIZE })
+  })""",
+                    "prevent-game-selected-comfy-probes-when-nai-engine-active",
+                ),
+                (
+                    "    const comfyUrl = (ctx.query.get('comfyUrl')?.trim() || settings.comfyUrl).replace(/\\/+$/, '')",
+                    "    const comfyUrl = config.comfyUrl.replace(/\\/+$/, '')",
+                    "ignore-game-provided-comfy-url-query",
+                ),
+                (
+                    "    const useRemote = !Object.values(local).some(list => list.length)",
+                    "    const useRemote = config.imageProvider !== 'nai' && config.imageProvider !== 'launcher' && !Object.values(local).some(list => list.length)",
+                    "do-not-query-comfy-models-during-nai-or-launcher-mode",
+                ),
+            ],
+        )
+
         manifest = {
             "schemaVersion": 1,
             "sourceCommit": SOURCE_COMMIT,
