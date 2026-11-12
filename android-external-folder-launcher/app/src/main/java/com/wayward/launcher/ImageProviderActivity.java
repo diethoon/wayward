@@ -362,7 +362,7 @@ public final class ImageProviderActivity extends Activity {
                         fallbackSpinner.setSelection(0);
                     } else {
                         String selectedProvider = data.providers.get(position - 1).id;
-                        data.defaults.put(profile.id, selectedProvider);
+                        ImageProviderStore.setDefaultForGame(data, profile.id, selectedProvider);
                         fallbackSpinner.setEnabled(!loadFailed);
                         if (selectedProvider.equals(data.fallbacks.get(profile.id))) {
                             data.fallbacks.remove(profile.id);
@@ -370,6 +370,7 @@ public final class ImageProviderActivity extends Activity {
                         }
                     }
                     persist();
+                    renderList();
                 }
                 @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
             });
@@ -391,6 +392,7 @@ public final class ImageProviderActivity extends Activity {
                             persist();
                             return;
                         }
+                        ImageProviderStore.enableForGame(data, selectedProvider);
                         data.fallbacks.put(profile.id, selectedProvider);
                     }
                     persist();
@@ -399,6 +401,28 @@ public final class ImageProviderActivity extends Activity {
             });
 
             item.addView(primarySpinner, new LinearLayout.LayoutParams(-1, dp(48)));
+            ImageProviderStore.Provider primary = ImageProviderStore.find(data, primaryId);
+            if (primary != null && primary.enabled && primary.allowInGame) {
+                addGap(item, 4);
+                item.addView(label("인게임 이미지 생성 연결됨", 11, GREEN, true));
+            } else if (primary != null) {
+                addGap(item, 4);
+                item.addView(action("인게임 생성 연결 허용", true, () -> {
+                    try {
+                        ImageProviderStore.setDefaultForGame(data, profile.id, primary.id);
+                        persist();
+                        renderList();
+                    } catch (Exception error) {
+                        showError("게임 연결을 허용하지 못했습니다", error.getMessage());
+                    }
+                }));
+            } else if (primaryId != null && !primaryId.trim().isEmpty()) {
+                addGap(item, 4);
+                item.addView(label("저장된 기본 서비스를 찾을 수 없습니다. 다시 선택해 주세요.", 11, AMBER, true));
+            } else {
+                addGap(item, 4);
+                item.addView(label("기본 서비스를 선택하면 이 게임의 인게임 사용도 자동으로 허용됩니다.", 10, MUTED, false));
+            }
             addGap(item, 5);
             item.addView(fallbackSpinner, new LinearLayout.LayoutParams(-1, dp(48)));
             addGap(item, 5);
@@ -415,7 +439,8 @@ public final class ImageProviderActivity extends Activity {
         identity.addView(label(provider.name, 16, TEXT, true));
         addGap(identity, 3);
         identity.addView(label(typeName(provider.type), 11, AMBER, true));
-        identity.addView(label(provider.allowInGame ? "게임 연결 허용" : "게임 연결 차단", 10, provider.allowInGame ? GREEN : MUTED, true));
+        boolean gameUsable = provider.enabled && provider.allowInGame;
+        identity.addView(label(gameUsable ? "게임 연결 허용" : "게임 연결 차단", 10, gameUsable ? GREEN : MUTED, true));
         top.addView(identity, new LinearLayout.LayoutParams(0, -2, 1));
         boolean isDefault = data.defaults.containsValue(provider.id);
         TextView state = label(isDefault ? "기본 서비스" : (provider.enabled ? "사용 가능" : "사용 안 함"), 10,
@@ -443,6 +468,18 @@ public final class ImageProviderActivity extends Activity {
         buttons.addView(new View(this), gap2);
         buttons.addView(delete, new LinearLayout.LayoutParams(0, -2, 0.62f));
         item.addView(buttons);
+        if (!gameUsable && !loadFailed) {
+            addGap(item, 8);
+            item.addView(action("인게임 생성 연결 허용", true, () -> {
+                try {
+                    ImageProviderStore.enableForGame(data, provider.id);
+                    persist();
+                    renderList();
+                } catch (Exception error) {
+                    showError("게임 연결을 허용하지 못했습니다", error.getMessage());
+                }
+            }));
+        }
         if (loadFailed) item.setAlpha(0.45f);
         return item;
     }
@@ -502,7 +539,7 @@ public final class ImageProviderActivity extends Activity {
         gameAccess.setButtonTintList(android.content.res.ColorStateList.valueOf(GREEN));
         gameAccess.setChecked(existing != null && existing.allowInGame);
         fields.addView(gameAccess);
-        TextView accessNote = label("켜면 활성화된 게임 모드가 이 서비스로 실제 생성 요청을 보낼 수 있습니다. API 사용량과 비용이 발생할 수 있으며, 기본값은 꺼짐입니다.", 11, MUTED, false);
+        TextView accessNote = label("게임별 기본 서비스로 지정하면 인게임 사용이 자동 허용됩니다. 이 항목을 끄면 해당 서비스의 인게임 요청이 차단됩니다. 실제 생성 시 Worker 사용량이 발생할 수 있습니다.", 11, MUTED, false);
         fields.addView(accessNote);
         addGap(fields, 8);
 

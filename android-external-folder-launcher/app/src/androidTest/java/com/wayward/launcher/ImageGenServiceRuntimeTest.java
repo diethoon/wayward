@@ -1469,10 +1469,16 @@ public final class ImageGenServiceRuntimeTest {
         provider.name = "Wayward Android CI Worker contract fixture";
         provider.type = "cloudflare-worker";
         provider.endpoint = endpoint;
-        provider.enabled = true;
-        provider.allowInGame = true;
+        // Exercise the same opt-in path used when a user selects a profile default.
+        provider.enabled = false;
+        provider.allowInGame = false;
         snapshot.providers.add(provider);
-        snapshot.defaults.put(profileId, provider.id);
+        ImageProviderStore.Provider activated =
+                ImageProviderStore.setDefaultForGame(snapshot, profileId, provider.id);
+        if (!activated.enabled || !activated.allowInGame
+                || !provider.id.equals(snapshot.defaults.get(profileId))) {
+            throw new IllegalStateException("Selecting the in-game default did not activate the provider.");
+        }
         new ImageProviderStore(context).save(snapshot);
     }
 

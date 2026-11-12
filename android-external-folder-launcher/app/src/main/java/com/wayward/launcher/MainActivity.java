@@ -814,8 +814,17 @@ public final class MainActivity extends Activity {
             if (activeProfileId != null && activeProfileId.matches("[a-f0-9]{32}")) {
                 ImageProviderStore.Snapshot providers = new ImageProviderStore(this).load();
                 String defaultId = providers.defaults.get(activeProfileId);
-                ImageProviderStore.Provider selected = ImageProviderStore.find(providers, defaultId);
-                if (selected != null && selected.enabled && selected.allowInGame) {
+                if (defaultId != null && !defaultId.trim().isEmpty()) {
+                    ImageProviderStore.Provider selected = ImageProviderStore.find(providers, defaultId);
+                    if (selected == null) {
+                        throw new IllegalStateException("이 게임의 기본 이미지 서비스를 찾지 못했습니다. 런처의 이미지 서비스 설정에서 다시 지정해 주세요.");
+                    }
+                    if (!selected.enabled) {
+                        throw new IllegalStateException("이 게임의 기본 이미지 서비스가 비활성화되었습니다. 이미지 서비스 목록에서 다시 활성화해 주세요.");
+                    }
+                    if (!selected.allowInGame) {
+                        throw new IllegalStateException("기본 이미지 서비스의 인게임 사용이 차단되어 있습니다. 이미지 서비스 화면에서 '인게임 생성 연결 허용'을 눌러 주세요.");
+                    }
                     selectedMode = "launcher";
                     selectedProfile = activeProfileId;
                     selectedProvider = selected.id;
