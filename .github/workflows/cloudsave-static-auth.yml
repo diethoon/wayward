@@ -55,11 +55,17 @@ jobs:
           Google OAuth and Google Drive API traffic run only in the GitHub Pages HTTPS popup.
           The game receives no access token.
           EOF
-          node -e "const fs=require('fs');const s=fs.readFileSync('cloud-save/mod.js','utf8');if(!/WML\\.define\\(\\{[\\s\\S]*?id:\\s*'cloud-save'/.test(s))process.exit(1);if(!/version:\\s*'0\\.7\\.0'/.test(s))process.exit(1);if(!/api\\.loadScript\\('crypto\\.js'\\)/.test(s))process.exit(1)"
+          node -e "const fs=require('fs');const s=fs.readFileSync('cloud-save/mod.js','utf8');for(const token of ['WML.define({',\"id: 'cloud-save'\",\"version: '0.7.0'\",\"api.loadScript('crypto.js')\"])if(!s.includes(token))throw new Error('missing WML metadata: '+token)"
           (cd dist && zip -qr ../Wayward_Google_Drive_CloudSave_v0.7.0.zip cloud-save)
           unzip -t Wayward_Google_Drive_CloudSave_v0.7.0.zip
           unzip -Z1 Wayward_Google_Drive_CloudSave_v0.7.0.zip | sort > dist/package-files.txt
-          printf '%s\\n' 'cloud-save/INSTALL.txt' 'cloud-save/README.md' 'cloud-save/crypto.js' 'cloud-save/mod.js' | sort > dist/expected-files.txt
+          cat > dist/expected-files.txt <<'EOF'
+          cloud-save/INSTALL.txt
+          cloud-save/README.md
+          cloud-save/crypto.js
+          cloud-save/mod.js
+          EOF
+          sort -o dist/expected-files.txt dist/expected-files.txt
           diff -u dist/expected-files.txt dist/package-files.txt
           sha256sum Wayward_Google_Drive_CloudSave_v0.7.0.zip | tee dist/SHA256SUMS.txt
           node -e "const fs=require('fs'),c=require('crypto');for(const f of ['cloud-save/mod.js','cloud-save/crypto.js','cloud-save/README.md']){const b=fs.readFileSync(f);const chunks=[];for(let o=0;o<b.length;o+=4096)chunks.push({offset:o,length:Math.min(4096,b.length-o),sha256:c.createHash('sha256').update(b.subarray(o,o+4096)).digest('hex')});console.log(JSON.stringify({file:f,bytes:b.length,sha256:c.createHash('sha256').update(b).digest('hex'),chunks}));}" > dist/CHUNK_SHA256.jsonl
