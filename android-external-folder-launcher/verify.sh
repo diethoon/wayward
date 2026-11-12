@@ -111,6 +111,7 @@ with zipfile.ZipFile(apk) as bundle:
         "prevent-game-selected-comfy-probes-when-nai-engine-active",
         "ignore-game-provided-comfy-url-query",
         "do-not-query-comfy-models-during-nai-or-launcher-mode",
+        "allow-generation-settings-save-without-launcher-credential",
     ):
         assert patch in manifest.get("launcherPatches", []), "APK is missing Image Studio native-provider patch: " + patch
     settings_source = bundle.read(settings_path).decode("utf-8")
