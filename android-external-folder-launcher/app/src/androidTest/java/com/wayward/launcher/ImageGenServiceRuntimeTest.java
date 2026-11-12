@@ -865,14 +865,14 @@ public final class ImageGenServiceRuntimeTest {
                     "launcher", overrideResult.optString("provider", ""));
             assertEquals("The in-game request changed the launcher's ComfyUI address.",
                     "http://127.0.0.1:8188", overrideResult.optString("comfyUrl", ""));
-            assertFalse("The game request must not create or replace an NAI token.",
-                    overrideResult.optBoolean("naiTokenConfigured", true));
+            assertTrue("The game request must not create or replace an NAI token.",
+                    !overrideResult.optBoolean("naiTokenConfigured", true));
             assertEquals("The in-game request must not write credentials to Android Keystore.",
                     "", ImageProviderStore.readNovelAiToken(context));
             File naiSettingsFile = new File(context.getFilesDir(), "imagegen/state/anima-settings.json");
             String naiSettingsOnDisk = readText(naiSettingsFile);
-            assertFalse("The in-game request wrote its token into anima-settings.json.",
-                    naiSettingsOnDisk.contains("ci-must-not-be-stored"));
+            assertTrue("The in-game request wrote its token into anima-settings.json.",
+                    !naiSettingsOnDisk.contains("ci-must-not-be-stored"));
 
             assertEquals("ImageGen did not remain ready after the ignored engine override.",
                     200, awaitStatus(200, 30_000L));
