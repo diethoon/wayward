@@ -1,6 +1,7 @@
 /* Personal Google Drive-backed cloud saves for WML.
- * OAuth is completed on the fixed GitHub Pages callback and returned over a
- * nonce-bound message/Worker relay. Refresh tokens stay in the game origin.
+ * Browser OAuth uses Google's direct Token Model on the fixed GitHub Pages
+ * page and a nonce-bound popup postMessage. Android uses the launcher's
+ * native Google Identity bridge. No refresh token or auth relay is used.
  * Save contents are encrypted in the game page before direct upload to Drive.
  */
 WML.define({
