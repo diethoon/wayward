@@ -672,6 +672,7 @@ jobs:
           const saveText = fs.readFileSync(root + '/save.json', 'utf8');
           const saved = JSON.parse(saveText);
           const after = JSON.parse(fs.readFileSync(root + '/health-after.json', 'utf8'));
+          console.log('engine-authority-smoke=' + JSON.stringify({ before, saved: saved.settings, after }));
           if (before.status !== 'error' || before.imageProvider !== 'nai' || before.novelai !== 'unconfigured') {
             throw new Error('No-token health response did not correctly report an unconfigured NovelAI provider.');
           }
