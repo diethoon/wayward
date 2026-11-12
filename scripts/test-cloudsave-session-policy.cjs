@@ -28,6 +28,17 @@ for (const required of [
   "authStatus = 'permission-revoked'"
 ]) assert.ok(mod.includes(required), 'missing WML auth policy contract: ' + required);
 
+const policyStart = mod.indexOf('function setSessionPolicy(policy)');
+const policyEnd = mod.indexOf('function markExplicitLogout(', policyStart);
+assert.ok(policyStart >= 0 && policyEnd > policyStart, 'session policy function boundaries missing');
+const policySetter = mod.slice(policyStart, policyEnd);
+assert.ok(!policySetter.includes('explicitLogout = false'),
+  'changing settings must not cancel an explicit logout marker');
+assert.ok(!policySetter.includes('permissionRevoked = false'),
+  'changing settings must not clear permission revocation state');
+assert.ok(policySetter.includes("else if (explicitLogout) authStatus = 'explicit-logout'"),
+  'explicit logout must remain visible after preference changes');
+
 const logoutStart = mod.indexOf('function logoutGoogleAccount()');
 const logoutEnd = mod.indexOf('function requestNativeGoogleRevoke()', logoutStart);
 assert.ok(logoutStart >= 0 && logoutEnd > logoutStart, 'local logout function boundaries missing');
