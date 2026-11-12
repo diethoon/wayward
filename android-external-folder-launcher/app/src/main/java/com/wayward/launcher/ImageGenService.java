@@ -93,11 +93,12 @@ public final class ImageGenService extends Service {
             serverAvailable = false;
             starting = false;
             statusMessage = "이미지 생성 서버가 중지되었습니다.";
+            // Remove the dedicated foreground notification before the Bun process
+            // goes down. Observers use the closed health endpoint as the stop
+            // completion signal, so the notification must already be gone then.
+            removeForegroundNotification();
             stopRuntime();
-            // Do not repost the foreground notification while removing it.
-            // Persist the stopped state, then remove the service notification.
             persistState();
-            stopForeground(true);
             stopSelf(startId);
             return START_NOT_STICKY;
         }
@@ -793,8 +794,16 @@ public final class ImageGenService extends Service {
         persistState();
         heartbeat.shutdownNow();
         worker.shutdownNow();
-        stopForeground(true);
+        removeForegroundNotification();
         super.onDestroy();
+    }
+
+    private void removeForegroundNotification() {
+        synchronized (notificationLock) {
+            stopForeground(STOP_FOREGROUND_REMOVE);
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            if (manager != null) manager.cancel(NOTIFICATION_ID);
+        }
     }
 
     @Override public IBinder onBind(Intent intent) { return null; }
