@@ -6,7 +6,7 @@
 WML.define({
   id: 'cloud-save',
   name: '클라우드세이브 (Google Drive)',
-  version: '0.5.0',
+  version: '0.5.1',
   description: 'Google 계정으로 연결해 개인 Drive에 암호화 세이브를 저장합니다. 게임 세이브는 서버를 거치지 않습니다.',
   symbols: {
     "pauseMenu": {
@@ -173,6 +173,7 @@ WML.define({
         }
         bridgeUrl.searchParams.set('origin', gameOrigin);
         bridgeUrl.searchParams.set('nonce', nonce);
+        bridgeUrl.searchParams.set('remember', sessionPolicy === 'persistent' ? '1' : '0');
 
         const cleanup = () => {
           window.removeEventListener('message', onMessage);
@@ -602,7 +603,17 @@ WML.define({
         });
     }
 
+    function clearCentralAuthSession() {
+      try {
+        const logoutUrl = new URL(AUTH_BRIDGE_URL);
+        logoutUrl.searchParams.set('logout', '1');
+        window.open(logoutUrl.toString(), 'waywardGoogleDriveLogout',
+          'popup=yes,width=360,height=240');
+      } catch (_) { /* Local and provider logout still proceed if popups are blocked. */ }
+    }
+
     async function logoutGoogleAccount() {
+      clearCentralAuthSession();
       const savedRefreshToken = refreshToken;
       const savedAccessToken = accessToken;
       let revoked = false;
@@ -680,6 +691,7 @@ WML.define({
         choice.setAttribute('aria-pressed', String(sessionPolicy === policy));
         choice.title = detail;
         choice.addEventListener('click', () => {
+          if (policy === 'session') clearCentralAuthSession();
           sessionPolicy = policy;
           writeStorage(SESSION_POLICY_KEY, sessionPolicy);
           if (sessionPolicy === 'persistent') persistSessionToken();
