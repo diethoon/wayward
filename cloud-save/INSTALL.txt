@@ -14,7 +14,7 @@ Wayward Google Drive CloudSave — WML v0.6.1
 
 로그인 상태 유지
 - 설정 두 가지: "로그인 상태 유지" / "새로고침할 때마다 로그인 해제". 서로 배타적입니다.
-- 로그인 상태 유지: 토큰을 저장하지 않고 로그인 정책만 저장합니다. Android 런처는 기존 승인 상태를 복구합니다. 브라우저는 새로고침 후 연결 버튼을 눌러 Google Token Model을 다시 실행해야 합니다.
+- 로그인 상태 유지: 토큰을 저장하지 않고 로그인 정책과 이전 로그인 성공 여부만 저장합니다. Android 런처는 과거에 연결한 적이 있을 때만 기존 승인 상태 복구를 시도합니다. 브라우저는 새로고침 후 연결 버튼을 눌러 Google Token Model을 다시 실행해야 합니다.
 - 새로고침할 때마다 로그인 해제: 다음 초기화부터 인증 복구를 시도하지 않고 다음 연결에서 계정 선택을 요청합니다.
 - 웹은 prompt: '' 또는 prompt: 'select_account'를 사용합니다. Android는 AuthorizationRequest.Prompt.SELECT_ACCOUNT로 계정 선택을 요청합니다.
 
