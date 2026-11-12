@@ -67,6 +67,7 @@ public final class ImageGenService extends Service {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService heartbeat = Executors.newSingleThreadScheduledExecutor();
     private final Object processLock = new Object();
+    private final Object notificationLock = new Object();
     private volatile Process serverProcess;
     private volatile boolean stopping = false;
     private volatile String backendVersion = "";
@@ -87,13 +88,15 @@ public final class ImageGenService extends Service {
         String action = intent == null ? ACTION_START : intent.getAction();
         if (ACTION_STOP.equals(action)) {
             DiagnosticsLogger.event(this,"INFO","imagegen_service","stop_command_received",null);
-            stopping = true;
+            synchronized (notificationLock) { stopping = true; }
             serverReady = false;
             serverAvailable = false;
             starting = false;
             statusMessage = "이미지 생성 서버가 중지되었습니다.";
             stopRuntime();
-            updateNotification(statusMessage);
+            // Do not repost the foreground notification while removing it.
+            // Persist the stopped state, then remove the service notification.
+            persistState();
             stopForeground(true);
             stopSelf(startId);
             return START_NOT_STICKY;
@@ -167,10 +170,13 @@ public final class ImageGenService extends Service {
     }
 
     private void updateNotification(String text) {
-        statusMessage = text;
-        persistState();
-        NotificationManager manager = getSystemService(NotificationManager.class);
-        if (manager != null) manager.notify(NOTIFICATION_ID, buildNotification(text));
+        synchronized (notificationLock) {
+            if (stopping) return;
+            statusMessage = text;
+            persistState();
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            if (manager != null) manager.notify(NOTIFICATION_ID, buildNotification(text));
+        }
     }
 
     private void persistState() {
@@ -775,7 +781,7 @@ public final class ImageGenService extends Service {
 
     @Override public void onDestroy() {
         boolean unexpected = !stopping;
-        stopping = true;
+        synchronized (notificationLock) { stopping = true; }
         starting = false;
         stopRuntime();
         if (unexpected) {

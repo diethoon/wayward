@@ -91,6 +91,7 @@ public final class ImageDiagnosticsActivity extends Activity {
         page.addView(scroll, scrollParams);
 
         setContentView(page);
+        LauncherWindowInsets.apply(page);
         refreshLog();
     }
 

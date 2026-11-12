@@ -23,6 +23,8 @@ import android.os.Build;
 import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -99,6 +101,20 @@ public final class ImageGenServiceRuntimeTest {
                             .setData(Uri.parse("wayward://session/" + GAME_PROFILE_ID))
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT));
             assertNotNull("Launcher activity did not start", launcherActivity);
+            instrumentation.waitForIdleSync();
+            View contentFrame = launcherActivity.findViewById(android.R.id.content);
+            assertTrue("Launcher content frame is not a ViewGroup", contentFrame instanceof ViewGroup);
+            View launcherRoot = ((ViewGroup) contentFrame).getChildAt(0);
+            assertNotNull("Launcher root view is missing", launcherRoot);
+            WindowInsets rootInsets = launcherRoot.getRootWindowInsets();
+            assertNotNull("Android did not dispatch root window insets", rootInsets);
+            int statusBarInset = Build.VERSION.SDK_INT >= 30
+                    ? rootInsets.getInsets(WindowInsets.Type.statusBars()).top
+                    : rootInsets.getSystemWindowInsetTop();
+            assertTrue("Android 15 status bar inset should be non-zero", statusBarInset > 0);
+            assertTrue("Launcher content still overlaps the status bar: rootTopPadding="
+                            + launcherRoot.getPaddingTop() + " statusBarInset=" + statusBarInset,
+                    launcherRoot.getPaddingTop() >= statusBarInset);
             setField(launcherActivity, "activeProfileId", GAME_PROFILE_ID);
 
             // Exercise the actual launcher-selected provider mode, including the

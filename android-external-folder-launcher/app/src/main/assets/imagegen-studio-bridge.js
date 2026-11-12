@@ -29,50 +29,95 @@
   }
 
   function prefersLauncherLocal() {
-    const settings = gameSettings();
-    const mode = String(settings.imageBackendMode || "auto");
-    if (mode === "off") return false;
-    if (mode !== "custom") return true;
-    const raw = String(settings.imageBackendUrl || "").trim().replace(/\/+$/, "");
-    return raw === LOCAL_ORIGIN || raw === "http://localhost:8189";
+    return runtimeStatus().ready === true;
+  }
+
+  function runtimeEngine(status) {
+    const declared = String(status && status.engine || "").trim().toLowerCase();
+    if (declared) return declared;
+    const version = String(status && status.backendVersion || "");
+    const parts = version.split(":");
+    return parts[0] === "launcher-imagegen" && parts[2]
+      ? parts[2].toLowerCase()
+      : "unknown";
   }
 
   function runtimeStatus() {
+    let status = null;
     try {
-      if (!host || typeof host.imageGenRuntimeStatus !== "function") {
-        return { available: false, starting: false, ready: false };
+      if (host && typeof host.imageGenRuntimeStatus === "function") {
+        const raw = host.imageGenRuntimeStatus();
+        status = typeof raw === "string" ? JSON.parse(raw) : raw;
       }
-      const raw = host.imageGenRuntimeStatus();
-      const status = typeof raw === "string" ? JSON.parse(raw) : raw;
-      return {
-        available: status && status.available === true,
-        starting: status && status.starting === true,
-        ready: status && status.ready === true,
-        backendVersion: String(status && status.backendVersion || "")
-      };
-    } catch (_) {
-      return { available: false, starting: false, ready: false };
-    }
+    } catch (_) {}
+
+    const result = {
+      available: !!(status && status.available === true),
+      starting: !!(status && status.starting === true),
+      ready: !!(status && status.ready === true),
+      backendVersion: String(status && status.backendVersion || ""),
+      engine: runtimeEngine(status)
+    };
+    try {
+      window.__WAYWARD_LAUNCHER_IMAGE_RUNTIME__ = Object.freeze({
+        available: result.available,
+        starting: result.starting,
+        ready: result.ready,
+        engine: result.engine,
+        offlineOnly: !result.ready
+      });
+      window.__WW_STUDIO_OFFLINE_ONLY__ = !result.ready;
+    } catch (_) {}
+    return result;
+  }
+
+  function isApiPath(path) {
+    try {
+      return new URL(String(path || ""), LOCAL_ORIGIN + "/").pathname.startsWith("/api/");
+    } catch (_) { return false; }
+  }
+
+  function isGenerationPath(pathname) {
+    return /^\/api\/batch\/enqueue(?:\/|$)/.test(pathname) ||
+      /^\/api\/(?:image|images)\/generate(?:\/|$)/.test(pathname) ||
+      /^\/api\/generation\/(?:generate|enqueue)(?:\/|$)/.test(pathname);
+  }
+
+  function backendState() {
+    const status = runtimeStatus();
+    const serverAvailable = status.available || status.starting;
+    const ready = serverAvailable && status.ready;
+    return {
+      baseUrl: serverAvailable ? LOCAL_ORIGIN : null,
+      comfyui: ready,
+      images: 0,
+      version: status.backendVersion || null,
+      error: !serverAvailable ? "launcher_server_not_running" : (ready ? null : "provider_not_ready"),
+      launcherManaged: true,
+      engine: status.engine
+    };
   }
 
   function localEndpoint(path) {
-    if (!prefersLauncherLocal()) return null;
-    const value = String(path || "").trim();
-    if (!value || value.indexOf("\\") >= 0 || value.indexOf("\0") >= 0) return null;
+    const raw = String(path || "").trim();
+    if (!raw || raw.indexOf("\\") >= 0 || raw.indexOf("\0") >= 0) return null;
     let url;
-    try { url = new URL(value, LOCAL_ORIGIN + "/"); }
+    try { url = new URL(raw, LOCAL_ORIGIN + "/"); }
     catch (_) { return null; }
     if (url.username || url.password ||
-        (url.origin !== LOCAL_ORIGIN && url.origin !== "http://localhost:8189")) return null;
+        (url.protocol !== "http:" && url.protocol !== "https:")) return null;
 
     if (url.pathname.startsWith("/api/")) {
       const state = runtimeStatus();
       if (!state.available && !state.starting) return null;
+      if (isGenerationPath(url.pathname) && !state.ready) return null;
       return LOCAL_ORIGIN + url.pathname + url.search;
     }
-    // Cached image files live in app-private storage and remain readable even
-    // when the generation service is stopped; only API requests need it alive.
+
     if (!url.pathname.startsWith("/images/")) return null;
+    const absolute = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw);
+    const localImageOrigin = url.origin === LOCAL_ORIGIN || url.origin === "http://localhost:8189";
+    if (absolute && !localImageOrigin) return null;
 
     const encodedSegments = url.pathname.slice("/images/".length).split("/");
     if (!encodedSegments.length) return null;
@@ -144,48 +189,25 @@
   }
 
   function refreshBackendProbe(reason) {
-    if (!backendProbe || !prefersLauncherLocal()) return Promise.resolve({ ok: false, reason: "probe_unavailable" });
-    const state = runtimeStatus();
-    if (!state.available && !state.starting) return Promise.resolve({ ok: false, retry: true, reason: "server_not_available" });
-    if (probeRunning) {
-      if (reason === "generation_settings_saved") {
-        return probeRunning.then(
-          () => refreshBackendProbe("generation_settings_saved_after_pending_probe"),
-          () => refreshBackendProbe("generation_settings_saved_after_pending_probe")
-        );
-      }
-      return probeRunning;
-    }
-
-    const settings = gameSettings();
-    const mode = String(settings.imageBackendMode || "auto");
-    const options = mode === "custom"
-      ? { mode: "custom", url: String(settings.imageBackendUrl || "").trim(), allowAutoProbe: true }
-      : { mode: "auto", url: "", allowAutoProbe: true };
-
-    probeRunning = Promise.resolve()
-      .then(() => backendProbe(options, true))
-      .then(result => {
-        const connection = result && typeof result === "object" ? result : {};
-        const ok = connection.baseUrl === LOCAL_ORIGIN || connection.baseUrl === "http://localhost:8189";
-        report("studio_backend_probe_completed", {
-          reason: String(reason || "runtime_state_changed"),
-          available: state.available,
-          ready: state.ready,
-          connected: !!connection.baseUrl,
-          selectedLocal: ok
-        });
-        return { ok, baseUrl: connection.baseUrl || null, comfyui: connection.comfyui === true };
-      })
-      .catch(error => {
-        report("studio_backend_probe_failed", {
-          reason: String(reason || "runtime_state_changed"),
-          errorType: error && error.name ? String(error.name) : "Error"
-        });
-        return { ok: false, retry: true, reason: "backend_probe_failed" };
-      })
-      .finally(() => { probeRunning = null; });
-    return probeRunning;
+    const state = backendState();
+    const ok = state.comfyui === true;
+    report("studio_backend_probe_completed", {
+      reason: String(reason || "runtime_state_changed"),
+      available: !!state.baseUrl,
+      ready: ok,
+      connected: !!state.baseUrl,
+      selectedLocal: !!state.baseUrl,
+      engine: state.engine
+    });
+    // Never invoke the original probe: it honors the game-configured URL.
+    return Promise.resolve({
+      ok,
+      retry: !ok,
+      reason: state.error || null,
+      baseUrl: state.baseUrl,
+      comfyui: state.comfyui,
+      engine: state.engine
+    });
   }
 
   function registerBackendProbe(probe) {
@@ -200,22 +222,6 @@
     let originalGet;
     try { originalGet = value.get; } catch (_) { return value; }
     if (typeof originalGet !== "function") return value;
-
-    const wrappedGet = (name, ...args) => {
-      const resolved = originalGet.apply(value, [name, ...args]);
-      if (name !== "ph" || typeof resolved !== "function") return resolved;
-      return (...callArgs) => {
-        const current = resolved(...callArgs) || {};
-        const state = runtimeStatus();
-        if (!prefersLauncherLocal() || (!state.available && !state.starting)) return current;
-        return { ...current, baseUrl: LOCAL_ORIGIN, comfyui: state.ready };
-      };
-    };
-
-    // Do not Proxy the WML API. Its get member can be a frozen, non-configurable
-    // native function; returning wrappedGet from a Proxy get trap violates the
-    // ECMAScript Proxy invariant and aborts Image Studio setup. A facade lets us
-    // override get without mutating or proxying the original object.
     try {
       const facade = Object.create(value);
       const descriptor = Object.getOwnPropertyDescriptor(value, "get");
@@ -223,13 +229,17 @@
         configurable: true,
         enumerable: descriptor ? descriptor.enumerable : true,
         writable: true,
-        value: wrappedGet
+        value(name, ...args) {
+          const resolved = originalGet.apply(value, [name, ...args]);
+          if (name !== "ph" || typeof resolved !== "function") return resolved;
+          return (...callArgs) => ({
+            ...(resolved(...callArgs) || {}),
+            ...backendState()
+          });
+        }
       });
       return facade;
-    } catch (_) {
-      // Preserve the original WML API if it cannot be safely facaded.
-      return value;
-    }
+    } catch (_) { return value; }
   }
 
   function installLegacyApiHook() {
@@ -248,6 +258,31 @@
     }
   }
 
+  function wrapSettingsStore(store) {
+    if (!store || typeof store.getState !== "function") return store;
+    try {
+      const originalGetState = store.getState.bind(store);
+      const facade = Object.create(store);
+      Object.defineProperty(facade, "getState", {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value() {
+          const state = originalGetState();
+          // The launcher's running engine is authoritative. Keep the persisted
+          // game preference untouched while allowing this session to generate.
+          if (runtimeStatus().ready && state && state.imageBackendMode !== "auto") {
+            return { ...state, imageBackendMode: "auto" };
+          }
+          return state;
+        }
+      });
+      return facade;
+    } catch (_) {
+      return store;
+    }
+  }
+
   function wrapPauseSettingsFactory(factory) {
     if (!factory || typeof factory.connect !== "function" || factory.__waywardImageStudioWrapped) return factory;
     const originalConnect = factory.connect;
@@ -260,20 +295,24 @@
         try {
           api.fn = function(name, ...args) {
             const value = originalFn(name, ...args);
+            if (name === "settingsStore") return wrapSettingsStore(value);
             if (name === "imageBackendProbe" && typeof value === "function") {
               registerBackendProbe(value);
-              return value;
+              return (..._args) => refreshBackendProbe("game_backend_probe");
             }
             if (name === "imageServerUrl" && typeof value === "function") {
-              return path => localEndpoint(path) || value(path);
+              return path => {
+                if (!path) return backendState().baseUrl;
+                const local = localEndpoint(path);
+                if (local) return local;
+                return isApiPath(path) ? null : value(path);
+              };
             }
             if (name === "imageBackend" && typeof value === "function") {
-              return (...callArgs) => {
-                const current = value(...callArgs) || {};
-                const state = runtimeStatus();
-                if (!prefersLauncherLocal() || (!state.available && !state.starting)) return current;
-                return { ...current, baseUrl: LOCAL_ORIGIN, comfyui: state.ready };
-              };
+              return (...callArgs) => ({
+                ...(value(...callArgs) || {}),
+                ...backendState()
+              });
             }
             return value;
           };
@@ -308,6 +347,33 @@
     }
   }
 
+  function wrapStudioBridge(value) {
+    if (!value || typeof value.connection !== "function" || value.__waywardLauncherConnectionWrapped) return value;
+    const facade = Object.create(value);
+    const originalConnection = value.connection.bind(value);
+    Object.defineProperty(facade, "connection", {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: (...args) => ({
+        ...(originalConnection(...args) || {}),
+        ...backendState()
+      })
+    });
+    if (typeof value.setOfflineOnly === "function") {
+      const originalSetOfflineOnly = value.setOfflineOnly.bind(value);
+      Object.defineProperty(facade, "setOfflineOnly", {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: _requested => originalSetOfflineOnly(!runtimeStatus().ready)
+      });
+    }
+    try { Object.defineProperty(facade, "__waywardLauncherConnectionWrapped", { value: true }); } catch (_) {}
+    report("studio_connection_bridge_wrapped", {});
+    return facade;
+  }
+
   function installStudioBridgeHook() {
     let current = null;
     try { current = window.WW_ImageStudioBridge || null; } catch (_) {}
@@ -316,29 +382,12 @@
         configurable: true,
         enumerable: true,
         get() { return current; },
-        set(value) {
-          current = value;
-          if (!value || typeof value.connection !== "function" || value.__waywardLauncherConnectionWrapped) return;
-          const originalConnection = value.connection.bind(value);
-          value.connection = (...args) => {
-            const currentConnection = originalConnection(...args) || {};
-            const state = runtimeStatus();
-            if (!prefersLauncherLocal() || (!state.available && !state.starting)) return currentConnection;
-            return {
-              ...currentConnection,
-              baseUrl: LOCAL_ORIGIN,
-              comfyui: state.ready
-            };
-          };
-          try { Object.defineProperty(value, "__waywardLauncherConnectionWrapped", { value: true }); } catch (_) {}
-          report("studio_connection_bridge_wrapped", {});
-        }
+        set(value) { current = wrapStudioBridge(value); }
       });
-      if (current) {
-        const setter = Object.getOwnPropertyDescriptor(window, "WW_ImageStudioBridge").set;
-        setter.call(window, current);
-      }
-    } catch (_) {}
+      if (current) current = wrapStudioBridge(current);
+    } catch (_) {
+      if (current) current = wrapStudioBridge(current);
+    }
   }
 
   function installSettingsSaveProbe() {
@@ -366,18 +415,8 @@
   }
 
   function serverOrigin() {
-    try {
-      const connection = window.WW_ImageStudioBridge && window.WW_ImageStudioBridge.connection();
-      const raw = connection && connection.baseUrl;
-      const url = new URL(String(raw || ""));
-      if (url.protocol !== "http:" ||
-          (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") ||
-          url.port !== "8189" || (url.username || url.password)) return null;
-      return url.origin;
-    } catch (_) {
-      const state = runtimeStatus();
-      return prefersLauncherLocal() && (state.available || state.starting) ? LOCAL_ORIGIN : null;
-    }
+    const state = runtimeStatus();
+    return state.available || state.starting ? LOCAL_ORIGIN : null;
   }
 
   async function discoverNow() {
