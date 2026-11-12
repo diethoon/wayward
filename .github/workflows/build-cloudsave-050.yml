@@ -106,7 +106,7 @@ jobs:
               !html.includes('google.accounts.oauth2.revoke') ||
               !html.includes('google.accounts.oauth2.hasGrantedAllScopes') ||
               !html.includes("params.get('login')==='select_account'") ||
-              !html.includes("prompt:loginPolicy==='select_account'?'select_account':'') ||
+              !html.includes("prompt:loginPolicy==='select_account'?'select_account':'',state:nonce") ||
               !html.includes('https://www.googleapis.com/auth/drive.appdata') ||
               !html.includes('wayward-cloud-auth-success') ||
               !html.includes('event.source') ||
