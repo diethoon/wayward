@@ -367,6 +367,17 @@ async function launcherGenerate(
         )
 
         patch_backend_text(
+            "wayward-imagegen/src/routes/generationSettings.ts",
+            [
+                (
+                    "  if (settings.imageProvider === 'nai' && !settings.naiToken) throw new HttpError(400, 'NovelAI API 토큰을 입력하세요.')",
+                    "  // A missing launcher-managed NAI token affects readiness/generation, not saving non-secret UI settings.",
+                    "allow-generation-settings-save-without-launcher-credential",
+                ),
+            ],
+        )
+
+        patch_backend_text(
             "wayward-imagegen/src/routes/catalogue.ts",
             [
                 (
