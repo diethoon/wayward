@@ -35,6 +35,8 @@ const statusNode=document.getElementById('status');
 const params=new URLSearchParams(location.search);
 const nonceFromUrl=params.get('nonce')||'';
 const originFromUrl=params.get('origin')||'';
+const rememberFromUrl=params.get('remember')==='1';
+const CENTRAL_SESSION_KEY='wayward-cloud-auth-session-v1';
 function status(message){statusNode.textContent=message;}
 function randomBytes(size){const value=new Uint8Array(size);crypto.getRandomValues(value);return value;}
 function base64url(bytes){let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,'');}
@@ -82,16 +84,74 @@ async function exchangeCode(code,verifier){
  if(!response.ok||!data.accessToken||!data.refreshToken)throw new Error(data.error||('Google 인증 교환 실패 ('+response.status+')'));
  return data;
 }
+async function deliverTokens(tokens,nonce,gameOrigin,remember){
+ if(remember&&tokens.refreshToken){
+  try{localStorage.setItem(CENTRAL_SESSION_KEY,JSON.stringify({refreshToken:tokens.refreshToken,savedAt:Date.now()}));}
+  catch(_){/* The game-origin copy remains available when this origin blocks storage. */}
+ }
+ const payload={
+  type:'wayward-cloud-auth-success',nonce,
+  accessToken:tokens.accessToken,
+  refreshToken:tokens.refreshToken,
+  expiresIn:Math.max(60,Math.min(3600,Number(tokens.expiresIn)||3600))
+ };
+ const parentSent=notifyParent(payload,gameOrigin);
+ const relaySent=await relay(payload);
+ if(!parentSent&&!relaySent)return false;
+ status('Google 로그인이 완료되었습니다. Wayward 게임으로 돌아가세요.');
+ setTimeout(()=>{try{window.close();}catch(_){}},1000);
+ return true;
+}
+async function tryCentralSession(nonce,gameOrigin){
+ let saved;
+ try{saved=JSON.parse(localStorage.getItem(CENTRAL_SESSION_KEY)||'null');}catch(_){}
+ if(!saved||typeof saved.refreshToken!=='string'||!saved.refreshToken)return false;
+ status('이 브라우저에 저장된 Google 로그인을 확인하고 있습니다.');
+ let response,data={};
+ try{
+  response=await fetch(OAUTH_API+'/oauth/refresh',{
+   method:'POST',
+   headers:{'Content-Type':'application/json','X-Requested-With':'XmlHttpRequest'},
+   cache:'no-store',
+   credentials:'omit',
+   body:JSON.stringify({refreshToken:saved.refreshToken})
+  });
+  try{data=await response.json();}catch(_){}
+ }catch(_){
+  status('저장된 Google 로그인을 확인할 수 없습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.');
+  return true;
+ }
+ if(response.status===401||data.invalidGrant){
+  try{localStorage.removeItem(CENTRAL_SESSION_KEY);}catch(_){}
+  return false;
+ }
+ if(!response.ok||!data.accessToken){
+  status(data.error||('Google 로그인 자동 갱신 실패 ('+response.status+')'));
+  return true;
+ }
+ const tokens={
+  accessToken:data.accessToken,
+  refreshToken:typeof data.refreshToken==='string'&&data.refreshToken?data.refreshToken:saved.refreshToken,
+  expiresIn:data.expiresIn
+ };
+ try{localStorage.setItem(CENTRAL_SESSION_KEY,JSON.stringify({refreshToken:tokens.refreshToken,savedAt:Date.now()}));}catch(_){}
+ const delivered=await deliverTokens(tokens,nonce,gameOrigin,true);
+ if(!delivered)status('로그인 정보는 복원했지만 게임 연결이 끊어졌습니다. 게임에서 다시 연결해 주세요.');
+ return true;
+}
 async function begin(){
  if(!/^[a-f0-9]{48}$/.test(nonceFromUrl)||!validOrigin(originFromUrl)){
   status('잘못된 로그인 요청입니다. Wayward 게임으로 돌아가 다시 시도해 주세요.');
   return;
  }
+ if(rememberFromUrl&&await tryCentralSession(nonceFromUrl,originFromUrl))return;
  const state=base64url(randomBytes(24));
  const verifier=base64url(randomBytes(32));
  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier));
  const challenge=base64url(new Uint8Array(digest));
- sessionStorage.setItem('wayward-cloud-oauth:'+state,JSON.stringify({nonce:nonceFromUrl,gameOrigin:originFromUrl,verifier,createdAt:Date.now()}));
+ sessionStorage.setItem('wayward-cloud-oauth:'+state,JSON.stringify({
+  nonce:nonceFromUrl,gameOrigin:originFromUrl,verifier,remember:rememberFromUrl,createdAt:Date.now()
+ }));
  const authorize=new URL('https://accounts.google.com/o/oauth2/v2/auth');
  authorize.search=new URLSearchParams({
   client_id:CLIENT_ID,
@@ -133,27 +193,26 @@ async function finishCallback(){
  try{
   status('Google 계정을 확인하고 로그인 토큰을 안전하게 교환하고 있습니다.');
   const tokens=await exchangeCode(code,saved.verifier);
-  const payload={
-   type:'wayward-cloud-auth-success',nonce,
-   accessToken:tokens.accessToken,
-   refreshToken:tokens.refreshToken,
-   expiresIn:Math.max(60,Math.min(3600,Number(tokens.expiresIn)||3600))
-  };
-  const parentSent=notifyParent(payload,gameOrigin);
-  const relaySent=await relay(payload);
-  if(!parentSent&&!relaySent){
-   status('인증은 완료했지만 게임 연결이 끊어졌습니다. 게임으로 돌아가 다시 연결해 주세요.');
-   return true;
-  }
-  status('Google 로그인이 완료되었습니다. Wayward 게임으로 돌아가세요.');
-  setTimeout(()=>{try{window.close();}catch(_){}},1000);
+  const delivered=await deliverTokens(tokens,nonce,gameOrigin,!!saved.remember);
+  if(!delivered)status('인증은 완료했지만 게임 연결이 끊어졌습니다. 게임으로 돌아가 다시 연결해 주세요.');
   return true;
  }catch(error){
   await fail(error&&error.message||error);
   return true;
  }
 }
-(async()=>{try{if(await finishCallback())return;await begin();}catch(error){status('로그인을 시작하지 못했습니다: '+String(error&&error.message||error));}})();
+(async()=>{
+ try{
+  if(params.get('logout')==='1'){
+   try{localStorage.removeItem(CENTRAL_SESSION_KEY);}catch(_){}
+   status('브라우저 공통 Google 로그인 정보도 삭제했습니다. 이 창을 닫아도 됩니다.');
+   setTimeout(()=>{try{window.close();}catch(_){}},700);
+   return;
+  }
+  if(await finishCallback())return;
+  await begin();
+ }catch(error){status('로그인을 시작하지 못했습니다: '+String(error&&error.message||error));}
+})();
 })();
 </script>
 </body>
