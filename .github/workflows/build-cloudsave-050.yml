@@ -1,9 +1,9 @@
-name: Build and verify CloudSave 0.6.0
+name: Build and verify CloudSave 0.6.1
 
 on:
   push:
     branches:
-      - work/cloudsave-pages-only-token-model-20261113
+      - work/cloudsave-session-policy-20261113
     paths:
       - 'cloud-save/**'
       - 'auth-page/index.html'
@@ -65,7 +65,7 @@ jobs:
             assert.equal(extract(newSource, start, end), extract(oldSource, start, end),
               'protected game save/load logic changed: ' + start);
           }
-          assert.ok(newSource.includes("version: '0.6.0'"));
+          assert.ok(newSource.includes("version: '0.6.1'"));
           assert.ok(newSource.includes('https://jeiky224.github.io/cloud/'));
           for (const forbidden of [
             'wayward-auth-relay', 'workers.dev', 'cloudflare', 'AUTH_API_URL',
@@ -79,6 +79,12 @@ jobs:
           assert.ok(newSource.includes('takePendingStateForNonce'));
           assert.ok(newSource.includes('postMessage'));
           assert.ok(newSource.includes('ensureAccessToken'));
+          assert.ok(newSource.includes('EXPLICIT_LOGOUT_KEY'));
+          assert.ok(newSource.includes('forceSelectAccount'));
+          assert.ok(newSource.includes('attemptNativeSessionRestore'));
+          assert.ok(newSource.includes('markExplicitLogout'));
+          assert.ok(newSource.includes('revokeGooglePermission'));
+          assert.ok(newSource.includes('sessionPolicy === ' + "'reauth'"));
           console.log('Protected save/load functions are byte-for-byte unchanged.');
           NODE
 
@@ -99,6 +105,8 @@ jobs:
               !html.includes('google.accounts.oauth2.initTokenClient') ||
               !html.includes('google.accounts.oauth2.revoke') ||
               !html.includes('google.accounts.oauth2.hasGrantedAllScopes') ||
+              !html.includes("params.get('login')==='select_account'") ||
+              !html.includes("prompt:loginPolicy==='select_account'?'select_account':'') ||
               !html.includes('https://www.googleapis.com/auth/drive.appdata') ||
               !html.includes('wayward-cloud-auth-success') ||
               !html.includes('event.source') ||
@@ -113,6 +121,7 @@ jobs:
           }
           NODE
           node --check /tmp/cloudsave-auth-page.js
+          node scripts/test-cloudsave-session-policy.cjs
           git add -A
           git diff --cached --check
 
@@ -150,11 +159,11 @@ jobs:
             bytes: original.length,
             sha256: crypto.createHash('sha256').update(original).digest('hex')
           };
-          fs.writeFileSync('CLOUDSAVE_0.6.0_INSPECTION.json', JSON.stringify(result, null, 2) + '\n');
+          fs.writeFileSync('CLOUDSAVE_0.6.1_INSPECTION.json', JSON.stringify(result, null, 2) + '\n');
           NODE
-          zip -qr Wayward_Google_Drive_CloudSave_v0.6.0.zip cloud-save
-          unzip -t Wayward_Google_Drive_CloudSave_v0.6.0.zip
-          sha256sum Wayward_Google_Drive_CloudSave_v0.6.0.zip
+          zip -qr Wayward_Google_Drive_CloudSave_v0.6.1.zip cloud-save
+          unzip -t Wayward_Google_Drive_CloudSave_v0.6.1.zip
+          sha256sum Wayward_Google_Drive_CloudSave_v0.6.1.zip
           git add -A
           git diff --cached --check
           git status --short
@@ -168,6 +177,6 @@ jobs:
           git add -A
           git diff --cached --check
           if ! git diff --cached --quiet; then
-            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "build: package verified CloudSave 0.6.0"
-            git push origin HEAD:refs/heads/work/cloudsave-pages-only-token-model-20261113
+            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "build: package verified CloudSave 0.6.1"
+            git push origin HEAD:refs/heads/work/cloudsave-session-policy-20261113
           fi
