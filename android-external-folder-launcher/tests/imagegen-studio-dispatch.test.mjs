@@ -84,6 +84,8 @@ async function exerciseEngine(engine) {
       setItem() {}
     },
     fetch: globalThis.fetch,
+    setTimeout,
+    clearTimeout,
     crypto: { randomUUID: () => "test-" + engine + "-" + forwarded.length },
     WMLHost: {
       imageGenRuntimeStatus() { return JSON.stringify(runtime); },
