@@ -38,10 +38,12 @@ WML.define({
     let slotsError = '';
     const SESSION_POLICY_KEY = 'wml-google-drive-session-policy-v1';
     const EXPLICIT_LOGOUT_KEY = 'wml-google-drive-explicit-logout-v1';
+    const HAD_AUTH_KEY = 'wml-google-drive-had-auth-v1';
     const LEGACY_SESSION_TOKEN_KEY = 'wml-google-drive-session-token-v1';
     let sessionPolicy = 'remember'; // remember | reauth
     let explicitLogout = false;
     let permissionRevoked = false;
+    let hadPreviousAuth = false;
     let authStatus = 'restore-pending';
     let startupRestoreAttempted = false;
 
@@ -105,6 +107,9 @@ WML.define({
     function loadExplicitLogout() {
       return loadLogoutMarker() === '1' || loadLogoutMarker() === 'revoked';
     }
+    function loadHadPreviousAuth() {
+      return readStorage(HAD_AUTH_KEY) === '1';
+    }
     function saveAuthPreferences() {
       writeStorage(SESSION_POLICY_KEY, sessionPolicy);
       writeStorage(EXPLICIT_LOGOUT_KEY,
@@ -116,12 +121,18 @@ WML.define({
       permissionRevoked = false;
       saveAuthPreferences();
       if (hasToken()) authStatus = 'connected';
-      else authStatus = sessionPolicy === 'remember' ? 'restore-pending' : 'session-only';
+      else authStatus = sessionPolicy === 'remember'
+        ? (hadPreviousAuth ? 'restore-pending' : 'reauth-required')
+        : 'session-only';
     }
     function markExplicitLogout(revoked) {
       sessionPolicy = 'reauth';
       explicitLogout = true;
       permissionRevoked = revoked === true;
+      if (permissionRevoked) {
+        hadPreviousAuth = false;
+        writeStorage(HAD_AUTH_KEY, null);
+      }
       saveAuthPreferences();
       authStatus = permissionRevoked ? 'permission-revoked' : 'explicit-logout';
     }
@@ -129,15 +140,20 @@ WML.define({
       sessionPolicy = 'reauth';
       explicitLogout = true;
       permissionRevoked = true;
+      hadPreviousAuth = false;
+      writeStorage(HAD_AUTH_KEY, null);
       saveAuthPreferences();
       authStatus = 'permission-revoked';
     }
     sessionPolicy = loadSessionPolicy();
     explicitLogout = loadExplicitLogout();
     permissionRevoked = loadLogoutMarker() === 'revoked';
+    hadPreviousAuth = loadHadPreviousAuth();
     authStatus = permissionRevoked ? 'permission-revoked' :
       (explicitLogout ? 'explicit-logout' :
-        (sessionPolicy === 'remember' ? 'restore-pending' : 'session-only'));
+        (sessionPolicy === 'remember'
+          ? (hadPreviousAuth ? 'restore-pending' : 'reauth-required')
+          : 'session-only'));
 
     function clearToken() {
       accessToken = '';
@@ -185,6 +201,8 @@ WML.define({
         Math.max(60, Math.min(3600, Number(payload.expiresIn) || 3600)) * 1000;
       explicitLogout = false;
       permissionRevoked = false;
+      hadPreviousAuth = true;
+      writeStorage(HAD_AUTH_KEY, '1');
       writeStorage(EXPLICIT_LOGOUT_KEY, null);
       authStatus = 'connected';
     }
@@ -322,7 +340,8 @@ WML.define({
     }
 
     function attemptNativeSessionRestore() {
-      if (startupRestoreAttempted || explicitLogout || sessionPolicy !== 'remember' || hasToken()) return;
+      if (startupRestoreAttempted || explicitLogout || !hadPreviousAuth ||
+          sessionPolicy !== 'remember' || hasToken()) return;
       const host = window.WMLHost;
       if (!host || typeof host.startGoogleDriveAuthWithPolicy !== 'function' ||
           typeof host.takePendingStateForNonce !== 'function') return;
