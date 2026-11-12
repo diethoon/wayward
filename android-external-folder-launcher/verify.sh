@@ -72,13 +72,14 @@ with zipfile.ZipFile(apk) as bundle:
     nai_path = root + "wayward-imagegen/src/nai/client.ts"
     cli_path = root + "wayward-imagegen/src/cli.ts"
     settings_path = root + "wayward-imagegen/src/routes/generationSettings.ts"
+    direct_route_path = root + "wayward-imagegen/src/routes/image.ts"
     queue_path = root + "wayward-imagegen/src/batch/queue.ts"
     runner_path = root + "wayward-imagegen/src/comfy/jobRunner.ts"
     config_path = root + "wayward-imagegen/src/config.ts"
     catalogue_path = root + "wayward-imagegen/src/routes/catalogue.ts"
     ui_path = root + "wayward-imagegen/ui/index.html"
     for path in (manifest_path, package_path, nai_path, cli_path, settings_path,
-                 queue_path, runner_path, config_path, catalogue_path, ui_path):
+                 direct_route_path, queue_path, runner_path, config_path, catalogue_path, ui_path):
         assert path in names, "APK is missing embedded server file: " + path
     manifest = json.loads(bundle.read(manifest_path))
     package = json.loads(bundle.read(package_path))
@@ -96,9 +97,24 @@ with zipfile.ZipFile(apk) as bundle:
         "add-guarded-loopback-provider-job-adapter",
         "save-launcher-provider-image-through-normal-finalize-cache-path",
         "probe-native-provider-adapter-for-imagegen-health",
+        "force-direct-image-route-through-launcher-selected-engine",
+        "never-upload-reference-images-to-comfy-when-launcher-selected-nai",
+        "force-batch-queue-through-launcher-selected-engine",
+        "lock-image-provider-to-launcher-server-mode",
+        "lock-novelai-credential-to-launcher-keystore",
+        "lock-comfy-endpoint-to-launcher-server-mode",
+        "remove-game-comfy-client-mutation-parameter",
+        "keep-launcher-image-engine-immutable",
+        "keep-launcher-comfy-endpoint-immutable",
+        "ignore-in-game-novelai-token-clear",
+        "only-check-nai-when-launcher-selected-nai-engine",
+        "prevent-game-selected-comfy-probes-when-nai-engine-active",
+        "ignore-game-provided-comfy-url-query",
+        "do-not-query-comfy-models-during-nai-or-launcher-mode",
     ):
         assert patch in manifest.get("launcherPatches", []), "APK is missing Image Studio native-provider patch: " + patch
     settings_source = bundle.read(settings_path).decode("utf-8")
+    direct_route_source = bundle.read(direct_route_path).decode("utf-8")
     queue_source = bundle.read(queue_path).decode("utf-8")
     runner_source = bundle.read(runner_path).decode("utf-8")
     config_source = bundle.read(config_path).decode("utf-8")
@@ -111,6 +127,14 @@ with zipfile.ZipFile(apk) as bundle:
     assert "launcherProviderToken" in config_source
     assert "launcher-provider-v1" in catalogue_source
     assert "token missing" in ui_source
+    assert "imageProvider: base.imageProvider" in settings_source
+    assert "naiToken: base.naiToken" in settings_source
+    assert "comfyUrl: base.comfyUrl" in settings_source
+    assert "config.imageProvider = settings.imageProvider" not in settings_source
+    assert "comfy.setBaseUrl(settings.comfyUrl)" not in settings_source
+    assert "function activeImageWorkflow(_requested: WorkflowType, config: Config)" in direct_route_source
+    assert "config.imageProvider === 'launcher'" in direct_route_source
+    assert "private workflowFor(_item: BatchItem)" in queue_source
 print("APK embedded ImageGen and native-provider pipeline assets verified.")
 PY
 "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
