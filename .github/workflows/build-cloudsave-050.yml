@@ -5,7 +5,7 @@ on:
     branches:
       - work/cloudsave-auth-universal-20261113
     paths:
-      - '_cloudsave_inspect/cloud-save/**'
+      - 'cloud-save/**'
       - 'auth-page/index.html'
       - '.github/workflows/build-cloudsave-050.yml'
 
@@ -25,8 +25,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p cloud-save
-          cp -a _cloudsave_inspect/cloud-save/. cloud-save/
+          test -d cloud-save
           test -s cloud-save/mod.js
           test -s cloud-save/crypto.js
           test -s cloud-save/README.md
