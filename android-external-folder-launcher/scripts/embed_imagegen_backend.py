@@ -433,6 +433,16 @@ async function launcherGenerate(
                     "force-direct-image-route-through-launcher-selected-engine",
                 ),
                 (
+                    "const WORKFLOWS: readonly WorkflowType[] = ['anima', 'illustrious', 'z-image', 'nai']\\n\\nfunction activeImageWorkflow",
+                    "function activeImageWorkflow",
+                    "ignore-game-workflow-enumeration",
+                ),
+                (
+                    "    if (!WORKFLOWS.includes(requestedWorkflow)) {\\n      throw new HttpError(400, `unknown workflow: ${requestedWorkflow}. available: ${WORKFLOWS.join(', ')}`)\\n    }\\n",
+                    "",
+                    "ignore-game-supplied-workflow-validation",
+                ),
+                (
                     """    if(reference){
       if(!deps.comfy)throw new HttpError(501,'img2img를 지원하는 공통 서버가 필요합니다.')
       const uploaded=await deps.comfy.upload(fs.readFileSync(reference.path),'wwis-reference-'+derivePromptHash(reference.identity,'')+path.extname(reference.path))
