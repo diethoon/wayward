@@ -206,7 +206,7 @@ WML.define({
           typeof payload.accessToken !== 'string' ||
           !payload.accessToken ||
           payload.accessToken.length > 4096 ||
-          payload.scope !== 'https://www.googleapis.com/auth/drive.appdata' ||
+          !String(payload.scope || '').split(/\s+/).includes('https://www.googleapis.com/auth/drive.appdata') ||
           !Number.isFinite(expiresIn) || expiresIn < 60 || expiresIn > 3600) {
         authStatus = 'reauth-required';
         throw new Error('Google 인증 응답의 토큰·scope·만료 시간이 올바르지 않습니다.');
