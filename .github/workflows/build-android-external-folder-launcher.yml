@@ -661,7 +661,7 @@ jobs:
           save_code="$(curl --silent --show-error --output "$SMOKE/save.json" --write-out '%{http_code}' \
             -X PUT http://127.0.0.1:8189/api/generation/settings \
             -H 'content-type: application/json' \
-            --data '{"imageProvider":"nai","naiToken":"ci-smoke-token-not-valid"}')"
+            --data '{"imageProvider":"sdxl","comfyUrl":"https://attacker.invalid:8188","naiToken":"ci-must-not-be-stored","naiTokenClear":true}')"
           test "$save_code" = "200"
           after_code="$(curl --silent --show-error --output "$SMOKE/health-after.json" --write-out '%{http_code}' http://127.0.0.1:8189/api/image/health)"
           test "$after_code" = "200"
@@ -675,12 +675,14 @@ jobs:
           if (before.status !== 'error' || before.imageProvider !== 'nai' || before.novelai !== 'unconfigured') {
             throw new Error('No-token health response did not correctly report an unconfigured NovelAI provider.');
           }
-          if (saved.saved !== true || saved.settings?.naiTokenConfigured !== true || 'naiToken' in (saved.settings || {})) {
-            throw new Error('The settings endpoint did not safely save the provider token state.');
+          if (saved.saved !== true || saved.settings?.imageProvider !== 'nai'
+            || saved.settings?.comfyUrl !== 'http://127.0.0.1:8188'
+            || saved.settings?.naiTokenConfigured !== false || 'naiToken' in (saved.settings || {})) {
+            throw new Error('The settings endpoint allowed an in-game engine, endpoint, or credential override.');
           }
-          if (saveText.includes('ci-smoke-token-not-valid')) throw new Error('The settings response leaked the test token.');
-          if (after.status !== 'ok' || after.imageProvider !== 'nai' || after.novelai !== 'configured' || after.comfyui !== 'connected') {
-            throw new Error('Health did not become ready after provider settings were saved.');
+          if (saveText.includes('ci-must-not-be-stored')) throw new Error('The settings response leaked the in-game test token.');
+          if (after.status !== 'error' || after.imageProvider !== 'nai' || after.novelai !== 'unconfigured') {
+            throw new Error('The in-game override incorrectly activated a generation provider.');
           }
           const log = fs.readFileSync(root + '/server.log', 'utf8');
           if (!log.includes('wayward-imagegen 0.8.4') || !log.includes('listening')) {
@@ -691,8 +693,8 @@ jobs:
             'bun=1.4.0',
             'server_start_without_token=PASS (process alive; provider health 503/unconfigured as designed)',
             'image_panel_http=200',
-            'provider_settings_save=PASS (token redacted in response)',
-            'health_after_provider_setup=200/connected',
+            'game_engine_endpoint_token_override=BLOCKED (launcher engine and endpoint remain immutable)',
+            'health_after_in_game_override=503/unconfigured',
             'novelai_remote_generation=NOT_RUN (no real NovelAI account token supplied)',
           ].join('\\n') + '\\n';
           fs.writeFileSync(root + '/result.txt', report);
