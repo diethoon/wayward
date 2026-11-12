@@ -13,7 +13,7 @@ for (const required of [
   "explicitLogout = true",
   "const forceSelectAccount = explicitLogout || sessionPolicy === 'reauth'",
   "startGoogleDriveAuthWithPolicy(nonce, !!forceSelectAccount)",
-  "AuthorizationRequest.Prompt.SELECT_ACCOUNT",
+  "startGoogleDriveAuthWithPolicy(nonce, !!forceSelectAccount)",
   "function attemptNativeSessionRestore()",
   "function requestNativeGoogleRevoke()",
   "async function revokeGooglePermission()",
