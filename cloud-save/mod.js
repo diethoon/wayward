@@ -41,6 +41,7 @@ WML.define({
     const LEGACY_SESSION_TOKEN_KEY = 'wml-google-drive-session-token-v1';
     let sessionPolicy = 'remember'; // remember | reauth
     let explicitLogout = false;
+    let permissionRevoked = false;
     let authStatus = 'restore-pending';
     let startupRestoreAttempted = false;
 
@@ -98,30 +99,45 @@ WML.define({
       const saved = readStorage(SESSION_POLICY_KEY);
       return saved === 'reauth' || saved === 'session' ? 'reauth' : 'remember';
     }
+    function loadLogoutMarker() {
+      return readStorage(EXPLICIT_LOGOUT_KEY) || '';
+    }
     function loadExplicitLogout() {
-      return readStorage(EXPLICIT_LOGOUT_KEY) === '1';
+      return loadLogoutMarker() === '1' || loadLogoutMarker() === 'revoked';
     }
     function saveAuthPreferences() {
       writeStorage(SESSION_POLICY_KEY, sessionPolicy);
-      writeStorage(EXPLICIT_LOGOUT_KEY, explicitLogout ? '1' : null);
+      writeStorage(EXPLICIT_LOGOUT_KEY,
+        explicitLogout ? (permissionRevoked ? 'revoked' : '1') : null);
     }
     function setSessionPolicy(policy) {
       sessionPolicy = policy === 'reauth' ? 'reauth' : 'remember';
       explicitLogout = false;
+      permissionRevoked = false;
       saveAuthPreferences();
       if (hasToken()) authStatus = 'connected';
       else authStatus = sessionPolicy === 'remember' ? 'restore-pending' : 'session-only';
     }
-    function markExplicitLogout() {
+    function markExplicitLogout(revoked) {
       sessionPolicy = 'reauth';
       explicitLogout = true;
+      permissionRevoked = revoked === true;
       saveAuthPreferences();
-      authStatus = 'explicit-logout';
+      authStatus = permissionRevoked ? 'permission-revoked' : 'explicit-logout';
+    }
+    function markPermissionRevoked() {
+      sessionPolicy = 'reauth';
+      explicitLogout = true;
+      permissionRevoked = true;
+      saveAuthPreferences();
+      authStatus = 'permission-revoked';
     }
     sessionPolicy = loadSessionPolicy();
     explicitLogout = loadExplicitLogout();
-    authStatus = explicitLogout ? 'explicit-logout' :
-      (sessionPolicy === 'remember' ? 'restore-pending' : 'session-only');
+    permissionRevoked = loadLogoutMarker() === 'revoked';
+    authStatus = permissionRevoked ? 'permission-revoked' :
+      (explicitLogout ? 'explicit-logout' :
+        (sessionPolicy === 'remember' ? 'restore-pending' : 'session-only'));
 
     function clearToken() {
       accessToken = '';
@@ -153,7 +169,7 @@ WML.define({
       }
       if (payload.type === 'wayward-cloud-auth-error') {
         if (payload.code === 'scope_missing' || payload.code === 'access_denied') {
-          authStatus = 'permission-revoked';
+          markPermissionRevoked();
         } else if (payload.code === 'login_required' || payload.code === 'interaction_required') {
           authStatus = 'google-session-expired';
         } else authStatus = 'reauth-required';
@@ -168,6 +184,7 @@ WML.define({
       tokenExpiresAt = Date.now() +
         Math.max(60, Math.min(3600, Number(payload.expiresIn) || 3600)) * 1000;
       explicitLogout = false;
+      permissionRevoked = false;
       writeStorage(EXPLICIT_LOGOUT_KEY, null);
       authStatus = 'connected';
     }
@@ -355,9 +372,18 @@ WML.define({
       }
       if (!response.ok) {
         let detail = '';
+        let apiError = null;
         try {
           const data = await response.clone().json();
-          detail = data && data.error && data.error.message ? data.error.message : '';
+          apiError = data && data.error ? data.error : null;
+          detail = apiError && apiError.message ? apiError.message : '';
+          const reasons = apiError && Array.isArray(apiError.errors)
+            ? apiError.errors.map(item => String(item && item.reason || ''))
+            : [];
+          if (response.status === 403 &&
+              (apiError.status === 'PERMISSION_DENIED' || reasons.includes('insufficientPermissions'))) {
+            markPermissionRevoked();
+          }
         } catch (_) { /* response body may not be JSON */ }
         throw new Error('Google Drive 요청 실패 (' + response.status + ')' +
           (detail ? ': ' + detail : ''));
@@ -799,7 +825,7 @@ WML.define({
         try { host.clearGoogleAccessToken(savedAccessToken); } catch (_) {}
       }
       clearToken();
-      markExplicitLogout();
+      markExplicitLogout(revoked);
       show({ page: 'home' }, revoked
         ? 'Google 앱 권한 철회를 완료하고 이 기기의 로그인 정보도 삭제했습니다.'
         : '이 기기의 로그인 정보는 삭제했습니다. Google 권한 철회는 확인되지 않았습니다.' +
