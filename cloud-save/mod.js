@@ -1,14 +1,14 @@
 /* Personal Google Drive-backed cloud saves for WML.
- * Browser OAuth uses Google's direct Token Model on the fixed GitHub Pages
- * page and a nonce-bound popup postMessage. Android uses the launcher's
- * native Google Identity bridge. No refresh token or auth relay is used.
- * Save contents are encrypted in the game page before direct upload to Drive.
+ * Google OAuth and every Drive API request run only inside the fixed GitHub
+ * Pages HTTPS popup. The game exchanges encrypted envelopes and slot commands
+ * over a nonce- and request-id-bound postMessage session. No token enters game
+ * memory, storage, messages, URLs or logs; no server relay is used.
  */
 WML.define({
   id: 'cloud-save',
   name: '클라우드세이브 (Google Drive)',
-  version: '0.6.1',
-  description: 'Google 계정으로 연결해 개인 Drive에 암호화 세이브를 저장합니다. 게임 세이브는 서버를 거치지 않습니다.',
+  version: '0.7.0',
+  description: '정적 HTTPS 인증 페이지가 Google Drive를 직접 처리하고 게임은 암호화된 세이브 데이터만 주고받습니다.',
   symbols: {
     "pauseMenu": {
       "raw": { "2026-10-04": "N6e" },
@@ -416,6 +416,7 @@ WML.define({
           return;
         }
         closeAuthSession(false, '이전 인증 세션을 새 세션으로 교체했습니다.');
+        usedDriveRequestIds.clear();
         authPopup = popup;
         authNonce = nonce;
         authSessionId = '';
@@ -717,9 +718,6 @@ WML.define({
       });
     }
 
-    function connectFromClick() {
-      openAuthPopup();
-    }
 
     async function logoutGoogleAccount() {
       if (bridgeReady) await requestDrive('logout', {});
