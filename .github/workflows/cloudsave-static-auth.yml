@@ -1,0 +1,40 @@
+name: Verify CloudSave static-only integration
+
+on:
+  push:
+    branches:
+      - restart/cloudsave-static-google-direct-20261113
+    paths:
+      - 'cloud-save/**'
+      - 'verification/**'
+      - '.github/workflows/cloudsave-static-auth.yml'
+  pull_request:
+    paths:
+      - 'cloud-save/**'
+      - 'verification/**'
+      - '.github/workflows/cloudsave-static-auth.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository history for preservation comparison
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch exact v0.6.1 preservation base
+        run: git fetch origin refs/heads/work/cloudsave-session-policy-20261113:refs/remotes/origin/work/cloudsave-session-policy-20261113
+      - name: Verify JavaScript syntax
+        run: |
+          node --check cloud-save/mod.js
+          node --check cloud-save/crypto.js
+      - name: Verify static-only auth and protected save behavior
+        run: node --test verification/cloudsave-static-auth.test.cjs
+      - name: Verify patch hygiene and forbidden hosts
+        run: |
+          git diff --check origin/work/cloudsave-session-policy-20261113...HEAD
+          ! grep -niE 'vercel\.app|vercel\.com|workers\.dev|cloudflare|render\.com|AUTH_API_URL|AUTH_RELAY|token_endpoint|oauth/refresh|refreshToken|client_secret' cloud-save/mod.js
