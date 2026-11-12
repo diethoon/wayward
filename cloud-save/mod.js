@@ -56,7 +56,7 @@ WML.define({
 
     // Browser auth is hosted by GitHub Pages. The official Android launcher
     // obtains its access token through the platform Google Identity bridge.
-    const AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/';
+    const AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/auth.html';
     const AUTH_BRIDGE_ORIGIN = 'https://jeiky224.github.io';
     const FILE_PREFIX = 'wayward-cloud-slot-';
     const STYLE_ID = 'wml-google-drive-save-style';
@@ -359,6 +359,7 @@ WML.define({
           pendingAuthWindow = null;
           pendingAuthResolve = null;
           pendingAuthReject = null;
+          pendingAuthOpen = null;
           resolve();
           return true;
         };
