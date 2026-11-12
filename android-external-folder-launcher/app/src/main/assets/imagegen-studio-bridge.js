@@ -13,6 +13,69 @@
   let discoveryComplete = false;
   let discoveryResult = null;
 
+  function installLauncherOwnedSettingsUi() {
+    const apply = () => {
+      const root = window.document;
+      if (!root || typeof root.querySelector !== "function") return;
+      const hide = element => {
+        if (!element) return;
+        element.hidden = true;
+        if (typeof element.setAttribute === "function") element.setAttribute("aria-hidden", "true");
+        if (element.style && typeof element.style.setProperty === "function") {
+          element.style.setProperty("display", "none", "important");
+        }
+      };
+
+      // Prompt/character editing stays in Image Studio. Engine and server
+      // selection are launcher-owned and are not exposed as game controls.
+      const engineButton = root.querySelector("#wwis-generation-settings");
+      if (engineButton) {
+        engineButton.textContent = "생성 옵션 (엔진·서버는 런처 관리)";
+        if (typeof engineButton.setAttribute === "function") {
+          engineButton.setAttribute("aria-label", "생성 옵션. 엔진과 서버는 런처에서 관리합니다.");
+        }
+      }
+      const providerRadio = root.querySelector('input[name="wwis-provider"]');
+      hide(providerRadio && typeof providerRadio.closest === "function"
+        ? providerRadio.closest(".wwis-card") : null);
+      hide(root.querySelector("#wwis-comfy-settings"));
+
+      // Credentials can only be entered or cleared in launcher settings.
+      for (const selector of ["#wwis-nai-token", "#wwis-nai-token-clear"]) {
+        const control = root.querySelector(selector);
+        hide(control && typeof control.closest === "function" ? control.closest("label") : control);
+      }
+      const naiCheck = root.querySelector("#wwis-nai-check");
+      hide(naiCheck && typeof naiCheck.closest === "function"
+        ? (naiCheck.closest(".wwis-row") || naiCheck) : naiCheck);
+
+      const naiCard = root.querySelector("#wwis-nai-settings");
+      if (naiCard && typeof root.createElement === "function"
+          && !root.querySelector("#wwis-launcher-nai-credential-note")) {
+        const note = root.createElement("p");
+        note.id = "wwis-launcher-nai-credential-note";
+        note.className = "wwis-setting-status";
+        note.textContent = "NovelAI 인증 정보와 서버 선택은 런처 설정에서만 관리됩니다.";
+        const heading = naiCard.querySelector && naiCard.querySelector("h3");
+        if (heading && heading.parentNode && typeof heading.parentNode.insertBefore === "function") {
+          heading.parentNode.insertBefore(note, heading.nextSibling);
+        }
+      }
+
+      const settingsTitle = root.querySelector(".wwis-generation-toolbar strong");
+      if (settingsTitle && settingsTitle.textContent !== "생성 옵션 · 엔진/서버는 런처 관리") {
+        settingsTitle.textContent = "생성 옵션 · 엔진/서버는 런처 관리";
+      }
+    };
+
+    apply();
+    if (window.MutationObserver && window.document && window.document.documentElement) {
+      const observer = new window.MutationObserver(apply);
+      observer.observe(window.document.documentElement, { childList: true, subtree: true });
+      window.__waywardLauncherSettingsUiObserver = observer;
+    }
+  }
+
   function report(event, details) {
     try {
       if (host && typeof host.logImageProviderDiagnostic === "function") {
@@ -579,6 +642,7 @@
     }
   }
 
+  installLauncherOwnedSettingsUi();
   installImageElementUrlRewrite();
   installLauncherOwnedSettingsUi();
   installLegacyApiHook();
