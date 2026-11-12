@@ -1438,6 +1438,12 @@ public final class ImageGenServiceRuntimeTest {
         assertTrue("ImageGen did not stop before the Keystore persistence restart test.",
                 awaitServerDown(45_000L));
 
+        // Simulate saving the credential through the launcher's ImageProviderActivity.
+        // The game WebView is deliberately not involved in credential management.
+        ImageProviderStore.Snapshot launcherSettings = new ImageProviderStore(context).load();
+        launcherSettings.novelAiToken = "ci-smoke-token-not-valid";
+        new ImageProviderStore(context).save(launcherSettings);
+
         Method startAction = MainActivity.class.getDeclaredMethod("startNovelAiServer");
         startAction.setAccessible(true);
         instrumentation.runOnMainSync(() -> {
