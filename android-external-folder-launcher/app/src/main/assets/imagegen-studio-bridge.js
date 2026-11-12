@@ -71,9 +71,12 @@
     };
 
     apply();
-    if (window.MutationObserver && window.document && window.document.documentElement) {
+    if (window.MutationObserver && window.document) {
       const observer = new window.MutationObserver(apply);
-      observer.observe(window.document.documentElement, { childList: true, subtree: true });
+      observer.observe(window.document.documentElement || window.document, { childList: true, subtree: true });
+      if (typeof window.document.addEventListener === "function") {
+        window.document.addEventListener("DOMContentLoaded", apply, { once: true });
+      }
       window.__waywardLauncherSettingsUiObserver = observer;
     }
   }
