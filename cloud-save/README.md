@@ -1,40 +1,59 @@
-# 클라우드세이브 — Google Drive (WML / static direct-auth candidate)
+# Wayward CloudSave — Google Drive WML v0.7.0
 
-**대상:** Wayward WML  
-**현재 후보 버전:** 0.6.2-static-auth (검증 전 후보)
+**상태:** 정적 인증 + 페이지 소유 Drive 브리지 최종 후보(실계정·실기기 검증 전)
 
-Google Drive `appDataFolder`에 개인 세이브를 저장하는 WML 모드입니다. 저장·목록·덮어쓰기·불러오기·삭제는 Google Drive API에 직접 요청합니다. 저장 데이터는 게임 페이지에서 기존 AES-256-GCM 형식으로 암호화합니다.
+Google Drive `appDataFolder`에 개인 세이브를 저장하는 WML 모드입니다. Google 계정 인증과 모든 Drive API 요청은 GitHub Pages의 정적 HTTPS 인증 페이지가 직접 처리합니다. Wayward 게임 모드는 토큰을 받지 않으며, 게임에서 암호화한 저장 envelope와 제한된 슬롯 명령만 HTTPS 팝업과 주고받습니다.
 
-## 인증 구조
+## 구조와 보안 경계
 
-- 정적 인증 저장소: `https://jeiky224.github.io/cloud/`
-- 게임에서 여는 실제 인증 문서: `https://jeiky224.github.io/cloud/auth.html`
-- `index.html`은 정적 진입 안내, `auth.html`/`auth.js`는 Google Identity Services Token Model, `recovery.html`은 팝업·외부 브라우저 수동 복구 안내입니다.
-- Google OAuth Client ID는 공개 Web Client ID만 사용합니다. Client Secret, Authorization Code 교환 서버, Refresh Token broker는 없습니다.
-- 인증 페이지는 Google Token Model로 직접 액세스 토큰을 받고, Google Drive 요청은 모드가 `https://www.googleapis.com`에 직접 보냅니다.
-- Android 공식 런처는 Google Identity `AuthorizationClient` 브리지를 사용합니다. 런처가 없는 환경은 정적 인증 페이지를 열고, 팝업 반환이 끊기면 일회성 JSON을 복사·붙여넣기합니다.
-- `file://`은 opaque origin `null`로 처리합니다. 인증 페이지에서 게임으로 보낼 때만 `targetOrigin='*'`를 쓰며, 게임은 발신 origin이 `https://jeiky224.github.io`인지, 발신 창이 현재 요청의 팝업인지, 192-bit nonce와 메시지 타입·토큰 구조가 맞는지 모두 검사합니다.
-- `localhost`, `127.0.0.1`, `0.0.0.0`, LAN HTTP, HTTPS는 각각 실제 `location.origin` 값을 사용합니다. `0.0.0.0`을 `localhost` 또는 opaque origin으로 취급하지 않습니다.
-- 팝업 연결이 없거나 외부 브라우저로 분리되면 인증 페이지가 JSON 결과를 화면에 표시합니다. 사용자가 직접 복사해 원래 CloudSave 창에 붙여 넣을 수 있습니다. 토큰은 URL, localStorage, GitHub Pages 저장소에 기록하지 않습니다.
+- 인증/Drive 페이지: `https://jeiky224.github.io/cloud/auth.html`
+- Google OAuth: 기존 공개 Web Client ID + Google Identity Services Token Model
+- Drive API: 페이지의 `drive.js`가 `https://www.googleapis.com`으로 직접 요청합니다.
+- 게임↔페이지 통신: HTTPS 페이지 origin, 실제 팝업 WindowProxy, 192-bit nonce, 페이지가 생성한 session ID, 192-bit request ID, 메시지 버전, 허용된 command 및 데이터 schema를 확인하는 `postMessage` 프로토콜입니다.
+- `file://`의 origin `null`을 그대로 유지합니다. 페이지→게임 메시지에만 opaque origin 때문에 `targetOrigin='*'`를 사용하며, 게임 수신부는 인증 페이지의 정확한 HTTPS origin과 실제 팝업 창을 검사합니다. 임의 파일의 `null` origin만으로 신뢰하지 않습니다.
+- `localhost`, `127.0.0.1`, `0.0.0.0`, 일반 HTTP, HTTPS는 각각 실제 `location.origin`을 사용합니다. 주소를 서로 별칭 처리하지 않습니다.
+- 액세스 토큰은 정적 HTTPS 페이지의 JavaScript 메모리 안에만 존재합니다. 게임 메모리·localStorage·sessionStorage·IndexedDB·URL·로그·postMessage 응답에 토큰을 기록하거나 전달하지 않습니다.
+- 인증 창이 닫히거나 게임 창이 사라지거나 세션 handshake timeout이 발생하면 세션을 닫고 pending 요청을 거부합니다. 토큰은 팝업 메모리에서 제거됩니다. 외부 브라우저로 분리되어 opener 연결이 사라진 경우 수동 토큰 복사 방식을 제공하지 않으며, 게임에서 새 팝업을 다시 시작해야 합니다.
+- 명시적 로그아웃은 이 페이지의 메모리 토큰만 지우고 Google 동의 자체는 철회하지 않습니다. 권한 철회는 GIS revoke 성공 응답이 확인된 경우에만 성공으로 표시합니다.
 
-## Google Token Model 한계
+## Google Token Model 정책
 
-Token Model은 짧은 수명의 액세스 토큰을 제공합니다. 만료 또는 권한 철회 뒤에는 사용자가 CloudSave의 연결 버튼을 눌러 Google에 직접 재인증해야 합니다. 기존 계정 승인 상태가 남아 있으면 계정·동의 단계를 줄일 수 있지만, 이를 Refresh Token 기반 무인 갱신으로 간주하지 않습니다. 장기 무인 로그인은 브라우저 Token Model에서 보장하지 않습니다.
+- scope: `https://www.googleapis.com/auth/drive.appdata`
+- 기존 OAuth Web Client ID를 재사용하며 Client Secret은 사용하지 않습니다.
+- Token Model의 액세스 토큰은 단기 토큰입니다. 만료되면 사용자가 인증 페이지에서 다시 연결해야 합니다.
+- 기존 Google 계정 로그인·동의가 남아 있다면 재사용을 요청할 수 있지만 무인 Refresh Token 갱신을 보장하지 않습니다. Refresh Token은 요청·저장하지 않습니다.
+- 계정 선택 정책은 비밀정보가 아닌 상태값으로만 저장합니다.
 
-## 설치
+## Google Drive 저장 구조
 
-1. `cloud-save` 폴더를 게임의 `wml/mods/` 안에 복사합니다. `mod.js`, `crypto.js`, `README.md`가 같은 폴더에 있어야 합니다.
-2. `wml/mods/mods.js`의 `WML.enable([...])`에 `"cloud-save"`가 있는지 확인합니다. 없을 때만 기존 항목을 보존한 채 추가합니다.
-3. 게임을 다시 열고 **클라우드세이브 (Google Drive)** 를 엽니다.
+다음 기존 형식을 유지합니다.
 
-## 보존 범위
+- Drive location: `appDataFolder`
+- 이름: `wayward-cloud-slot-{n}.json`
+- 새 슬롯 저장: metadata에 `parents: ['appDataFolder']`를 지정해 multipart create
+- 기존 슬롯 덮어쓰기: 기존 Drive file ID에 media PATCH
+- 불러오기: 기존 ID의 `alt=media` envelope 읽기
+- 삭제: 해당 파일 ID만 delete
+- Google Drive CRUD는 인증 페이지에서만 실행합니다. 게임 모드에는 Drive API URL 또는 Authorization 헤더가 없습니다.
 
-- Google Drive scope: `https://www.googleapis.com/auth/drive.appdata`
-- Drive의 `appDataFolder`, 파일명 `wayward-cloud-slot-{slot}.json`, 기존 Drive file ID를 유지합니다.
-- 세이브 snapshot schema, native save format, 암호화 envelope 및 `crypto.js`는 인증 연결 변경과 분리합니다.
-- 기존 액세스/Refresh Token을 게임 Origin `localStorage`에서 제거합니다. 이전 저장 토큰이 발견되면 재사용하지 않습니다.
-- Android 런처는 Google Identity API의 기기 계정 승인 상태를 이용합니다. 브라우저는 액세스 토큰을 현재 페이지 메모리에만 보관합니다.
+## 기존 세이브 호환성
 
-## 검증 상태
+- snapshot schema v1 및 native save format 1
+- `embedded-addon-v2`, AES-256-GCM
+- 이전 PBKDF2-SHA256 310,000회 비밀번호 envelope 복호화
+- v0.4.4의 embedded 및 passphrase 암호화 fixture를 회귀 테스트합니다.
+- `crypto.js`는 v0.6.1 기준본과 byte-identical이어야 합니다.
+- snapshot 생성·복원, save/prepare-load/load/delete 흐름은 v0.6.1 기준 함수와 byte-identical 검사를 수행합니다.
+- 기존 세이브 파일을 자동 마이그레이션하거나 삭제하지 않습니다. 이전 형식 파일은 기존 비밀번호 복호화 경로를 따릅니다.
 
-이 후보의 코드·브라우저 시뮬레이션·실계정 테스트는 별도 기록합니다. 정적 검사나 시뮬레이션만 통과한 환경을 실계정 CloudSave 성공으로 보고하지 않습니다.
+## 설치 및 WML 등록
+
+1. ZIP 안의 `cloud-save/` 폴더를 게임의 `wml/mods/` 폴더에 복사합니다. 모드 파일은 `mod.js`, `crypto.js`, `README.md`, `INSTALL.txt`입니다.
+2. `wml/mods/mods.js`의 기존 `WML.enable([...])` 배열에 `"cloud-save"`가 있는지 확인합니다. 없을 때만 기존 배열 항목을 보존해 추가합니다.
+3. 게임을 다시 열고 **클라우드세이브 (Google Drive)** 를 실행합니다.
+
+별도의 JSON manifest는 사용하지 않습니다. WML 모드 manifest는 `mod.js`의 `WML.define({ id: 'cloud-save', name, version, … })`이며, 활성화는 `WML.enable([...])`에 의해 이뤄집니다.
+
+## 실계정 검증에 대한 주의
+
+정적 Node 테스트와 기준 코드 비교는 Google 실계정 로그인, 실제 Drive CRUD, 브라우저 file URL CORS, Android Chrome/Firefox 동작을 대신하지 않습니다. Pages 배포와 실제 계정·브라우저 테스트가 모두 끝나기 전에는 이 후보를 설치 완료 또는 실사용 성공으로 간주하지 않습니다.
