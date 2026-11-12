@@ -100,6 +100,7 @@ with zipfile.ZipFile(apk) as bundle:
         "force-direct-image-route-through-launcher-selected-engine",
         "ignore-game-workflow-enumeration",
         "ignore-game-supplied-workflow-validation",
+        "ignore-game-supplied-workflow-validation",
         "never-upload-reference-images-to-comfy-when-launcher-selected-nai",
         "force-batch-queue-through-launcher-selected-engine",
         "lock-image-provider-to-launcher-server-mode",
