@@ -59,6 +59,21 @@ test('popup return is bound to the exact Pages origin, WindowProxy and one-time 
   assert.match(mod, /pendingAuthWindow\.postMessage[\s\S]{0,180}AUTH_BRIDGE_ORIGIN/);
 });
 
+test('browser token revocation waits for the static page-ready handshake', () => {
+  const revoke = segment(
+    mod,
+    '    function requestBrowserTokenRevocation(token) {',
+    '    function logoutGoogleAccount() {'
+  );
+  assert.match(revoke, /event\.origin\s*!==\s*AUTH_BRIDGE_ORIGIN/);
+  assert.match(revoke, /event\.source\s*!==\s*popup/);
+  assert.match(revoke, /event\.data\.type\s*===\s*'wayward-cloud-auth-page-ready'/);
+  assert.match(revoke, /popup\.postMessage\(\{\s*type:\s*'wayward-cloud-auth-hello',\s*nonce\s*\}/);
+  assert.match(revoke, /event\.data\.type\s*===\s*'wayward-cloud-revoke-ready'/);
+  assert.match(revoke, /accessToken:\s*token/);
+  assert.doesNotMatch(revoke, /popup\.postMessage\(\{\s*type:\s*'wayward-cloud-auth-hello'[\s\S]{0,300}window\.addEventListener/);
+});
+
 test('manual external-browser return validates pending nonce and never persists the token', () => {
   assert.match(mod, /function submitManualAuthResponse\(\)/);
   assert.match(mod, /payload\.nonce\s*!==\s*pendingAuthNonce/);
