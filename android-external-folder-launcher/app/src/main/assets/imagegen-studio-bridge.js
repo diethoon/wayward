@@ -269,12 +269,15 @@
         writable: true,
         value() {
           const state = originalGetState();
-          // The launcher's running engine is authoritative. Keep the persisted
-          // game preference untouched while allowing this session to generate.
-          if (runtimeStatus().ready && state && state.imageBackendMode !== "auto") {
-            return { ...state, imageBackendMode: "auto" };
+          if (!state || typeof state !== "object") return state;
+          // The launcher owns engine selection. Never expose a game-selected remote backend.
+          const active = runtimeStatus().ready === true;
+          const imageBackendMode = active ? "auto" : "off";
+          const imageBackendUrl = active ? LOCAL_ORIGIN : "";
+          if (state.imageBackendMode === imageBackendMode && state.imageBackendUrl === imageBackendUrl) {
+            return state;
           }
-          return state;
+          return { ...state, imageBackendMode, imageBackendUrl };
         }
       });
       return facade;
