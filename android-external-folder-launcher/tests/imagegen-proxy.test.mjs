@@ -121,6 +121,6 @@ assert.equal(await nonApi.text(), "native-network");
 const wrongPort = await window.fetch("http://127.0.0.1:8190/api/image/health");
 assert.equal(await wrongPort.text(), "native-network");
 
-assert.equal(bridgeCalls.length, 3, "Only active launcher Image Studio API calls should be proxied.");
+assert.equal(bridgeCalls.length, 3, "Local and forced launcher generation requests should be proxied.");
 assert.equal(nativeCalls.length, 3, "Non-generation network requests must retain native fetch.");
 console.log("ImageGen proxy contract: PASS");
