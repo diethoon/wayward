@@ -93,7 +93,9 @@ public final class ImageGenService extends Service {
             starting = false;
             statusMessage = "이미지 생성 서버가 중지되었습니다.";
             stopRuntime();
-            updateNotification(statusMessage);
+            // Do not repost the foreground notification while removing it.
+            // Persist the stopped state, then remove the service notification.
+            persistState();
             stopForeground(true);
             stopSelf(startId);
             return START_NOT_STICKY;
