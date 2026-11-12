@@ -70,6 +70,12 @@ test('popup bridge binds exact Pages origin, popup WindowProxy, nonce, session a
   assert.doesNotMatch(mod, /authPopup\.postMessage[\s\S]{0,220}'\*'/);
 });
 
+test('auth page reload starts a fresh 30-second handshake timeout', () => {
+  assert.match(mod, /data\.type === 'wayward-cloudsave-page-ready'[\s\S]{0,800}인증 페이지 재연결 시간 초과/);
+  assert.match(mod, /bridgeHandshakeTimer = setTimeout\(\(\) => \{/);
+  assert.match(mod, /}, 30000\);/);
+});
+
 test('the game distinguishes a generic Drive permission denial from an explicit confirmed revoke', () => {
   assert.match(mod, /bridgeStatus === 'permission-revoked'[\s\S]{0,180}markPermissionRevoked\(\)/);
   assert.match(mod, /'permission-denied': 'Google Drive API가 권한을 거부했습니다/);
