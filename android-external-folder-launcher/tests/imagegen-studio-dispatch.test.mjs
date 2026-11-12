@@ -25,8 +25,10 @@ const directImageRouteSource = readBackend("routes/image.ts");
 assert.match(batchRoutesSource,
   /typeof item\.talentId !== 'string' \|\| typeof item\.prompt !== 'string'/,
   "the production batch API requires talentId and prompt on every item");
-assert.doesNotMatch(directImageRouteSource, /WORKFLOWS\\.includes\\(requestedWorkflow\\)|unknown workflow:/,
+assert.equal(directImageRouteSource.includes("WORKFLOWS.includes(requestedWorkflow)"), false,
   "the direct image endpoint must not reject a request because of a game-selected engine name");
+assert.equal(directImageRouteSource.includes("unknown workflow:"), false,
+  "the direct image endpoint must not validate game-selected engine names");
 assert.match(directImageRouteSource,
   /function activeImageWorkflow\(_requested: WorkflowType, config: Config\)[\s\S]*?return config\.imageProvider === 'nai' \|\| config\.imageProvider === 'launcher'[\s\S]*?config\.imageProvider === 'anima' \? 'anima' : 'illustrious'/,
   "the direct /api/image/generate route must ignore the game's requested workflow and use the launcher's configured engine");
