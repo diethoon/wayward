@@ -13,7 +13,9 @@ for (const required of [
   "explicitLogout = true",
   "const forceSelectAccount = explicitLogout || sessionPolicy === 'reauth'",
   "startGoogleDriveAuthWithPolicy(nonce, !!forceSelectAccount)",
-  "startGoogleDriveAuthWithPolicy(nonce, !!forceSelectAccount)",
+  "permissionRevoked = loadLogoutMarker() === 'revoked'",
+  "function markPermissionRevoked()",
+  "markExplicitLogout(revoked)",
   "function attemptNativeSessionRestore()",
   "function requestNativeGoogleRevoke()",
   "async function revokeGooglePermission()",
@@ -34,7 +36,7 @@ for (const required of [
   "client.requestAccessToken({prompt:loginPolicy==='select_account'?'select_account':'',state:nonce})",
   "google.accounts.oauth2.hasGrantedAllScopes(response,DRIVE_SCOPE)",
   "code:'scope_missing'",
-  "google.accounts.oauth2.revoke"
+  "google.accounts.oauth2.revoke",
   '<meta name="referrer" content="strict-origin-when-cross-origin">',
 ]) assert.ok(page.includes(required), 'missing Pages auth policy contract: ' + required);
 
