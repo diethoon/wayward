@@ -350,7 +350,7 @@ async function exerciseEngine(engine) {
 
 assert.match(mainActivitySource, /@JavascriptInterface public void imageGenProxyFetch\(String requestId,String method,String path,String headersJson,String bodyBase64\)\{\s*ImageGenProxy\.dispatch\(web,requestId,method,path,headersJson,bodyBase64\);\s*\}/,
   "the real WebView JavaScript interface must dispatch intercepted Image Studio requests to ImageGenProxy");
-assert.match(mainActivitySource, /version\s*=\s*"launcher-imagegen:"\s*\+\s*ImageGenBackendInstaller\.VERSION\s*\+\s*":"\s*\+\s*providerMode/,
+assert.match(mainActivitySource, /String launchVersion\s*=\s*"launcher-imagegen:"\s*\+\s*ImageGenBackendInstaller\.VERSION\s*\+\s*":"\s*\+\s*mode/,
   "the active NovelAI or ComfyUI engine mode must be present in the runtime identity");
 assert.match(proxyJava, /new URL\("http:\/\/127\.0\.0\.1:8189" \+ safePath\)/,
   "the native WebView proxy must target only the launcher-managed loopback server");
