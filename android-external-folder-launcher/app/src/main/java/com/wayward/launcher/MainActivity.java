@@ -709,7 +709,7 @@ public final class MainActivity extends Activity {
             return;
         }
         try {
-            for (String assetName : new String[] {"imagegen-proxy.js", "image-provider-bridge.js", "imagegen-studio-bridge.js"}) {
+            for (String assetName : new String[] {"imagegen-proxy.js", "imagegen-studio-bridge.js"}) {
                 try (InputStream in = getAssets().open(assetName)) {
                     ByteArrayOutputStream out = new ByteArrayOutputStream();
                     byte[] buffer = new byte[8192];
@@ -778,131 +778,57 @@ public final class MainActivity extends Activity {
     private void ensureImageGenServer(SafTree sessionTree, Runnable afterReady) {
         if (afterReady != null) imageGenReadyCallbacks.add(afterReady);
         if (sessionTree == null) {
-            imageGenSessionMessage = "현재 게임 세션의 폴더를 확인할 수 없어 이미지 서버 자동 시작을 건너뛰었습니다.";
-            finishImageGenCallbacks();
-            refreshImageGenStatus();
-            return;
-        }
-
-        if (manualImageGenPreparing) {
-            imageGenSessionMessage = "이미지 생성 서버 준비가 진행 중입니다. 준비가 끝난 뒤 현재 세션을 다시 여세요.";
+            imageStudioSessionDetected = false;
+            imageGenSessionMessage = "현재 게임 세션 폴더를 확인할 수 없습니다. 기존 이미지팩을 사용합니다.";
             refreshImageGenStatus();
             finishImageGenCallbacks();
             return;
         }
-        if (imageGenCopying) {
-            waitForImageGenReady();
-            return;
-        }
 
-        final String providerMode;
-        final String providerProfileId;
-        final String providerId;
-        final String version;
         try {
             String detected = imageStudioModId(sessionTree);
             imageStudioSessionDetected = "imagestudio".equals(detected);
             if (detected == null) {
-                imageGenSessionMessage = "현재 세션의 WML Image Studio 모드가 없어 이미지 서버를 시작하지 않았습니다.";
+                imageGenSessionMessage = "현재 세션에 WML Image Studio 모드가 없습니다. 기존 이미지팩을 사용합니다.";
                 refreshImageGenStatus();
                 finishImageGenCallbacks();
                 return;
             }
-            String selectedMode = "novelai";
-            String selectedProfile = "";
-            String selectedProvider = "";
-            if (activeProfileId != null && activeProfileId.matches("[a-f0-9]{32}")) {
-                ImageProviderStore.Snapshot providers = new ImageProviderStore(this).load();
-                String defaultId = providers.defaults.get(activeProfileId);
-                if (defaultId != null && !defaultId.trim().isEmpty()) {
-                    ImageProviderStore.Provider selected = ImageProviderStore.find(providers, defaultId);
-                    if (selected == null) {
-                        throw new IllegalStateException("이 게임의 기본 이미지 서비스를 찾지 못했습니다. 런처의 이미지 서비스 설정에서 다시 지정해 주세요.");
-                    }
-                    if (!selected.enabled) {
-                        throw new IllegalStateException("이 게임의 기본 이미지 서비스가 비활성화되었습니다. 이미지 서비스 목록에서 다시 활성화해 주세요.");
-                    }
-                    if (!selected.allowInGame) {
-                        throw new IllegalStateException("기본 이미지 서비스의 인게임 사용이 차단되어 있습니다. 이미지 서비스 화면에서 '인게임 생성 연결 허용'을 눌러 주세요.");
-                    }
-                    selectedMode = "launcher";
-                    selectedProfile = activeProfileId;
-                    selectedProvider = selected.id;
-                }
-            }
-            providerMode = selectedMode;
-            providerProfileId = selectedProfile;
-            providerId = selectedProvider;
-            version = "launcher-imagegen:" + ImageGenBackendInstaller.VERSION + ":" + providerMode
-                    + ("launcher".equals(providerMode) ? ":" + providerProfileId + ":" + providerId : "");
-        } catch (Exception e) {
-            imageGenSessionMessage = "현재 세션의 Image Studio / 이미지 서비스 확인 실패: " + msg(e);
+        } catch (Exception error) {
+            imageStudioSessionDetected = false;
+            imageGenSessionMessage = "Image Studio 모드 확인 실패: " + msg(error) + " · 기존 이미지팩을 사용합니다.";
             refreshImageGenStatus();
             finishImageGenCallbacks();
             return;
         }
 
-        ImageGenStatusStore.State shared = ImageGenStatusStore.read(getFilesDir());
-        if (shared.isAvailable() || shared.isStarting()) {
-            if (!sameImageGenVersion(shared.backendVersion, version)) {
-                imageGenSessionMessage = "현재 세션 Image Studio 버전(" + version + ")이 실행 중 서버 버전("
-                        + safeVersion(shared.backendVersion) + ")과 달라 공유하지 않았습니다. 실행 중인 서버를 중지한 뒤 세션을 다시 열어 주세요.";
-                refreshImageGenStatus();
-                finishImageGenCallbacks();
-                return;
-            }
-            imageGenSessionMessage = "현재 세션의 Image Studio " + version + "을 공통 이미지 서버에 연결합니다.";
-            waitForImageGenReady();
+        // Opening a game session must never choose or start an engine implicitly.
+        // Only an explicit server start from the launcher can enable generation.
+        ImageGenStatusStore.State state = ImageGenStatusStore.read(getFilesDir());
+        if (!state.isAvailable() && !state.isStarting()) {
+            imageGenSessionMessage = "런처 이미지 생성 서버가 꺼져 있습니다. 생성 요청은 차단되고 기존 이미지팩만 사용합니다.";
+            refreshImageGenStatus();
+            finishImageGenCallbacks();
             return;
         }
 
-        synchronized (IMAGEGEN_LOCK) {
-            shared = ImageGenStatusStore.read(getFilesDir());
-            if (shared.isAvailable() || shared.isStarting()) {
-                if (!sameImageGenVersion(shared.backendVersion, version)) {
-                    imageGenSessionMessage = "다른 세션에서 다른 Image Studio 버전의 서버가 실행 중입니다. 현재 서버를 중지한 뒤 다시 시도해 주세요.";
-                    refreshImageGenStatus();
-                    finishImageGenCallbacks();
-                    return;
-                }
-                waitForImageGenReady();
-                return;
-            }
-            if (imageGenCopying) {
-                waitForImageGenReady();
-                return;
-            }
-            imageGenCopying = true;
+        String engine = "런처";
+        String[] versionParts = state.backendVersion == null ? new String[0] : state.backendVersion.split(":");
+        if (versionParts.length >= 3) {
+            String mode = versionParts[2];
+            if ("novelai".equals(mode)) engine = "NovelAI";
+            else if ("comfy".equals(mode)) engine = "ComfyUI";
+            else if ("launcher".equals(mode)) engine = "런처 등록 이미지 서비스";
         }
-
-        imageGenSessionMessage = "현재 세션의 Image Studio 백엔드를 확인하고 런처 서버에 연결하는 중입니다…";
+        if (state.isReady()) {
+            imageGenSessionMessage = "런처에서 선택한 " + engine + " 서버를 사용합니다. 게임 내부 엔진·서버 설정은 적용되지 않습니다.";
+        } else if (state.isStarting()) {
+            imageGenSessionMessage = "런처에서 선택한 " + engine + " 서버가 시작 중입니다. 준비될 때까지 이미지팩만 사용합니다.";
+        } else {
+            imageGenSessionMessage = "런처에서 선택한 " + engine + " 서버가 준비되지 않았습니다. 이미지 생성은 차단되고 기존 이미지팩만 사용합니다.";
+        }
         refreshImageGenStatus();
-        new Thread(() -> {
-            String problem = null;
-            File backend = imageGenBackendRoot();
-            try {
-                synchronized (IMAGEGEN_LOCK) {
-                    if (!ensureImageGenBackend(sessionTree)) {
-                        throw new IllegalStateException("현재 런처 APK에 포함된 ImageGen 서버 자산을 찾지 못했습니다.");
-                    }
-                }
-                writeImageGenRuntimeConfig(backend, providerMode, "", providerProfileId, providerId);
-            } catch (Throwable error) {
-                problem = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
-            }
-            final String failure = problem;
-            runOnUiThread(() -> {
-                imageGenCopying = false;
-                if (failure != null) {
-                    imageGenSessionMessage = "Image Studio 백엔드 준비 실패: " + failure;
-                    refreshImageGenStatus();
-                    finishImageGenCallbacks();
-                    return;
-                }
-                startImageGenService(backend, version, providerMode, "", providerProfileId, providerId);
-                waitForImageGenReady();
-            });
-        }, "wayward-imagegen-session-prepare").start();
+        waitForImageGenReady();
     }
 
     private static boolean sameImageGenVersion(String running, String requested) {
@@ -1379,12 +1305,6 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public String version(){return "0.3.2";}
         @JavascriptInterface public void imageGenProxyFetch(String requestId,String method,String path,String headersJson,String bodyBase64){
             ImageGenProxy.dispatch(web,requestId,method,path,headersJson,bodyBase64);
-        }
-        @JavascriptInterface public String listImageProviders(){
-            return ImageProviderBridge.list(MainActivity.this,activeProfileId);
-        }
-        @JavascriptInterface public void generateImageWithProvider(String requestId,String providerId,String prompt,int width,int height){
-            ImageProviderBridge.generate(MainActivity.this,web,activeProfileId,requestId,providerId,prompt,width,height);
         }
         @JavascriptInterface public String imageGenRuntimeStatus(){
             ImageGenStatusStore.State state=ImageGenStatusStore.read(getFilesDir());
