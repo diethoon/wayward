@@ -1,0 +1,53 @@
+name: Temporary CloudSave source scan
+
+on:
+  push:
+    branches: ["diag/cloudsave-auth-source-scan-20261113"]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout published repository snapshot
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Inspect CloudSave archive without printing full source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          from pathlib import Path
+          import hashlib, re
+
+          archive = Path("Wayward_Google_Drive_CloudSave_v0.4.4_pre7.zip")
+          print("ARCHIVE", archive.stat().st_size, hashlib.sha256(archive.read_bytes()).hexdigest())
+          patterns = [
+              r"auth\\.html", r"nonce", r"getRandomValues", r"randomUUID",
+              r"window\\.open", r"postMessage", r"transport", r"crypto\\."
+          ]
+          with ZipFile(archive) as z:
+              for name in z.namelist():
+                  info = z.getinfo(name)
+                  data = z.read(name)
+                  digest = hashlib.sha256(data).hexdigest()
+                  print("ENTRY", name, info.file_size, digest)
+                  try:
+                      source = data.decode("utf-8")
+                  except UnicodeDecodeError:
+                      continue
+                  if not name.lower().endswith((".js", ".html", ".json", ".txt")):
+                      continue
+                  shown = 0
+                  for pat in patterns:
+                      for m in list(re.finditer(pat, source, re.I))[:8]:
+                          lo, hi = max(0, m.start()-220), min(len(source), m.end()+320)
+                          excerpt = source[lo:hi].replace("\\r", " ").replace("\\n", " ")
+                          print("MATCH", name, pat, "offset", m.start(), excerpt)
+                          shown += 1
+                          if shown >= 36: break
+                      if shown >= 36: break
+          PY
