@@ -1,4 +1,4 @@
-name: Temporary CloudSave source scan
+name: Temporary CloudSave source and live-page scan
 
 on:
   push:
@@ -25,29 +25,63 @@ jobs:
 
           archive = Path("Wayward_Google_Drive_CloudSave_v0.4.4_pre7.zip")
           print("ARCHIVE", archive.stat().st_size, hashlib.sha256(archive.read_bytes()).hexdigest())
-          patterns = [
-              r"auth\\.html", r"nonce", r"getRandomValues", r"randomUUID",
-              r"window\\.open", r"postMessage", r"transport", r"crypto\\."
-          ]
+          patterns = [r"auth\\.html", r"nonce", r"getRandomValues", r"window\\.open", r"transport"]
           with ZipFile(archive) as z:
               for name in z.namelist():
                   info = z.getinfo(name)
                   data = z.read(name)
-                  digest = hashlib.sha256(data).hexdigest()
-                  print("ENTRY", name, info.file_size, digest)
-                  try:
-                      source = data.decode("utf-8")
-                  except UnicodeDecodeError:
-                      continue
-                  if not name.lower().endswith((".js", ".html", ".json", ".txt")):
-                      continue
+                  print("ENTRY", name, info.file_size, hashlib.sha256(data).hexdigest())
+                  try: source = data.decode("utf-8")
+                  except UnicodeDecodeError: continue
+                  if not name.lower().endswith((".js", ".html", ".json", ".txt")): continue
                   shown = 0
                   for pat in patterns:
-                      for m in list(re.finditer(pat, source, re.I))[:8]:
-                          lo, hi = max(0, m.start()-220), min(len(source), m.end()+320)
+                      for m in list(re.finditer(pat, source, re.I))[:6]:
+                          lo, hi = max(0, m.start()-180), min(len(source), m.end()+260)
                           excerpt = source[lo:hi].replace("\\r", " ").replace("\\n", " ")
                           print("MATCH", name, pat, "offset", m.start(), excerpt)
                           shown += 1
-                          if shown >= 36: break
-                      if shown >= 36: break
+                          if shown >= 30: break
+                      if shown >= 30: break
+          PY
+      - name: Verify live GitHub Pages response and cache headers
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request, urllib.parse, hashlib, re
+
+          base = "https://jeiky224.github.io/cloud/"
+          nonces = ["0123456789abcdef" * 3, "fedcba9876543210" * 3]
+          pages = []
+          for nonce in nonces:
+              q = urllib.parse.urlencode({
+                  "origin": "https://localhost:8080",
+                  "nonce": nonce,
+                  "login": "remember",
+                  "transport": "native-webview",
+                  "_wml_auth_build": "20261113-2"
+              })
+              url = base + "auth.html?" + q
+              req = urllib.request.Request(url, headers={"User-Agent":"Wayward-CloudSave-Diagnostic/1.0"})
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  body = response.read()
+                  headers = response.headers
+                  print("HTML", response.status, hashlib.sha256(body).hexdigest(),
+                        "length", len(body), "script", re.findall(rb'<script[^>]+src=["\\']([^"\\']*auth\\.js[^"\\']*)', body)[:2])
+                  for k in ("Cache-Control","Age","ETag","Last-Modified","Date","Vary","Via","X-Cache","X-Served-By","Server"):
+                      if headers.get(k): print("HTML_HEADER", k, headers.get(k))
+                  pages.append(body)
+          print("HTML_BODY_IDENTICAL_FOR_DISTINCT_NONCES", pages[0] == pages[1])
+
+          for suffix in ("auth.js", "auth.js?v=20261113-2"):
+              url = base + suffix
+              req = urllib.request.Request(url, headers={"User-Agent":"Wayward-CloudSave-Diagnostic/1.0"})
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  body = response.read()
+                  print("JS", suffix, response.status, len(body), hashlib.sha256(body).hexdigest(),
+                        "nativeWebView", b"nativeWebViewTransportRequested" in body,
+                        "setsNativeHandler", b"nativeHost.onmessage = handleNativeHostMessage" in body,
+                        "legacyWindowError", "Wayward 게임 창을 찾을 수 없습니다".encode() in body)
+                  for k in ("Cache-Control","Age","ETag","Last-Modified","Date","Vary","Via","X-Cache","X-Served-By","Server"):
+                      if response.headers.get(k): print("JS_HEADER", k, response.headers.get(k))
           PY
