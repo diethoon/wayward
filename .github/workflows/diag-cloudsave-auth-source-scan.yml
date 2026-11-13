@@ -6,6 +6,8 @@ on:
 
 permissions:
   contents: read
+  pages: read
+  deployments: read
 
 jobs:
   inspect:
@@ -15,6 +17,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: main
+      - name: Inspect Pages configuration and recent deployment records
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          echo "PAGES_CONFIGURATION"
+          gh api "repos/$GITHUB_REPOSITORY/pages" --jq '{url, status, build_type, source, cname, html_url}' || true
+          echo "RECENT_GITHUB_PAGES_DEPLOYMENTS"
+          gh api "repos/$GITHUB_REPOSITORY/deployments?environment=github-pages&per_page=10" --jq '.[] | [.id, .sha, .environment, .created_at, .updated_at, .task, .ref] | @tsv' || true
       - name: Inspect CloudSave archive without printing full source
         shell: bash
         run: |
