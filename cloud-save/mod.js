@@ -55,6 +55,8 @@ WML.define({
     let preparedSlotRead = null;
     let lastListMetrics = null;
     let driveBodyDownloadCount = 0;
+    let authStartedAt = 0;
+    let authCompletedAt = 0;
     const SLOT_CACHE_KEY_PREFIX = 'wml-google-drive-slot-metadata-v1:';
     const slotMetadataMemoryCache = new Map();
 
@@ -203,6 +205,7 @@ WML.define({
       }
       resetDriveListState();
       accessToken = payload.accessToken;
+      authCompletedAt = Date.now();
       tokenExpiresAt = Date.now() +
         Math.max(60, Math.min(3600, Number(payload.expiresIn) || 3600)) * 1000;
       explicitLogout = false;
@@ -384,6 +387,8 @@ WML.define({
           typeof host.takePendingStateForNonce !== 'function') return;
       startupRestoreAttempted = true;
       const attempt = ++authAttemptSerial;
+      authStartedAt = Date.now();
+      authCompletedAt = 0;
       let nonce;
       try { nonce = createAuthNonce(); }
       catch (error) {
@@ -492,17 +497,18 @@ WML.define({
       try {
         const response = await driveFetch('/drive/v3/about?fields=user(permissionId)');
         const about = await response.json();
+        const aboutBytes = JSON.stringify(about).length;
         const permissionId = String(about && about.user && about.user.permissionId || '');
-        if (!permissionId) return { memoryKey: '', storageKey: '', apiCalls: 1 };
+        if (!permissionId) return { memoryKey: '', storageKey: '', apiCalls: 1, responseBytes: aboutBytes };
         driveAccountCacheIdentity = {
           memoryKey: permissionId,
           storageKey: await accountCacheStorageKey(permissionId)
         };
-        return Object.assign({ apiCalls: 1 }, driveAccountCacheIdentity);
+        return Object.assign({ apiCalls: 1, responseBytes: aboutBytes }, driveAccountCacheIdentity);
       } catch (_) {
         // Account metadata is an optional cache optimization. A failure here
         // must not prevent the actual appDataFolder list request from working.
-        return { memoryKey: '', storageKey: '', apiCalls: 1 };
+        return { memoryKey: '', storageKey: '', apiCalls: 1, responseBytes: 0 };
       }
     }
 
@@ -537,6 +543,7 @@ WML.define({
         ? performance.now() : Date.now();
       const startedAt = now();
       const bodyCountAtStart = driveBodyDownloadCount;
+      let cacheDisplayMs = null;
       const controller = typeof AbortController === 'function' ? new AbortController() : null;
       driveListAbortController = controller;
       const requestOptions = controller ? { signal: controller.signal } : undefined;
@@ -606,11 +613,14 @@ WML.define({
           const cacheKey = await accountTask;
           if (generation !== driveListGeneration) return [];
           driveAccountMemoryKey = cacheKey.memoryKey;
+          apiCalls += Number(cacheKey.apiCalls) || 0;
+          responseBytes += Number(cacheKey.responseBytes) || 0;
           if (!driveSlots.length) {
             const cached = readAccountSlotCache(cacheKey);
             if (cached) {
               driveSlots = cached;
               driveMetadataCacheAvailable = true;
+              cacheDisplayMs = Math.max(0, Math.round(now() - startedAt));
               if (isConnected()) render();
             }
           }
@@ -628,14 +638,21 @@ WML.define({
             responseBytes,
             bodyDownloads: driveBodyDownloadCount - bodyCountAtStart,
             slotCount: freshFiles.length,
-            durationMs: Math.max(0, Math.round(now() - startedAt))
+            durationMs: Math.max(0, Math.round(now() - startedAt)),
+            authDurationMs: authStartedAt && authCompletedAt
+              ? Math.max(0, authCompletedAt - authStartedAt) : null,
+            authToListStartMs: authCompletedAt
+              ? Math.max(0, Math.round(startedAt - authCompletedAt)) : null,
+            cacheFirstDisplayMs: cacheDisplayMs
           };
+          const renderStartedAt = now();
+          if (isConnected()) render();
+          lastListMetrics.renderMs = Math.max(0, Math.round(now() - renderStartedAt));
           try {
             if (typeof console !== 'undefined' && console.info) {
               console.info('[Wayward CloudSave] metadata list metrics', lastListMetrics);
             }
           } catch (_) {}
-          if (isConnected()) render();
           return driveSlots;
         } catch (error) {
           if (generation !== driveListGeneration || (error && error.name === 'AbortError')) return [];
@@ -911,6 +928,8 @@ WML.define({
         try { cancel(); } catch (_) {}
       }
       const attempt = ++authAttemptSerial;
+      authStartedAt = Date.now();
+      authCompletedAt = 0;
       const forceSelectAccount = explicitLogout;
       let task;
       try { task = requestGoogleToken(forceSelectAccount); }
