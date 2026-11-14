@@ -104,3 +104,59 @@ jobs:
           else:
               print("MISSING cloud-save/mod.js in branch")
           PY
+
+  inspect-wml-core:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact WML archive snapshot
+        uses: actions/checkout@v4
+      - name: Scan WML core and enabled mod list in 4096-byte chunks
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          from io import BytesIO
+          import hashlib
+
+          raw=Path("wayward 11.2.zip").read_bytes()
+          with ZipFile(BytesIO(raw)) as z:
+              names=[x.filename for x in z.infolist() if not x.is_dir()]
+              core_path=next(p for p in names if p.endswith("/wml/runtime/wml-core.js"))
+              mods_path=next(p for p in names if p.endswith("/wml/mods/mods.js"))
+              cloud_paths=[p for p in names if "cloud-save" in p.lower() or "cloudsave" in p.lower()]
+              print("CLOUD_SAVE_PATHS " + repr(cloud_paths))
+              core=z.read(core_path)
+              terms=[b"WML.define",b"WML.enable",b"define(",b"loadMod",b"loadScript",
+                     b"mod.setup",b"setup(api)",b"setup.call",b"new Function",b"eval(",
+                     b"createElement('script')",b'createElement("script")',b"script.src",
+                     b"mods.js",b"mod.js",b"loadAfter",b"requires"]
+              hashes=[]; found={}
+              digest=hashlib.sha256(); tail=b""
+              for offset in range(0,len(core),4096):
+                  chunk=core[offset:offset+4096]
+                  digest.update(chunk)
+                  hashes.append(hashlib.sha256(chunk).hexdigest())
+                  probe=tail+chunk; base=offset-len(tail); low=probe.lower()
+                  for term in terms:
+                      at=0
+                      while True:
+                          pos=low.find(term.lower(),at)
+                          if pos<0:break
+                          absolute=base+pos
+                          if absolute>=0 and absolute not in found.setdefault(term.decode(),[]):found[term.decode()].append(absolute)
+                          at=pos+1
+                  tail=probe[-max(map(len,terms)):]
+              text=core.decode("utf-8","replace")
+              print(f"CORE {core_path} bytes={len(core)} chunks={len(hashes)} sha256={digest.hexdigest()}")
+              for term,positions in found.items():
+                  if not positions:continue
+                  print(f"HIT {term!r} count={len(positions)} offsets={positions[:40]}")
+                  for pos in positions[:4]:
+                      left=max(0,pos-380);right=min(len(core),pos+len(term)+700)
+                      print("  CONTEXT "+repr(text[left:right]))
+              mods=z.read(mods_path)
+              print(f"MODS {mods_path} bytes={len(mods)} sha256={hashlib.sha256(mods).hexdigest()}")
+              print("MODS_JS "+repr(mods.decode("utf-8","replace")[:2200]))
+              print("MODS_HAS_CLOUD_SAVE "+str(b'"cloud-save"' in mods or b"'cloud-save'" in mods))
+          PY
