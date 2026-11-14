@@ -84,7 +84,7 @@ for (const count of [0, 20, 100, 500]) {
   const elapsed = performance.now() - started;
   assert.equal(slots.length, count);
   assert.equal(slots[0] && slots[0].name, count ? 'wayward-cloud-slot-1.json' : undefined);
-  assert.equal(slots.at(-1) && Number(slots.at(-1).name.slice(19, -5)), count || undefined);
+  assert.equal(slots.at(-1) && Number(slots.at(-1).name.slice('wayward-cloud-slot-'.length, -5)), count || undefined);
   console.log('SYNTHETIC_METADATA', JSON.stringify({
     slots: count, normalized: slots.length, cpuMs: Number(elapsed.toFixed(3)),
     bodyDownloads: 0, decryptMs: 0
