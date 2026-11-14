@@ -26,7 +26,7 @@ jobs:
       - name: Test file URL origin handling
         run: node --test tests/cloudsave-file-origin.test.cjs
       - name: Check patch whitespace
-        run: git diff --check HEAD^ HEAD
+        run: git diff --check ae072bb7b392ea501551647a4ec65218a3118567 HEAD
       - name: Package CloudSave
         run: |
           mkdir -p dist
