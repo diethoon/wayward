@@ -1,0 +1,106 @@
+name: CloudSave bridge source archive forensics
+
+on:
+  push:
+    branches:
+      - forensics/cloudsave-source-bridge-20261114
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-cloudsave:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact CloudSave forensic branch
+        uses: actions/checkout@v4
+      - name: Compare archived package revisions and current module
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, BadZipFile
+          from io import BytesIO
+          import hashlib
+
+          archives = [
+              Path("Wayward_Google_Drive_CloudSave_v0.4.4_pre7.zip"),
+              Path("Wayward_Google_Drive_CloudSave_v0.5.0.zip"),
+              Path("Wayward_Google_Drive_CloudSave_v0.5.1.zip"),
+              Path("Wayward_Google_Drive_CloudSave_v0.5.2.zip"),
+              Path("Wayward_Google_Drive_CloudSave_v0.6.0.zip"),
+              Path("Wayward_Google_Drive_CloudSave_v0.6.1.zip"),
+          ]
+          terms = [
+              "createAuthNonce", "function createAuthNonce", "const createAuthNonce",
+              "let createAuthNonce", "var createAuthNonce", "nonceBytes",
+              "crypto.getRandomValues", "window.open", "WMLHost",
+              "startGoogleDriveAuth", "AUTH BRIDGE URL", "AUTH_PAGE_URL",
+              "WML.define", "setup(api)"
+          ]
+
+          def scan_module(label, data):
+              digest = hashlib.sha256()
+              carry = b""
+              hits = {term: [] for term in terms}
+              chunks = 0
+              for offset in range(0, len(data), 4096):
+                  chunk = data[offset:offset+4096]
+                  digest.update(chunk)
+                  chunks += 1
+                  probe = carry + chunk
+                  base = offset - len(carry)
+                  low = probe.lower()
+                  for term in terms:
+                      needle = term.encode("utf-8").lower()
+                      start = 0
+                      while True:
+                          i = low.find(needle, start)
+                          if i < 0:
+                              break
+                          pos = base + i
+                          if pos >= 0 and pos not in hits[term]:
+                              hits[term].append(pos)
+                          start = i + 1
+                  carry = probe[-96:]
+              text = data.decode("utf-8", "replace")
+              print(f"MODULE {label} bytes={len(data)} chunks={chunks} sha256={digest.hexdigest()}")
+              print("  HEADER " + repr(text[:700]))
+              for term in terms:
+                  positions = hits[term]
+                  if positions:
+                      print(f"  {term!r} count={len(positions)} offsets={positions[:12]}")
+                      if term in ("createAuthNonce", "nonceBytes", "crypto.getRandomValues", "WMLHost", "startGoogleDriveAuth", "AUTH BRIDGE URL", "AUTH_PAGE_URL"):
+                          for pos in positions[:3]:
+                              left=max(0,pos-300); right=min(len(text),pos+len(term)+520)
+                              print("    " + repr(text[left:right]))
+              declared = any(x in text for x in (
+                  "function createAuthNonce", "const createAuthNonce",
+                  "let createAuthNonce", "var createAuthNonce"
+              ))
+              print("  CHECK createAuthNonce_declared=" + str(declared) +
+                    " occurrences=" + str(len(hits["createAuthNonce"])))
+
+          def scan_zip(path):
+              if not path.exists():
+                  print(f"MISSING {path}")
+                  return
+              raw=path.read_bytes()
+              print(f"ARCHIVE {path} bytes={len(raw)} sha256={hashlib.sha256(raw).hexdigest()}")
+              try:
+                  with ZipFile(BytesIO(raw)) as z:
+                      for info in z.infolist():
+                          if not info.is_dir() and info.filename.replace("\\","/").lower().endswith("cloud-save/mod.js"):
+                              scan_module(str(path)+"!"+info.filename,z.read(info))
+              except BadZipFile:
+                  print(f"INVALID_ZIP {path}")
+
+          for path in archives:
+              scan_zip(path)
+
+          direct = Path("cloud-save/mod.js")
+          if direct.exists():
+              scan_module(str(direct), direct.read_bytes())
+          else:
+              print("MISSING cloud-save/mod.js in branch")
+          PY
