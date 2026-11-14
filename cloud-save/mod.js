@@ -763,7 +763,6 @@ WML.define({
       const file = currentFile(slot);
       if (!file) throw new Error('삭제할 저장 파일을 찾지 못했습니다.');
       await driveFetch('/drive/v3/files/' + encodeURIComponent(file.id), { method: 'DELETE' });
-      preparedSlotRead = null;
       await refreshSlots();
     }
 
