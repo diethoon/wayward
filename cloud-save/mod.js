@@ -50,6 +50,7 @@ WML.define({
     let driveListPromise = null;
     let driveListAbortController = null;
     let driveAccountMemoryKey = '';
+    let driveAccountCacheIdentity = null;
     let driveMetadataCacheAvailable = false;
     let preparedSlotRead = null;
     let lastListMetrics = null;
@@ -153,6 +154,7 @@ WML.define({
       driveListAbortController = null;
       driveListPromise = null;
       driveAccountMemoryKey = '';
+      driveAccountCacheIdentity = null;
       driveMetadataCacheAvailable = false;
       driveSlots = [];
       slotsStatus = 'not-loaded';
@@ -479,19 +481,23 @@ WML.define({
     }
 
     async function resolveDriveAccountCache() {
+      if (driveAccountCacheIdentity) {
+        return Object.assign({ apiCalls: 0 }, driveAccountCacheIdentity);
+      }
       try {
         const response = await driveFetch('/drive/v3/about?fields=user(permissionId)');
         const about = await response.json();
         const permissionId = String(about && about.user && about.user.permissionId || '');
-        if (!permissionId) return { memoryKey: '', storageKey: '' };
-        return {
+        if (!permissionId) return { memoryKey: '', storageKey: '', apiCalls: 1 };
+        driveAccountCacheIdentity = {
           memoryKey: permissionId,
           storageKey: await accountCacheStorageKey(permissionId)
         };
+        return Object.assign({ apiCalls: 1 }, driveAccountCacheIdentity);
       } catch (_) {
         // Account metadata is an optional cache optimization. A failure here
         // must not prevent the actual appDataFolder list request from working.
-        return { memoryKey: '', storageKey: '' };
+        return { memoryKey: '', storageKey: '', apiCalls: 1 };
       }
     }
 
@@ -543,7 +549,7 @@ WML.define({
           // SHA-256 digest of Drive permissionId, never an email or access token.
           const accountTask = (async () => {
             const cache = await resolveDriveAccountCache();
-            apiCalls += 1;
+            apiCalls += Number(cache.apiCalls) || 0;
             return cache;
           })();
           const listTask = (async () => {
