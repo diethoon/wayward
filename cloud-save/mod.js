@@ -498,7 +498,6 @@ WML.define({
         }
       }
       const slotNumber = file => Number(file.name.slice(FILE_PREFIX.length, -5));
-      const slotNumber = file => Number(file.name.slice(FILE_PREFIX.length, -5));
       return Array.from(slots.values()).sort((a, b) => slotNumber(a) - slotNumber(b));
     }
 
