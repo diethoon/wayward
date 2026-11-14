@@ -181,7 +181,10 @@ test('empty title screen shows no artificial empty save slot', () => {
 test('title restore applies the old snapshot and enters started=true without replacing other store fields', () => {
   let current = { started: false, state: null, keep: 'same' };
   const api = { store: { set(update) { current = update(current); } } };
-  const apply = vm.runInNewContext(`(${extractFunction('applySnapshot')})`, { api, Object, Array });
+  const restoredStateFromSnapshot = vm.runInNewContext(`(${extractFunction('restoredStateFromSnapshot')})`, { Object, Array });
+  const apply = vm.runInNewContext(`(${extractFunction('applySnapshot')})`, {
+    api, restoredStateFromSnapshot, Object, Array
+  });
   apply({
     schema: 'wayward-cloud-save', version: 1, nativeFormat: 1, gameFamily: 'wayward',
     state: { day: 18, mods: { old: true } }, modData: { cloud: 'ok' }
@@ -193,8 +196,9 @@ test('title restore applies the old snapshot and enters started=true without rep
 
 test('invalid restore is rejected before store mutation', () => {
   let writes = 0;
+  const restoredStateFromSnapshot = vm.runInNewContext(`(${extractFunction('restoredStateFromSnapshot')})`, { Object, Array });
   const apply = vm.runInNewContext(`(${extractFunction('applySnapshot')})`, {
-    api: { store: { set() { writes++; } } }, Object, Array
+    api: { store: { set() { writes++; } } }, restoredStateFromSnapshot, Object, Array
   });
   assert.throws(() => apply({ schema: 'wrong', state: {} }));
   assert.equal(writes, 0);
