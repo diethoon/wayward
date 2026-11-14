@@ -33,7 +33,7 @@ requireText('event.origin !== AUTH_BRIDGE_ORIGIN', 'auth page Origin validation'
 requireText('event.source !== bridge', 'auth popup source validation');
 requireText('payload.nonce !== nonce', 'one-time nonce validation');
 requireText("'구글 계정으로 연결'", 'unified connect button label');
-requireText("prompt: loginPolicy === 'select_account' ? 'select_account' : 'remember'", 'browser account selection policy');
+requireText("bridgeUrl.searchParams.set('login', forceSelectAccount ? 'select_account' : 'remember')", 'browser account selection policy');
 requireText('forceSelectAccount', 'native account selection policy');
 requireText('closeWatch = setInterval', 'closed auth popup cleanup');
 requireText('activeAuthCancel', 'cancellable pending authentication');
