@@ -60,7 +60,7 @@ WML.define({
     const SLOT_CACHE_KEY_PREFIX = 'wml-google-drive-slot-metadata-v1:';
     const slotMetadataMemoryCache = new Map();
 
-    // Isolated 0.6.1 GIS page. It returns one nonce-bound access token.
+    // Dedicated static GIS endpoint preserves the 0.6.1 one-time-token handoff.
     const AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/auth-061.html';
     const AUTH_BRIDGE_ORIGIN = 'https://jeiky224.github.io';
     const FILE_PREFIX = 'wayward-cloud-slot-';
@@ -497,6 +497,7 @@ WML.define({
           });
         }
       }
+      const slotNumber = file => Number(file.name.slice(FILE_PREFIX.length, -5));
       const slotNumber = file => Number(file.name.slice(FILE_PREFIX.length, -5));
       return Array.from(slots.values()).sort((a, b) => slotNumber(a) - slotNumber(b));
     }
