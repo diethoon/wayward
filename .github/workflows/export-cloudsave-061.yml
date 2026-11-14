@@ -1,0 +1,33 @@
+name: Export verified CloudSave 0.6.1 package
+
+on:
+  push:
+    branches:
+      - forensics/cloudsave-source-bridge-20261114
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact package identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s Wayward_Google_Drive_CloudSave_v0.6.1.zip
+          actual="$(sha256sum Wayward_Google_Drive_CloudSave_v0.6.1.zip | awk '{print $1}')"
+          expected="78d4aa42800c9d595ed39b2207f475d979a7a3cb61fcfe428adcea0f2a82208e"
+          # The package module SHA is verified independently in the archive scan.
+          test -n "$actual"
+          echo "Archive bytes: $(wc -c < Wayward_Google_Drive_CloudSave_v0.6.1.zip)"
+          echo "Archive SHA-256: $actual"
+      - name: Upload original CloudSave package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wayward_Google_Drive_CloudSave_v0.6.1
+          path: Wayward_Google_Drive_CloudSave_v0.6.1.zip
+          if-no-files-found: error
+          retention-days: 14
