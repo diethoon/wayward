@@ -1,0 +1,41 @@
+name: CloudSave file URL regression
+
+on:
+  push:
+    branches:
+      - fix/cloudsave-file-origin-20261114
+  pull_request:
+    branches:
+      - work/cloudsave-drive-bridge-20261113
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check JavaScript syntax
+        run: |
+          node --check cloud-save/mod.js
+          node --check cloud-save/crypto.js
+      - name: Test file URL origin handling
+        run: node --test tests/cloudsave-file-origin.test.cjs
+      - name: Check patch whitespace
+        run: git diff --check HEAD^1 HEAD
+      - name: Package CloudSave
+        run: |
+          mkdir -p dist
+          zip -r dist/Wayward_Google_Drive_CloudSave_v0.7.1.zip cloud-save
+          sha256sum dist/Wayward_Google_Drive_CloudSave_v0.7.1.zip | tee dist/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Wayward_Google_Drive_CloudSave_v0.7.1
+          path: dist/
+          if-no-files-found: error
