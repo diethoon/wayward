@@ -905,7 +905,7 @@ WML.define({
     function renderSlots(root) {
       addTitle(root, 'Google Drive 저장 슬롯');
       const canSave = hasStartedGame();
-      const bySlot = new Map(driveSlots.map(file => [Number(file.name.match(/([0-9]+)\\.json$/)[1]), file]));
+      const bySlot = new Map(driveSlots.map(file => [Number(file.name.match(/([0-9]+)\.json$/)[1]), file]));
       const used = new Set(bySlot.keys()); let nextSlot = 1; while (used.has(nextSlot)) nextSlot++;
       const slots = Array.from(bySlot.keys()).sort((a,b) => a-b);
       if (canSave && !used.has(nextSlot)) slots.push(nextSlot);
