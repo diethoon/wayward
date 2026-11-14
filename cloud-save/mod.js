@@ -36,20 +36,20 @@ WML.define({
     let driveSlots = [];
     let slotsStatus = 'not-loaded'; // not-loaded | loading | loaded | error
     let slotsError = '';
-    const SESSION_POLICY_KEY = 'wml-google-drive-session-policy-v1';
     const EXPLICIT_LOGOUT_KEY = 'wml-google-drive-explicit-logout-v1';
     const HAD_AUTH_KEY = 'wml-google-drive-had-auth-v1';
     const LEGACY_SESSION_TOKEN_KEY = 'wml-google-drive-session-token-v1';
-    let sessionPolicy = 'remember'; // remember | reauth
     let explicitLogout = false;
     let permissionRevoked = false;
     let hadPreviousAuth = false;
-    let authStatus = 'restore-pending';
+    let authStatus = 'reauth-required';
     let startupRestoreAttempted = false;
+    let authAttemptSerial = 0;
+    let activeAuthCancel = null;
 
-    // Browser auth is hosted by GitHub Pages. The official Android launcher
-    // obtains its access token through the platform Google Identity bridge.
-    const AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/';
+    // Isolated 0.6.1 GIS page. It returns one nonce-bound access token.
+    const AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/auth-061.html';
+    const AUTH_BRIDGE_ORIGIN = 'https://jeiky224.github.io';
     const FILE_PREFIX = 'wayward-cloud-slot-';
     const STYLE_ID = 'wml-google-drive-save-style';
 
@@ -97,10 +97,6 @@ WML.define({
         return true;
       } catch (_) { return false; }
     }
-    function loadSessionPolicy() {
-      const saved = readStorage(SESSION_POLICY_KEY);
-      return saved === 'reauth' || saved === 'session' ? 'reauth' : 'remember';
-    }
     function loadLogoutMarker() {
       return readStorage(EXPLICIT_LOGOUT_KEY) || '';
     }
@@ -111,24 +107,10 @@ WML.define({
       return readStorage(HAD_AUTH_KEY) === '1';
     }
     function saveAuthPreferences() {
-      writeStorage(SESSION_POLICY_KEY, sessionPolicy);
       writeStorage(EXPLICIT_LOGOUT_KEY,
         explicitLogout ? (permissionRevoked ? 'revoked' : '1') : null);
     }
-    function setSessionPolicy(policy) {
-      sessionPolicy = policy === 'reauth' ? 'reauth' : 'remember';
-      // Changing a preference must never undo an explicit logout or a
-      // permission-revoked marker. Only a successful new authorization clears it.
-      saveAuthPreferences();
-      if (hasToken()) authStatus = 'connected';
-      else if (permissionRevoked) authStatus = 'permission-revoked';
-      else if (explicitLogout) authStatus = 'explicit-logout';
-      else authStatus = sessionPolicy === 'remember'
-        ? (hadPreviousAuth ? 'restore-pending' : 'reauth-required')
-        : 'session-only';
-    }
     function markExplicitLogout(revoked) {
-      sessionPolicy = 'reauth';
       explicitLogout = true;
       permissionRevoked = revoked === true;
       if (permissionRevoked) {
@@ -139,7 +121,6 @@ WML.define({
       authStatus = permissionRevoked ? 'permission-revoked' : 'explicit-logout';
     }
     function markPermissionRevoked() {
-      sessionPolicy = 'reauth';
       explicitLogout = true;
       permissionRevoked = true;
       hadPreviousAuth = false;
@@ -147,15 +128,12 @@ WML.define({
       saveAuthPreferences();
       authStatus = 'permission-revoked';
     }
-    sessionPolicy = loadSessionPolicy();
     explicitLogout = loadExplicitLogout();
     permissionRevoked = loadLogoutMarker() === 'revoked';
     hadPreviousAuth = loadHadPreviousAuth();
     authStatus = permissionRevoked ? 'permission-revoked' :
       (explicitLogout ? 'explicit-logout' :
-        (sessionPolicy === 'remember'
-          ? (hadPreviousAuth ? 'restore-pending' : 'reauth-required')
-          : 'session-only'));
+        (hadPreviousAuth ? 'restore-pending' : 'reauth-required'));
 
     function clearToken() {
       accessToken = '';
@@ -186,11 +164,11 @@ WML.define({
         throw new Error('Google 인증 응답의 nonce가 일치하지 않습니다.');
       }
       if (payload.type === 'wayward-cloud-auth-error') {
-        if (payload.code === 'scope_missing' || payload.code === 'access_denied') {
-          markPermissionRevoked();
-        } else if (payload.code === 'login_required' || payload.code === 'interaction_required') {
+        if (payload.code === 'scope_missing') markPermissionRevoked();
+        else if (payload.code === 'login_required' || payload.code === 'interaction_required') {
           authStatus = 'google-session-expired';
-        } else authStatus = 'reauth-required';
+        } else if (payload.code === 'access_denied') authStatus = 'consent-denied';
+        else authStatus = 'reauth-required';
         throw new Error(payload.message || 'Google 로그인이 취소되었거나 실패했습니다.');
       }
       if (payload.type !== 'wayward-cloud-auth-success' ||
@@ -215,32 +193,27 @@ WML.define({
         typeof host.startGoogleDriveAuthWithPolicy === 'function' ||
         typeof host.startGoogleDriveAuth === 'function'
       );
-      if (!hasNativeStart || typeof host.takePendingStateForNonce !== 'function') {
-        if (host && typeof host.openGoogleAuthPage === 'function') {
-          return Promise.reject(new Error(
-            '이 Android WebView에는 계정 선택 정책을 전달하는 인증 브리지가 없습니다. ' +
-            '최신 공식 Wayward Launcher가 필요합니다.'
-          ));
-        }
-        return null;
-      }
-      if (forceSelectAccount && typeof host.startGoogleDriveAuthWithPolicy !== 'function') {
-        return Promise.reject(new Error(
-          '현재 Android 런처는 로그아웃 후 계정 선택을 강제하는 기능이 없습니다. 런처 업데이트가 필요합니다.'
-        ));
-      }
+      if (!hasNativeStart || typeof host.takePendingStateForNonce !== 'function') return null;
+      // Legacy launchers cannot force SELECT_ACCOUNT, so use GIS on explicit logout.
+      if (forceSelectAccount && typeof host.startGoogleDriveAuthWithPolicy !== 'function') return null;
+
       return new Promise((resolve, reject) => {
         let settled = false;
-        const deadline = Date.now() + 180000;
+        let pollTimer = null;
+        const deadline = Date.now() + 90000;
         const finish = (error, payload) => {
           if (settled) return;
           settled = true;
+          if (pollTimer !== null) clearTimeout(pollTimer);
+          if (activeAuthCancel === cancel) activeAuthCancel = null;
           if (error) reject(error);
           else {
             try { acceptAccessToken(payload, nonce); resolve(); }
             catch (failure) { reject(failure); }
           }
         };
+        const cancel = () => finish(new Error('Google 인증 요청을 취소했습니다.'));
+        activeAuthCancel = cancel;
         try {
           if (typeof host.startGoogleDriveAuthWithPolicy === 'function') {
             host.startGoogleDriveAuthWithPolicy(nonce, !!forceSelectAccount);
@@ -267,10 +240,10 @@ WML.define({
             return;
           }
           if (Date.now() >= deadline) {
-            finish(new Error('Android Google 권한 요청 시간이 초과되었습니다.'));
+            finish(new Error('Android Google 권한 요청 시간이 초과되었습니다. 다시 연결을 누르세요.'));
             return;
           }
-          setTimeout(poll, 250);
+          pollTimer = setTimeout(poll, 250);
         };
         poll();
       });
@@ -282,68 +255,104 @@ WML.define({
       if (nativeTask) return nativeTask;
 
       return new Promise((resolve, reject) => {
+        const protocol = String(window.location.protocol || '');
         const rawOrigin = String(window.location.origin || '');
-        const gameOrigin = window.location.protocol === 'file:' || rawOrigin === 'null'
-          ? 'null' : rawOrigin;
-        if (!gameOrigin || !/^https?:$/.test(window.location.protocol)) {
-          authStatus = 'reauth-required';
-          reject(new Error(
-            '이 브라우저 주소는 안전한 인증 응답 전달을 지원하지 않습니다. ' +
-            'file:// 대신 http://127.0.0.1 또는 LAN HTTP/HTTPS 주소로 게임을 여세요.'
-          ));
+        const fileMode = protocol === 'file:' || rawOrigin === 'null';
+        const gameOrigin = fileMode ? 'null' : rawOrigin;
+        if (fileMode && protocol !== 'file:' && rawOrigin !== 'null') {
+          reject(new Error('file:// 실행 Origin을 확인할 수 없습니다.'));
           return;
         }
+        if (!fileMode) {
+          try {
+            const parsed = new URL(gameOrigin);
+            if (!/^https?:$/.test(protocol) ||
+                (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+                parsed.origin !== gameOrigin || parsed.username || parsed.password) {
+              throw new Error('invalid origin');
+            }
+          } catch (_) {
+            reject(new Error('이 실행 주소는 Google 인증 응답을 안전하게 전달할 수 없습니다.'));
+            return;
+          }
+        }
+
         const bridgeUrl = new URL(AUTH_BRIDGE_URL);
-        const bridgeOrigin = bridgeUrl.origin;
         bridgeUrl.searchParams.set('origin', gameOrigin);
         bridgeUrl.searchParams.set('nonce', nonce);
         bridgeUrl.searchParams.set('login', forceSelectAccount ? 'select_account' : 'remember');
-        let bridge = null, timeout = null, settled = false;
+
+        let bridge = null, timeout = null, closeWatch = null, settled = false, helloSent = false;
         const cleanup = () => {
           window.removeEventListener('message', onMessage);
-          if (timeout) clearTimeout(timeout);
+          if (timeout !== null) clearTimeout(timeout);
+          if (closeWatch !== null) clearInterval(closeWatch);
+          timeout = null;
+          closeWatch = null;
+          if (activeAuthCancel === cancel) activeAuthCancel = null;
         };
-        const fail = error => {
+        const finishError = error => {
           if (settled) return;
-          settled = true; cleanup();
+          settled = true;
+          cleanup();
           try { if (bridge && !bridge.closed) bridge.close(); } catch (_) {}
-          if (!['permission-revoked','google-session-expired'].includes(authStatus)) {
-            authStatus = 'reauth-required';
-          }
           reject(error instanceof Error ? error : new Error(String(error || 'Google 연결에 실패했습니다.')));
         };
+        const cancel = () => finishError(new Error('Google 인증 요청을 취소했습니다.'));
+        activeAuthCancel = cancel;
         const onMessage = event => {
-          if (event.origin !== bridgeOrigin || event.source !== bridge || !event.data) return;
+          if (event.origin !== AUTH_BRIDGE_ORIGIN || event.source !== bridge ||
+              !event.data || typeof event.data !== 'object') return;
           const payload = event.data;
-          if (payload.nonce !== nonce) return;
-          if (payload.type === 'wayward-cloud-auth-error') {
-            try { acceptAccessToken(payload, nonce); } catch (error) { fail(error); }
+          if (payload.version !== 1 || payload.nonce !== nonce) return;
+          if (payload.type === 'wayward-cloud-auth-061-ready') {
+            if (helloSent) return;
+            helloSent = true;
+            try {
+              bridge.postMessage({
+                type: 'wayward-cloud-auth-061-hello', version: 1, nonce
+              }, AUTH_BRIDGE_ORIGIN);
+            } catch (_) {
+              finishError(new Error('정적 Google 인증 페이지와 보안 핸드셰이크를 완료하지 못했습니다.'));
+            }
             return;
           }
-          if (payload.type !== 'wayward-cloud-auth-success' ||
-              typeof payload.accessToken !== 'string' || !payload.accessToken) return;
+          if (payload.type !== 'wayward-cloud-auth-success' &&
+              payload.type !== 'wayward-cloud-auth-error') return;
           try { acceptAccessToken(payload, nonce); }
-          catch (error) { fail(error); return; }
-          settled = true; cleanup();
+          catch (error) { finishError(error); return; }
+          settled = true;
+          cleanup();
           try { if (bridge && !bridge.closed) bridge.close(); } catch (_) {}
           resolve();
         };
         window.addEventListener('message', onMessage);
-        bridge = window.open(bridgeUrl.toString(), 'waywardGoogleDriveAuth',
-          'popup=yes,width=520,height=720,resizable=yes,scrollbars=yes');
-        if (!bridge) {
-          fail(new Error('Google 로그인 팝업이 차단되었습니다. 게임 사이트의 팝업을 허용한 뒤 다시 시도하세요.'));
+        try {
+          // window.open must remain synchronous inside the user's click handler.
+          bridge = window.open(bridgeUrl.toString(), 'waywardGoogleDriveAuth061',
+            'popup=yes,width=520,height=720,resizable=yes,scrollbars=yes');
+        } catch (error) {
+          finishError(new Error('Google 인증 팝업을 열지 못했습니다: ' +
+            String(error && error.message || error)));
           return;
         }
-        timeout = setTimeout(() => fail(new Error(
-          'Google 로그인 시간이 초과되었습니다. 인증 페이지에서 승인을 마쳤는지 확인하세요.'
-        )), 180000);
+        if (!bridge) {
+          finishError(new Error('Google 로그인 팝업이 차단되었습니다. 팝업을 허용한 뒤 다시 시도하세요.'));
+          return;
+        }
+        timeout = setTimeout(() => finishError(new Error(
+          'Google 로그인이 시간 초과되었습니다. 연결 버튼을 눌러 다시 시도하세요.'
+        )), 120000);
+        closeWatch = setInterval(() => {
+          if (bridge && bridge.closed) {
+            finishError(new Error('Google 인증 창이 닫혔습니다. [구글 계정으로 연결]을 눌러 다시 시도하세요.'));
+          }
+        }, 350);
       });
     }
 
     function attemptNativeSessionRestore() {
-      if (startupRestoreAttempted || explicitLogout || !hadPreviousAuth ||
-          sessionPolicy !== 'remember' || hasToken()) return;
+      if (startupRestoreAttempted || explicitLogout || !hadPreviousAuth || hasToken()) return;
       const host = window.WMLHost;
       if (!host || typeof host.startGoogleDriveAuthWithPolicy !== 'function' ||
           typeof host.takePendingStateForNonce !== 'function') return;
@@ -376,7 +385,7 @@ WML.define({
     async function ensureAccessToken() {
       if (hasToken()) return accessToken;
       clearToken();
-      if (authStatus !== 'explicit-logout' && authStatus !== 'session-only') authStatus = 'reauth-required';
+      if (authStatus !== 'explicit-logout') authStatus = 'reauth-required';
       throw new Error('Google 액세스 토큰이 만료되었습니다. 연결 버튼을 눌러 다시 인증해 주세요.');
     }
 
@@ -697,28 +706,39 @@ WML.define({
 
     function connectFromClick() {
       if (busy) return;
-      const forceSelectAccount = explicitLogout || sessionPolicy === 'reauth';
+      if (activeAuthCancel) {
+        const cancel = activeAuthCancel;
+        activeAuthCancel = null;
+        try { cancel(); } catch (_) {}
+      }
+      const attempt = ++authAttemptSerial;
+      const forceSelectAccount = explicitLogout;
       let task;
       try { task = requestGoogleToken(forceSelectAccount); }
       catch (error) { task = Promise.reject(error); }
       authStatus = 'authenticating';
       busy = true;
-      message = forceSelectAccount
-        ? 'Google 계정 선택 화면을 여는 중…'
-        : '기존 Google 계정의 승인 상태로 다시 연결하는 중…';
+      message = 'Google 계정 인증을 여는 중…';
       render();
       Promise.resolve(task)
-        .then(() => refreshSlots())
-        .then(() => show({ page: 'home' }, 'Google Drive에 연결했습니다.'))
+        .then(() => {
+          if (attempt !== authAttemptSerial) return [];
+          return refreshSlots();
+        })
+        .then(() => {
+          if (attempt !== authAttemptSerial) return;
+          show({ page: 'home' }, 'Google Drive에 연결했습니다.');
+        })
         .catch(error => {
-          if (!hasToken() && !['permission-revoked','google-session-expired'].includes(authStatus)) {
-            authStatus = explicitLogout ? 'explicit-logout' :
-              (sessionPolicy === 'reauth' ? 'session-only' : 'reauth-required');
+          if (attempt !== authAttemptSerial) return;
+          if (!hasToken() && !['permission-revoked','google-session-expired','consent-denied'].includes(authStatus)) {
+            authStatus = explicitLogout ? 'explicit-logout' : 'reauth-required';
           }
           message = String(error && error.message || error || 'Google 연결에 실패했습니다.');
           render();
         })
         .finally(() => {
+          if (attempt !== authAttemptSerial) return;
           busy = false;
           if (isConnected()) render();
         });
@@ -775,15 +795,22 @@ WML.define({
     }
 
     function logoutGoogleAccount() {
+      authAttemptSerial += 1;
+      if (activeAuthCancel) {
+        const cancel = activeAuthCancel;
+        activeAuthCancel = null;
+        try { cancel(); } catch (_) {}
+      }
+      busy = false;
       const savedAccessToken = accessToken;
       const host = window.WMLHost;
       if (savedAccessToken && host && typeof host.clearGoogleAccessToken === 'function') {
         try { host.clearGoogleAccessToken(savedAccessToken); } catch (_) {}
       }
       clearToken();
-      markExplicitLogout();
+      markExplicitLogout(false);
       show({ page: 'home' },
-        '로그아웃했습니다. 로그인 유지를 해제했고 다음 연결에서는 Google 계정 선택 화면을 표시합니다. Google 앱 권한은 별도로 유지됩니다.');
+        '로그아웃했습니다. 다음 연결에서는 Google 계정 선택 화면을 표시합니다. Google 앱 권한은 유지됩니다.');
     }
 
     function requestNativeGoogleRevoke() {
