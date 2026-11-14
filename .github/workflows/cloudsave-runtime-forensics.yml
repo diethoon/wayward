@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: Checkout exact forensic branch
         uses: actions/checkout@v4
-      - name: Inspect CloudSave module source
+      - name: Compare packed CloudSave versions and current source
         shell: bash
         run: |
           python - <<'PY'
@@ -22,92 +22,83 @@ jobs:
           from zipfile import ZipFile, BadZipFile
           from io import BytesIO
           import hashlib
-          import re
 
-          ARCHIVES = [
-              Path("mods.zip"),
+          archives = [
               Path("Wayward_Google_Drive_CloudSave_v0.4.4_pre7.zip"),
+              Path("Wayward_Google_Drive_CloudSave_v0.5.0.zip"),
+              Path("Wayward_Google_Drive_CloudSave_v0.5.1.zip"),
+              Path("Wayward_Google_Drive_CloudSave_v0.5.2.zip"),
+              Path("Wayward_Google_Drive_CloudSave_v0.6.0.zip"),
+              Path("Wayward_Google_Drive_CloudSave_v0.6.1.zip"),
           ]
-          NAME_RE = re.compile(r"(cloud|google|drive|save).*\\.(js|json|html|txt)$", re.I)
-          TERMS = [
-              "createAuthNonce", "nonce", "window.open", "crypto",
-              "WMLHost", "startGoogleDriveAuth", "AUTH BRIDGE URL",
-              "AUTH_PAGE_URL", "WML.define", "setup(api)", "version:"
+          terms = [
+              "createAuthNonce", "function createAuthNonce", "const createAuthNonce",
+              "let createAuthNonce", "var createAuthNonce", "nonceBytes",
+              "crypto.getRandomValues", "window.open", "WMLHost",
+              "startGoogleDriveAuth", "AUTH BRIDGE URL", "AUTH_PAGE_URL",
+              "WML.define", "setup(api)"
           ]
-          visited = set()
-          entries_total = 0
 
-          def inspect_file(label, name, data):
-              key = (label, name)
-              if key in visited:
-                  return
-              visited.add(key)
+          def scan_module(label, data):
               digest = hashlib.sha256()
               carry = b""
-              hits = {term: [] for term in TERMS}
-              chunks = 0
+              hits = {term: [] for term in terms}
               for offset in range(0, len(data), 4096):
-                  chunk = data[offset:offset + 4096]
+                  chunk = data[offset:offset+4096]
                   digest.update(chunk)
-                  chunks += 1
                   probe = carry + chunk
                   base = offset - len(carry)
                   low = probe.lower()
-                  for term in TERMS:
+                  for term in terms:
                       needle = term.encode("utf-8").lower()
                       start = 0
                       while True:
-                          at = low.find(needle, start)
-                          if at < 0:
+                          i = low.find(needle, start)
+                          if i < 0:
                               break
-                          absolute = base + at
-                          if absolute >= 0 and (not hits[term] or hits[term][-1] != absolute):
-                              hits[term].append(absolute)
-                          start = at + 1
-                  carry = probe[-64:]
-              print(f"FILE {label}!{name} bytes={len(data)} chunks={chunks} sha256={digest.hexdigest()}")
+                          pos = base + i
+                          if pos >= 0 and pos not in hits[term]:
+                              hits[term].append(pos)
+                          start = i + 1
+                  carry = probe[-96:]
               text = data.decode("utf-8", "replace")
-              print("  TOP " + repr(text[:1300]))
-              for term in TERMS:
+              print(f"MODULE {label} bytes={len(data)} sha256={digest.hexdigest()}")
+              print("  HEADER " + repr(text[:700]))
+              for term in terms:
                   positions = hits[term]
                   if positions:
-                      print(f"  TERM {term!r} count={len(positions)} offsets={positions[:20]}")
-                      for pos in positions[:3]:
-                          left, right = max(0, pos - 320), min(len(text), pos + len(term) + 520)
-                          print("    CONTEXT " + repr(text[left:right]))
-              declared_fn = bool(re.search(r"function\\s+createAuthNonce\\s*\\(", text))
-              declared_var = bool(re.search(r"(?:const|let|var)\\s+createAuthNonce\\s*=", text))
-              print(f"  CREATE_AUTH_NONCE declared_function={declared_fn} declared_variable={declared_var} occurrences={len(hits['createAuthNonce'])}")
+                      print(f"  {term!r} count={len(positions)} offsets={positions[:12]}")
+                      if term in ("createAuthNonce", "nonceBytes", "crypto.getRandomValues", "WMLHost", "startGoogleDriveAuth", "AUTH BRIDGE URL", "AUTH_PAGE_URL"):
+                          for pos in positions[:3]:
+                              left=max(0,pos-300); right=min(len(text),pos+len(term)+520)
+                              print("    " + repr(text[left:right]))
+              print("  CHECK createAuthNonce_declared=" + str(
+                  "function createAuthNonce" in text or
+                  "const createAuthNonce" in text or
+                  "let createAuthNonce" in text or
+                  "var createAuthNonce" in text
+              ) + " occurrences=" + str(len(hits["createAuthNonce"])))
 
-          def walk_zip(label, raw, depth=0):
-              global entries_total
-              if depth > 3:
+          def scan_zip(path):
+              if not path.exists():
+                  print(f"MISSING {path}")
                   return
+              raw=path.read_bytes()
+              print(f"ARCHIVE {path} bytes={len(raw)} sha256={hashlib.sha256(raw).hexdigest()}")
               try:
                   with ZipFile(BytesIO(raw)) as z:
                       for info in z.infolist():
-                          if info.is_dir():
-                              continue
-                          entries_total += 1
-                          name = info.filename
-                          if name.lower().endswith(".zip") and info.file_size <= 100 * 1024 * 1024:
-                              walk_zip(label + "!" + name, z.read(info), depth + 1)
-                              continue
-                          low = name.lower()
-                          is_cloud_file = bool(NAME_RE.search(low)) or ("cloud" in low and low.endswith((".js",".json",".html",".txt")))
-                          if is_cloud_file and info.file_size <= 12 * 1024 * 1024:
-                              data = z.read(info)
-                              if low.endswith("mod.js") or "cloud-save" in low or "cloudsave" in low:
-                                  inspect_file(label, name, data)
+                          if not info.is_dir() and info.filename.replace("\\","/").lower().endswith("cloud-save/mod.js"):
+                              scan_module(str(path)+"!"+info.filename,z.read(info))
               except BadZipFile:
-                  print(f"NOT_ZIP {label}")
+                  print(f"INVALID_ZIP {path}")
 
-          for archive in ARCHIVES:
-              if not archive.exists():
-                  print(f"MISSING {archive}")
-                  continue
-              raw = archive.read_bytes()
-              print(f"ARCHIVE {archive} bytes={len(raw)} sha256={hashlib.sha256(raw).hexdigest()}")
-              walk_zip(str(archive), raw)
-          print(f"SUMMARY files={len(visited)} entries={entries_total}")
+          for path in archives:
+              scan_zip(path)
+
+          direct = Path("cloud-save/mod.js")
+          if direct.exists():
+              scan_module(str(direct), direct.read_bytes())
+          else:
+              print("MISSING cloud-save/mod.js in branch")
           PY
