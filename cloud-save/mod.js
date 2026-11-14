@@ -7,7 +7,7 @@
 WML.define({
   id: 'cloud-save',
   name: '클라우드세이브 (Google Drive)',
-  version: '0.7.0',
+  version: '0.7.1',
   description: '정적 HTTPS 인증 페이지가 Google Drive를 직접 처리하고 게임은 암호화된 세이브 데이터만 주고받습니다.',
   symbols: {
     "pauseMenu": {
@@ -219,7 +219,14 @@ WML.define({
     function validGameOrigin() {
       const protocol = String(window.location.protocol || '');
       const origin = String(window.location.origin || '');
-      if (protocol === 'file:' && origin === 'null') return 'null';
+      if (protocol === 'file:') {
+        // file:// has an opaque origin. Normalize browser-specific serializations
+        // (usually "null") to the value understood by the static auth page.
+        if (origin && origin !== 'null' && !/^file:/i.test(origin)) {
+          throw new Error('file:// 실행 주소의 Origin을 검증할 수 없습니다.');
+        }
+        return 'null';
+      }
       if (!/^https?:$/.test(protocol)) {
         throw new Error('지원하지 않는 실행 주소입니다. file://, HTTP 또는 HTTPS에서 실행해 주세요.');
       }
