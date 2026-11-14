@@ -46,6 +46,16 @@ WML.define({
     let startupRestoreAttempted = false;
     let authAttemptSerial = 0;
     let activeAuthCancel = null;
+    let driveListGeneration = 0;
+    let driveListPromise = null;
+    let driveListAbortController = null;
+    let driveAccountMemoryKey = '';
+    let driveMetadataCacheAvailable = false;
+    let preparedSlotRead = null;
+    let lastListMetrics = null;
+    let driveBodyDownloadCount = 0;
+    const SLOT_CACHE_KEY_PREFIX = 'wml-google-drive-slot-metadata-v1:';
+    const slotMetadataMemoryCache = new Map();
 
     // Isolated 0.6.1 GIS page. It returns one nonce-bound access token.
     const AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/auth-061.html';
@@ -135,12 +145,25 @@ WML.define({
       (explicitLogout ? 'explicit-logout' :
         (hadPreviousAuth ? 'restore-pending' : 'reauth-required'));
 
-    function clearToken() {
-      accessToken = '';
-      tokenExpiresAt = 0;
+    function resetDriveListState() {
+      driveListGeneration += 1;
+      if (driveListAbortController) {
+        try { driveListAbortController.abort(); } catch (_) {}
+      }
+      driveListAbortController = null;
+      driveListPromise = null;
+      driveAccountMemoryKey = '';
+      driveMetadataCacheAvailable = false;
       driveSlots = [];
       slotsStatus = 'not-loaded';
       slotsError = '';
+      preparedSlotRead = null;
+    }
+
+    function clearToken() {
+      accessToken = '';
+      tokenExpiresAt = 0;
+      resetDriveListState();
       writeStorage(LEGACY_SESSION_TOKEN_KEY, null);
     }
 
@@ -176,6 +199,7 @@ WML.define({
         authStatus = 'reauth-required';
         throw new Error('Google에서 유효한 액세스 토큰을 반환하지 않았습니다.');
       }
+      resetDriveListState();
       accessToken = payload.accessToken;
       tokenExpiresAt = Date.now() +
         Math.max(60, Math.min(3600, Number(payload.expiresIn) || 3600)) * 1000;
@@ -421,44 +445,206 @@ WML.define({
       return response;
     }
 
-    async function refreshSlots() {
+    async function accountCacheStorageKey(permissionId) {
+      if (!permissionId || !globalThis.crypto || !globalThis.crypto.subtle ||
+          typeof TextEncoder !== 'function') return '';
+      try {
+        const digest = await globalThis.crypto.subtle.digest(
+          'SHA-256', new TextEncoder().encode(String(permissionId))
+        );
+        return SLOT_CACHE_KEY_PREFIX + Array.from(new Uint8Array(digest), byte =>
+          byte.toString(16).padStart(2, '0')).join('');
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function validateMetadataCache(value) {
+      if (!Array.isArray(value) || value.length > 1000) return null;
+      const output = [];
+      for (const item of value) {
+        if (!item || typeof item !== 'object' ||
+            typeof item.id !== 'string' || !item.id ||
+            typeof item.name !== 'string' ||
+            !/^wayward-cloud-slot-[1-9][0-9]*\.json$/.test(item.name)) return null;
+        output.push({
+          id: item.id,
+          name: item.name,
+          modifiedTime: String(item.modifiedTime || ''),
+          size: Math.max(0, Number(item.size) || 0),
+          mimeType: String(item.mimeType || 'application/json')
+        });
+      }
+      return output;
+    }
+
+    async function resolveDriveAccountCache() {
+      try {
+        const response = await driveFetch('/drive/v3/about?fields=user(permissionId)');
+        const about = await response.json();
+        const permissionId = String(about && about.user && about.user.permissionId || '');
+        if (!permissionId) return { memoryKey: '', storageKey: '' };
+        return {
+          memoryKey: permissionId,
+          storageKey: await accountCacheStorageKey(permissionId)
+        };
+      } catch (_) {
+        // Account metadata is an optional cache optimization. A failure here
+        // must not prevent the actual appDataFolder list request from working.
+        return { memoryKey: '', storageKey: '' };
+      }
+    }
+
+    function readAccountSlotCache(cacheKey) {
+      if (!cacheKey || !cacheKey.memoryKey) return null;
+      const memory = slotMetadataMemoryCache.get(cacheKey.memoryKey);
+      if (memory) return validateMetadataCache(memory);
+      if (!cacheKey.storageKey) return null;
+      const raw = readStorage(cacheKey.storageKey);
+      if (!raw) return null;
+      try {
+        const parsed = validateMetadataCache(JSON.parse(raw));
+        if (parsed) slotMetadataMemoryCache.set(cacheKey.memoryKey, parsed);
+        return parsed;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function writeAccountSlotCache(cacheKey, files) {
+      if (!cacheKey || !cacheKey.memoryKey) return;
+      const safeFiles = validateMetadataCache(files);
+      if (!safeFiles) return;
+      slotMetadataMemoryCache.set(cacheKey.memoryKey, safeFiles);
+      if (cacheKey.storageKey) writeStorage(cacheKey.storageKey, JSON.stringify(safeFiles));
+    }
+
+    function refreshSlots() {
+      if (driveListPromise) return driveListPromise;
+      const generation = ++driveListGeneration;
+      const now = () => typeof performance !== 'undefined' && performance.now
+        ? performance.now() : Date.now();
+      const startedAt = now();
+      const bodyCountAtStart = driveBodyDownloadCount;
+      const controller = typeof AbortController === 'function' ? new AbortController() : null;
+      driveListAbortController = controller;
+      const requestOptions = controller ? { signal: controller.signal } : undefined;
       slotsStatus = 'loading';
       slotsError = '';
+      driveMetadataCacheAvailable = false;
       if (isConnected()) render();
-      try {
-      const slots = new Map(); let pageToken = '';
-      do {
-        const params = new URLSearchParams({ spaces: 'appDataFolder', pageSize: '100', q: 'trashed = false', fields: 'files(id,name,modifiedTime,size),nextPageToken' });
-        if (pageToken) params.set('pageToken', pageToken);
-        const response = await driveFetch('/drive/v3/files?' + params.toString());
-        const data = await response.json();
-        for (const file of (Array.isArray(data.files) ? data.files : [])) {
-          const match = new RegExp('^' + FILE_PREFIX + '([1-9][0-9]*)\\.json$').exec(String(file.name || ''));
-          if (!match) continue;
-          const slot = Number(match[1]); if (!Number.isSafeInteger(slot) || slot < 1) continue;
-          const previous = slots.get(slot);
-          if (!previous || String(file.modifiedTime || '') > String(previous.modifiedTime || '')) slots.set(slot, file);
-        }
-        pageToken = data.nextPageToken || '';
-      } while (pageToken);
-      driveSlots = Array.from(slots.values()).sort((a,b) => Number(a.name.match(/([0-9]+)\.json$/)[1]) - Number(b.name.match(/([0-9]+)\.json$/)[1]));
-      for (const file of driveSlots) {
+
+      const task = (async () => {
+        let apiCalls = 0;
+        let responseBytes = 0;
+        let pageCount = 0;
         try {
-          const envelope = await readSlotEnvelope(file);
-          if (envelope && envelope.keyMode === 'embedded-addon-v2') {
-            const snapshot = await globalThis.WMLGoogleDriveCrypto.decryptSnapshotEmbedded(envelope);
-            file.memo = String(snapshot.memo || ''); file.summary = makeSummary(snapshot);
-          } else { file.memo = ''; file.summary = ''; }
-        } catch (_) { file.memo = ''; file.summary = ''; file.unreadable = true; }
-      }
-      slotsStatus = 'loaded';
-      slotsError = '';
-      return driveSlots;
-      } catch (error) {
-        slotsStatus = 'error';
-        slotsError = String(error && error.message || error || '저장목록을 확인하지 못했습니다.');
-        throw error;
-      }
+          // Fetch the account namespace and list in parallel. Cache keys are a
+          // SHA-256 digest of Drive permissionId, never an email or access token.
+          const accountTask = (async () => {
+            const cache = await resolveDriveAccountCache();
+            apiCalls += 1;
+            return cache;
+          })();
+          const listTask = (async () => {
+            const files = new Map();
+            let pageToken = '';
+            do {
+              if (generation !== driveListGeneration) return null;
+              const params = new URLSearchParams({
+                spaces: 'appDataFolder',
+                pageSize: '1000',
+                q: 'trashed = false',
+                fields: 'files(id,name,mimeType,modifiedTime,size),nextPageToken'
+              });
+              if (pageToken) params.set('pageToken', pageToken);
+              apiCalls += 1;
+              pageCount += 1;
+              const response = await driveFetch(
+                '/drive/v3/files?' + params.toString(), requestOptions
+              );
+              const data = await response.json();
+              const raw = JSON.stringify(data);
+              try { responseBytes += new TextEncoder().encode(raw).length; }
+              catch (_) { responseBytes += raw.length; }
+              for (const file of (Array.isArray(data.files) ? data.files : [])) {
+                const match = new RegExp('^' + FILE_PREFIX + '([1-9][0-9]*)\\.json$')
+                  .exec(String(file.name || ''));
+                if (!match || !file.id) continue;
+                const slot = Number(match[1]);
+                if (!Number.isSafeInteger(slot) || slot < 1) continue;
+                const previous = files.get(slot);
+                if (!previous || String(file.modifiedTime || '') > String(previous.modifiedTime || '')) {
+                  files.set(slot, {
+                    id: String(file.id),
+                    name: String(file.name),
+                    mimeType: String(file.mimeType || 'application/json'),
+                    modifiedTime: String(file.modifiedTime || ''),
+                    size: Math.max(0, Number(file.size) || 0)
+                  });
+                }
+              }
+              pageToken = data.nextPageToken || '';
+            } while (pageToken);
+            return Array.from(files.values()).sort((a, b) =>
+              Number(a.name.match(/([0-9]+)\.json$/)[1]) -
+              Number(b.name.match(/([0-9]+)\.json$/)[1])
+            );
+          })();
+
+          const cacheKey = await accountTask;
+          if (generation !== driveListGeneration) return [];
+          driveAccountMemoryKey = cacheKey.memoryKey;
+          if (!driveSlots.length) {
+            const cached = readAccountSlotCache(cacheKey);
+            if (cached) {
+              driveSlots = cached;
+              driveMetadataCacheAvailable = true;
+              if (isConnected()) render();
+            }
+          }
+
+          const freshFiles = await listTask;
+          if (generation !== driveListGeneration || !freshFiles) return [];
+          driveSlots = freshFiles;
+          driveMetadataCacheAvailable = false;
+          writeAccountSlotCache(cacheKey, freshFiles);
+          slotsStatus = 'loaded';
+          slotsError = '';
+          lastListMetrics = {
+            apiCalls,
+            pageCount,
+            responseBytes,
+            bodyDownloads: driveBodyDownloadCount - bodyCountAtStart,
+            slotCount: freshFiles.length,
+            durationMs: Math.max(0, Math.round(now() - startedAt))
+          };
+          try {
+            if (typeof console !== 'undefined' && console.info) {
+              console.info('[Wayward CloudSave] metadata list metrics', lastListMetrics);
+            }
+          } catch (_) {}
+          if (isConnected()) render();
+          return driveSlots;
+        } catch (error) {
+          if (generation !== driveListGeneration || (error && error.name === 'AbortError')) return [];
+          slotsStatus = 'error';
+          slotsError = String(error && error.message || error || '저장목록을 확인하지 못했습니다.');
+          if (isConnected()) render();
+          throw error;
+        } finally {
+          if (generation === driveListGeneration && driveListAbortController === controller) {
+            driveListAbortController = null;
+          }
+        }
+      })();
+
+      let tracked;
+      tracked = task.finally(() => {
+        if (driveListPromise === tracked) driveListPromise = null;
+      });
+      driveListPromise = tracked;
+      return tracked;
     }
 
     function currentFile(slot) {
@@ -466,6 +652,7 @@ WML.define({
     }
 
     async function readSlotEnvelope(file) {
+      driveBodyDownloadCount += 1;
       const response = await driveFetch('/drive/v3/files/' + encodeURIComponent(file.id) + '?alt=media');
       return response.json();
     }
@@ -507,6 +694,7 @@ WML.define({
       const file = currentFile(slot);
       if (!file) throw new Error('삭제할 저장 파일을 찾지 못했습니다.');
       await driveFetch('/drive/v3/files/' + encodeURIComponent(file.id), { method: 'DELETE' });
+      preparedSlotRead = null;
       await refreshSlots();
     }
 
