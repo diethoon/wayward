@@ -936,7 +936,8 @@ WML.define({
       const host = window.WMLHost;
       if (host && typeof host.clearGoogleAccessToken === 'function') {
         try { host.clearGoogleAccessToken(token); } catch (_) {}
-        // Android Identity clears its token cache but does not report grant revocation.
+        // The Android native bridge clears its cached grant; it does not report
+        // Google web-token revocation as a completed GIS revoke operation.
         return Promise.resolve(false);
       }
       if (!token) return Promise.resolve(false);
@@ -945,40 +946,64 @@ WML.define({
         try { globalThis.crypto.getRandomValues(nonceBytes); }
         catch (_) { resolve(false); return; }
         const nonce = Array.from(nonceBytes, byte => byte.toString(16).padStart(2, '0')).join('');
-        const gameOrigin = String(window.location.origin || '');
-        if (!gameOrigin || gameOrigin === 'null' || !/^https?:$/.test(window.location.protocol)) {
-          resolve(false); return;
+        const protocol = String(window.location.protocol || '');
+        const rawOrigin = String(window.location.origin || '');
+        const fileMode = protocol === 'file:' || rawOrigin === 'null';
+        const gameOrigin = fileMode ? 'null' : rawOrigin;
+        if (!fileMode && !/^https?:$/.test(protocol)) {
+          resolve(false);
+          return;
         }
         const revokeUrl = new URL(AUTH_BRIDGE_URL);
-        const bridgeOrigin = revokeUrl.origin;
         revokeUrl.searchParams.set('mode', 'revoke');
         revokeUrl.searchParams.set('origin', gameOrigin);
         revokeUrl.searchParams.set('nonce', nonce);
-        let popup = null, timer = null, settled = false;
+        let popup = null, timer = null, closeWatch = null, settled = false, helloSent = false;
+        const cleanup = () => {
+          window.removeEventListener('message', onMessage);
+          if (timer !== null) clearTimeout(timer);
+          if (closeWatch !== null) clearInterval(closeWatch);
+          timer = null;
+          closeWatch = null;
+        };
         const finish = result => {
           if (settled) return;
           settled = true;
-          window.removeEventListener('message', onMessage);
-          if (timer) clearTimeout(timer);
+          cleanup();
           try { if (popup && !popup.closed) popup.close(); } catch (_) {}
           resolve(result === true);
         };
         const onMessage = event => {
-          if (event.origin !== bridgeOrigin || event.source !== popup || !event.data ||
-              event.data.nonce !== nonce) return;
-          if (event.data.type === 'wayward-cloud-revoke-ready') {
+          if (event.origin !== AUTH_BRIDGE_ORIGIN || event.source !== popup ||
+              !event.data || event.data.nonce !== nonce || event.data.version !== 1) return;
+          if (event.data.type === 'wayward-cloud-auth-061-ready') {
+            if (helloSent) return;
+            helloSent = true;
             try {
-              popup.postMessage({type:'wayward-cloud-revoke',nonce,accessToken:token},bridgeOrigin);
+              popup.postMessage({
+                type: 'wayward-cloud-auth-061-hello', version: 1, nonce
+              }, AUTH_BRIDGE_ORIGIN);
+            } catch (_) { finish(false); }
+          } else if (event.data.type === 'wayward-cloud-revoke-ready') {
+            try {
+              popup.postMessage({
+                type: 'wayward-cloud-revoke', version: 1, nonce, accessToken: token
+              }, AUTH_BRIDGE_ORIGIN);
             } catch (_) { finish(false); }
           } else if (event.data.type === 'wayward-cloud-revoke-result') {
             finish(event.data.revoked === true);
           }
         };
         window.addEventListener('message', onMessage);
-        popup = window.open(revokeUrl.toString(), 'waywardGoogleDriveRevoke',
-          'popup=yes,width=520,height=520,resizable=yes,scrollbars=yes');
+        try {
+          popup = window.open(revokeUrl.toString(), 'waywardGoogleDriveRevoke061',
+            'popup=yes,width=520,height=520,resizable=yes,scrollbars=yes');
+        } catch (_) { finish(false); return; }
         if (!popup) { finish(false); return; }
         timer = setTimeout(() => finish(false), 30000);
+        closeWatch = setInterval(() => {
+          if (popup && popup.closed) finish(false);
+        }, 350);
       });
     }
 
