@@ -1,0 +1,130 @@
+name: CloudSave WML loader and 0.6.1 package forensics
+
+on:
+  push:
+    branches:
+      - forensics/cloudsave-source-bridge-20261114
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-loader-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pinned CloudSave source commit
+        uses: actions/checkout@v4
+      - name: Chunk-scan WML loader and native-compatible package
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, BadZipFile
+          from io import BytesIO
+          import hashlib, json
+
+          html_path = Path("Wayward_WML_ko.html")
+          if not html_path.exists():
+              raise SystemExit("Wayward_WML_ko.html missing")
+          data = html_path.read_bytes()
+          ledger = []
+          hits = {}
+          needles = [
+              b"WML.define", b"WML.enable", b"wml/mods/mods.js",
+              b"mods.js", b"mod.js", b"wml.folders", b"listModIds",
+              b"loadMod", b"defineMod", b"setup(api)", b"setup(mod",
+              b"mod.setup", b"new Function", b"document.createElement('script')",
+              b"createElement('script')", b"script.src"
+          ]
+          digest = hashlib.sha256()
+          carry = b""
+          for offset in range(0, len(data), 4096):
+              chunk = data[offset:offset+4096]
+              digest.update(chunk)
+              ledger.append({
+                  "offset": offset,
+                  "length": len(chunk),
+                  "sha256": hashlib.sha256(chunk).hexdigest()
+              })
+              probe = carry + chunk
+              base = offset - len(carry)
+              lower = probe.lower()
+              for needle in needles:
+                  at = 0
+                  while True:
+                      pos = lower.find(needle.lower(), at)
+                      if pos < 0:
+                          break
+                      absolute = base + pos
+                      if absolute >= 0:
+                          bucket = hits.setdefault(needle.decode("ascii"), [])
+                          if absolute not in bucket:
+                              bucket.append(absolute)
+                      at = pos + 1
+              carry = probe[-max(map(len, needles)):]
+          print(f"HTML bytes={len(data)} chunks={len(ledger)} sha256={digest.hexdigest()}")
+          for term, positions in hits.items():
+              print(f"HIT {term!r} count={len(positions)} offsets={positions[:30]}")
+              for pos in positions[:3]:
+                  left=max(0,pos-380); right=min(len(data),pos+len(term)+620)
+                  excerpt=data[left:right].decode("utf-8","replace")
+                  print("  CONTEXT " + repr(excerpt))
+          Path("/tmp/wayward-wml-chunk-ledger.json").write_text(json.dumps({
+              "file": str(html_path),
+              "bytes": len(data),
+              "sha256": digest.hexdigest(),
+              "chunk_size": 4096,
+              "chunks": ledger
+          }, indent=2), encoding="utf-8")
+
+          archive_path=Path("Wayward_Google_Drive_CloudSave_v0.6.1.zip")
+          if not archive_path.exists():
+              raise SystemExit("CloudSave 0.6.1 archive missing")
+          raw=archive_path.read_bytes()
+          print(f"ARCHIVE 0.6.1 bytes={len(raw)} sha256={hashlib.sha256(raw).hexdigest()}")
+          with ZipFile(BytesIO(raw)) as z:
+              for entry in z.infolist():
+                  if entry.is_dir():
+                      continue
+                  if entry.filename.endswith(("cloud-save/INSTALL.txt","cloud-save/mod.js")):
+                      content=z.read(entry)
+                      if entry.filename.endswith("INSTALL.txt"):
+                          print("INSTALL " + repr(content.decode("utf-8","replace")[:1400]))
+                      else:
+                          mod_digest=hashlib.sha256()
+                          tail=b""
+                          positions={}
+                          terms=[b"version:",b"createAuthNonce",b"function createAuthNonce",
+                                 b"AUTH_BRIDGE_URL",b"startGoogleDriveAuth",b"setup(api)",
+                                 b"async setup(api)",b"window.open"]
+                          for offset in range(0,len(content),4096):
+                              chunk=content[offset:offset+4096]
+                              mod_digest.update(chunk)
+                              probe=tail+chunk
+                              base=offset-len(tail)
+                              low=probe.lower()
+                              for term in terms:
+                                  at=0
+                                  while True:
+                                      pos=low.find(term.lower(),at)
+                                      if pos<0: break
+                                      absolute=base+pos
+                                      if absolute>=0 and absolute not in positions.setdefault(term.decode(),[]):positions[term.decode()].append(absolute)
+                                      at=pos+1
+                              tail=probe[-max(map(len,terms)):]
+                          print(f"MOD 0.6.1 bytes={len(content)} chunks={(len(content)+4095)//4096} sha256={mod_digest.hexdigest()}")
+                          text=content.decode("utf-8","replace")
+                          for term, offsets in positions.items():
+                              print(f"MOD_HIT {term!r} offsets={offsets[:20]}")
+                              if term in ("function createAuthNonce","AUTH_BRIDGE_URL","startGoogleDriveAuth","async setup(api)"):
+                                  for pos in offsets[:3]:
+                                      left=max(0,pos-260);right=min(len(content),pos+len(term)+500)
+                                      print("  MOD_CONTEXT "+repr(text[left:right]))
+          PY
+      - name: Upload complete 4096-byte ledger
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudsave-wml-loader-forensics
+          path: /tmp/wayward-wml-chunk-ledger.json
+          if-no-files-found: error
+          retention-days: 14
