@@ -1,0 +1,95 @@
+name: WML core module loading forensic scan
+
+on:
+  push:
+    branches:
+      - forensics/cloudsave-source-bridge-20261114
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-core:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout forensic archive snapshot
+        uses: actions/checkout@v4
+      - name: Scan WML core in 4096-byte chunks and inspect registry path
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, BadZipFile
+          from io import BytesIO
+          import hashlib, json
+
+          archive=Path("wayward 11.2.zip")
+          raw=archive.read_bytes()
+          print(f"ARCHIVE bytes={len(raw)} sha256={hashlib.sha256(raw).hexdigest()}")
+          z=ZipFile(BytesIO(raw))
+          paths=[x.filename for x in z.infolist() if not x.is_dir()]
+          print("CLOUD_SAVE_PATHS " + repr([p for p in paths if "cloud-save" in p.lower() or "cloudsave" in p.lower()]))
+          core_path=next((p for p in paths if p.endswith("/wml/runtime/wml-core.js")),None)
+          mods_path=next((p for p in paths if p.endswith("/wml/mods/mods.js")),None)
+          if not core_path or not mods_path:
+              raise SystemExit(f"missing core or mods.js core={core_path} mods={mods_path}")
+          core=z.read(core_path)
+          terms=[
+              b"WML.define",b"WML.enable",b"define(",b"function define",
+              b"loadMods",b"loadMod",b"loadScript",b"mod.setup",
+              b"setup(api)",b"setup.call",b"new Function",b"eval(",
+              b"createElement('script')",b'createElement("script")',
+              b"script.src",b"mods.js",b"wml/mods",b"loadAfter",
+              b"requires",b"mod.js",b"window.WML"
+          ]
+          ledger=[]
+          hits={}
+          digest=hashlib.sha256()
+          carry=b""
+          for offset in range(0,len(core),4096):
+              chunk=core[offset:offset+4096]
+              digest.update(chunk)
+              ledger.append({"offset":offset,"length":len(chunk),"sha256":hashlib.sha256(chunk).hexdigest()})
+              probe=carry+chunk
+              base=offset-len(carry)
+              low=probe.lower()
+              for needle in terms:
+                  at=0
+                  while True:
+                      pos=low.find(needle.lower(),at)
+                      if pos<0: break
+                      absolute=base+pos
+                      if absolute>=0 and absolute not in hits.setdefault(needle.decode("ascii"),[]):
+                          hits[needle.decode("ascii")].append(absolute)
+                      at=pos+1
+              carry=probe[-max(map(len,terms)):]
+          print(f"CORE {core_path} bytes={len(core)} chunks={len(ledger)} sha256={digest.hexdigest()}")
+          text=core.decode("utf-8","replace")
+          for term,positions in hits.items():
+              if not positions: continue
+              print(f"HIT {term!r} count={len(positions)} offsets={positions[:30]}")
+              # The first implementation site and all setup/module execution sites matter most.
+              for pos in positions[:4]:
+                  left=max(0,pos-350);right=min(len(core),pos+len(term)+700)
+                  print("  CONTEXT "+repr(text[left:right]))
+          mods=z.read(mods_path)
+          print(f"MODS {mods_path} bytes={len(mods)} sha256={hashlib.sha256(mods).hexdigest()}")
+          print("MODS_JS_BEGIN")
+          print(mods.decode("utf-8","replace")[:2400])
+          print("MODS_JS_END")
+          Path("/tmp/wml-core-chunk-ledger.json").write_text(json.dumps({
+              "archive":str(archive),
+              "archiveBytes":len(raw),
+              "archiveSha256":hashlib.sha256(raw).hexdigest(),
+              "file":core_path,"bytes":len(core),"sha256":digest.hexdigest(),
+              "chunkSize":4096,"chunks":ledger
+          },indent=2),encoding="utf-8")
+          z.close()
+          PY
+      - name: Upload WML core chunk hash ledger
+        uses: actions/upload-artifact@v4
+        with:
+          name: wml-core-chunk-ledger
+          path: /tmp/wml-core-chunk-ledger.json
+          if-no-files-found: error
+          retention-days: 14
