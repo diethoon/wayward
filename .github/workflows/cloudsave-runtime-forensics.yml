@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: Checkout exact forensic branch
         uses: actions/checkout@v4
-      - name: Inspect mod archives without modifying them
+      - name: Inspect CloudSave module source
         shell: bash
         run: |
           python - <<'PY'
@@ -28,90 +28,86 @@ jobs:
               Path("mods.zip"),
               Path("Wayward_Google_Drive_CloudSave_v0.4.4_pre7.zip"),
           ]
-          MARKERS = [
-              b"createAuthNonce",
-              b"function createAuthNonce",
-              b"WML.define",
-              b"setup(api)",
-              b"version:",
-              b"WMLHost",
-              b"startGoogleDriveAuth",
-              b"AUTH_PAGE_URL",
-              b"wayward-cloud-auth.vercel.app",
-              b"jeiky224.github.io/cloud/auth.html",
+          NAME_RE = re.compile(r"(cloud|google|drive|save).*\\.(js|json|html|txt)$", re.I)
+          TERMS = [
+              "createAuthNonce", "nonce", "window.open", "crypto",
+              "WMLHost", "startGoogleDriveAuth", "AUTH BRIDGE URL",
+              "AUTH_PAGE_URL", "WML.define", "setup(api)", "version:"
           ]
-          seen = set()
-          total_entries = 0
+          visited = set()
+          entries_total = 0
 
-          def scan_bytes(label, raw):
+          def inspect_file(label, name, data):
+              key = (label, name)
+              if key in visited:
+                  return
+              visited.add(key)
               digest = hashlib.sha256()
               carry = b""
-              absolute = 0
-              hits = []
-              chunk_count = 0
-              for offset in range(0, len(raw), 4096):
-                  chunk = raw[offset:offset + 4096]
+              hits = {term: [] for term in TERMS}
+              chunks = 0
+              for offset in range(0, len(data), 4096):
+                  chunk = data[offset:offset + 4096]
                   digest.update(chunk)
-                  chunk_count += 1
+                  chunks += 1
                   probe = carry + chunk
-                  probe_base = offset - len(carry)
-                  for marker in MARKERS:
+                  base = offset - len(carry)
+                  low = probe.lower()
+                  for term in TERMS:
+                      needle = term.encode("utf-8").lower()
                       start = 0
                       while True:
-                          i = probe.find(marker, start)
-                          if i < 0:
+                          at = low.find(needle, start)
+                          if at < 0:
                               break
-                          pos = probe_base + i
-                          if pos >= 0 and (marker.decode("ascii"), pos) not in hits:
-                              hits.append((marker.decode("ascii"), pos))
-                          start = i + 1
-                  carry = probe[-max(len(m) for m in MARKERS):]
-                  absolute = offset + len(chunk)
-              print(f"FILE {label} bytes={len(raw)} chunks={chunk_count} sha256={digest.hexdigest()}")
-              for marker, pos in sorted(hits, key=lambda x: x[1]):
-                  left, right = max(0, pos - 260), min(len(raw), pos + len(marker) + 420)
-                  excerpt = raw[left:right].decode("utf-8", "replace")
-                  excerpt = re.sub(r"[^\\x09\\x0a\\x0d\\x20-\\x7e\\u3131-\\u318e\\uac00-\\ud7a3]", " ", excerpt)
-                  print(f"  HIT {marker!r} offset={pos}")
-                  print("  " + excerpt.replace("\\n", "\\n  ")[:900])
-              return hits
+                          absolute = base + at
+                          if absolute >= 0 and (not hits[term] or hits[term][-1] != absolute):
+                              hits[term].append(absolute)
+                          start = at + 1
+                  carry = probe[-64:]
+              print(f"FILE {label}!{name} bytes={len(data)} chunks={chunks} sha256={digest.hexdigest()}")
+              text = data.decode("utf-8", "replace")
+              print("  TOP " + repr(text[:1300]))
+              for term in TERMS:
+                  positions = hits[term]
+                  if positions:
+                      print(f"  TERM {term!r} count={len(positions)} offsets={positions[:20]}")
+                      for pos in positions[:3]:
+                          left, right = max(0, pos - 320), min(len(text), pos + len(term) + 520)
+                          print("    CONTEXT " + repr(text[left:right]))
+              declared_fn = bool(re.search(r"function\\s+createAuthNonce\\s*\\(", text))
+              declared_var = bool(re.search(r"(?:const|let|var)\\s+createAuthNonce\\s*=", text))
+              print(f"  CREATE_AUTH_NONCE declared_function={declared_fn} declared_variable={declared_var} occurrences={len(hits['createAuthNonce'])}")
 
-          def visit_zip(label, data, depth=0):
-              global total_entries
+          def walk_zip(label, raw, depth=0):
+              global entries_total
               if depth > 3:
                   return
               try:
-                  with ZipFile(BytesIO(data)) as z:
+                  with ZipFile(BytesIO(raw)) as z:
                       for info in z.infolist():
                           if info.is_dir():
                               continue
-                          total_entries += 1
+                          entries_total += 1
                           name = info.filename
-                          low = name.lower()
-                          if low.endswith(".zip"):
-                              if info.file_size <= 100 * 1024 * 1024:
-                                  visit_zip(label + "!" + name, z.read(info), depth + 1)
+                          if name.lower().endswith(".zip") and info.file_size <= 100 * 1024 * 1024:
+                              walk_zip(label + "!" + name, z.read(info), depth + 1)
                               continue
-                          relevant = (
-                              ("cloud" in low and (low.endswith(".js") or low.endswith(".json") or low.endswith(".html") or low.endswith(".txt")))
-                              or (low.endswith("mod.js") and ("save" in low or "drive" in low or "google" in low))
-                          )
-                          if relevant and info.file_size <= 12 * 1024 * 1024:
-                              key = (label, name)
-                              if key in seen:
-                                  continue
-                              seen.add(key)
-                              scan_bytes(label + "!" + name, z.read(info))
+                          low = name.lower()
+                          is_cloud_file = bool(NAME_RE.search(low)) or ("cloud" in low and low.endswith((".js",".json",".html",".txt")))
+                          if is_cloud_file and info.file_size <= 12 * 1024 * 1024:
+                              data = z.read(info)
+                              if low.endswith("mod.js") or "cloud-save" in low or "cloudsave" in low:
+                                  inspect_file(label, name, data)
               except BadZipFile:
-                  print(f"NOT_A_ZIP {label}")
+                  print(f"NOT_ZIP {label}")
 
-          for path in ARCHIVES:
-              if not path.exists():
-                  print(f"MISSING_ARCHIVE {path}")
+          for archive in ARCHIVES:
+              if not archive.exists():
+                  print(f"MISSING {archive}")
                   continue
-              raw = path.read_bytes()
-              print(f"ARCHIVE {path} bytes={len(raw)} sha256={hashlib.sha256(raw).hexdigest()}")
-              visit_zip(str(path), raw)
-
-          print(f"SUMMARY candidate_files={len(seen)} archive_entries={total_entries}")
+              raw = archive.read_bytes()
+              print(f"ARCHIVE {archive} bytes={len(raw)} sha256={hashlib.sha256(raw).hexdigest()}")
+              walk_zip(str(archive), raw)
+          print(f"SUMMARY files={len(visited)} entries={entries_total}")
           PY
