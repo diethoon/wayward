@@ -12,11 +12,11 @@ function extractFunction(name) {
   let depth = 0, quote = '', lineComment = false, blockComment = false, escaped = false;
   for (let i = open; i < source.length; i++) {
     const ch = source[i], next = source[i + 1];
-    if (lineComment) { if (ch === '\\n') lineComment = false; continue; }
+    if (lineComment) { if (ch === '\n') lineComment = false; continue; }
     if (blockComment) { if (ch === '*' && next === '/') { blockComment = false; i++; } continue; }
     if (quote) {
       if (escaped) { escaped = false; continue; }
-      if (ch === '\\\\') { escaped = true; continue; }
+      if (ch === '\\') { escaped = true; continue; }
       if (ch === quote) quote = '';
       continue;
     }
