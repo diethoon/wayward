@@ -1,0 +1,117 @@
+name: CloudSave runtime archive forensics
+
+on:
+  push:
+    branches:
+      - forensics/cloudsave-runtime-load-20261114
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-cloudsave:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact forensic branch
+        uses: actions/checkout@v4
+      - name: Inspect mod archives without modifying them
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, BadZipFile
+          from io import BytesIO
+          import hashlib
+          import re
+
+          ARCHIVES = [
+              Path("mods.zip"),
+              Path("Wayward_Google_Drive_CloudSave_v0.4.4_pre7.zip"),
+          ]
+          MARKERS = [
+              b"createAuthNonce",
+              b"function createAuthNonce",
+              b"WML.define",
+              b"setup(api)",
+              b"version:",
+              b"WMLHost",
+              b"startGoogleDriveAuth",
+              b"AUTH_PAGE_URL",
+              b"wayward-cloud-auth.vercel.app",
+              b"jeiky224.github.io/cloud/auth.html",
+          ]
+          seen = set()
+          total_entries = 0
+
+          def scan_bytes(label, raw):
+              digest = hashlib.sha256()
+              carry = b""
+              absolute = 0
+              hits = []
+              chunk_count = 0
+              for offset in range(0, len(raw), 4096):
+                  chunk = raw[offset:offset + 4096]
+                  digest.update(chunk)
+                  chunk_count += 1
+                  probe = carry + chunk
+                  probe_base = offset - len(carry)
+                  for marker in MARKERS:
+                      start = 0
+                      while True:
+                          i = probe.find(marker, start)
+                          if i < 0:
+                              break
+                          pos = probe_base + i
+                          if pos >= 0 and (marker.decode("ascii"), pos) not in hits:
+                              hits.append((marker.decode("ascii"), pos))
+                          start = i + 1
+                  carry = probe[-max(len(m) for m in MARKERS):]
+                  absolute = offset + len(chunk)
+              print(f"FILE {label} bytes={len(raw)} chunks={chunk_count} sha256={digest.hexdigest()}")
+              for marker, pos in sorted(hits, key=lambda x: x[1]):
+                  left, right = max(0, pos - 260), min(len(raw), pos + len(marker) + 420)
+                  excerpt = raw[left:right].decode("utf-8", "replace")
+                  excerpt = re.sub(r"[^\\x09\\x0a\\x0d\\x20-\\x7e\\u3131-\\u318e\\uac00-\\ud7a3]", " ", excerpt)
+                  print(f"  HIT {marker!r} offset={pos}")
+                  print("  " + excerpt.replace("\\n", "\\n  ")[:900])
+              return hits
+
+          def visit_zip(label, data, depth=0):
+              global total_entries
+              if depth > 3:
+                  return
+              try:
+                  with ZipFile(BytesIO(data)) as z:
+                      for info in z.infolist():
+                          if info.is_dir():
+                              continue
+                          total_entries += 1
+                          name = info.filename
+                          low = name.lower()
+                          if low.endswith(".zip"):
+                              if info.file_size <= 100 * 1024 * 1024:
+                                  visit_zip(label + "!" + name, z.read(info), depth + 1)
+                              continue
+                          relevant = (
+                              ("cloud" in low and (low.endswith(".js") or low.endswith(".json") or low.endswith(".html") or low.endswith(".txt")))
+                              or (low.endswith("mod.js") and ("save" in low or "drive" in low or "google" in low))
+                          )
+                          if relevant and info.file_size <= 12 * 1024 * 1024:
+                              key = (label, name)
+                              if key in seen:
+                                  continue
+                              seen.add(key)
+                              scan_bytes(label + "!" + name, z.read(info))
+              except BadZipFile:
+                  print(f"NOT_A_ZIP {label}")
+
+          for path in ARCHIVES:
+              if not path.exists():
+                  print(f"MISSING_ARCHIVE {path}")
+                  continue
+              raw = path.read_bytes()
+              print(f"ARCHIVE {path} bytes={len(raw)} sha256={hashlib.sha256(raw).hexdigest()}")
+              visit_zip(str(path), raw)
+
+          print(f"SUMMARY candidate_files={len(seen)} archive_entries={total_entries}")
+          PY
