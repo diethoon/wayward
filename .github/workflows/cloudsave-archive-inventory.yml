@@ -1,0 +1,81 @@
+name: CloudSave mod archive and WML runtime inventory
+
+on:
+  push:
+    branches:
+      - forensics/cloudsave-source-bridge-20261114
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout forensic source
+        uses: actions/checkout@v4
+      - name: Inventory shipped archives and inspect WML runtime files
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, BadZipFile
+          from io import BytesIO
+          import hashlib
+
+          candidates = [Path("mods.zip"), Path("wayward 11.2.zip")]
+          needles = [
+              b"WML.define", b"WML.enable", b"setup(api)", b"setup(mod",
+              b"mods.js", b"wml-core.js", b"createAuthNonce",
+              b"wml.folders", b"listModIds", b"cloud-save"
+          ]
+
+          for path in candidates:
+              if not path.exists():
+                  print(f"MISSING_ARCHIVE {path}")
+                  continue
+              raw=path.read_bytes()
+              print(f"ARCHIVE {path} bytes={len(raw)} sha256={hashlib.sha256(raw).hexdigest()}")
+              try:
+                  z=ZipFile(BytesIO(raw))
+              except BadZipFile:
+                  print("INVALID_ZIP")
+                  continue
+              infos=[x for x in z.infolist() if not x.is_dir()]
+              print(f"ENTRY_COUNT {len(infos)}")
+              selected=[]
+              for info in infos:
+                  low=info.filename.lower().replace("\\","/")
+                  if any(token in low for token in (
+                      "wml-core.js","/mods.js","/wml/","cloud-save","cloudsave",
+                      "google-drive","wayward_wml_ko.html"
+                  )):
+                      selected.append(info)
+              print("MATCHING_PATHS " + repr([
+                  {"path":x.filename,"bytes":x.file_size,"compressed":x.compress_size}
+                  for x in selected[:100]
+              ]))
+              for info in infos:
+                  low=info.filename.lower().replace("\\","/")
+                  if info.file_size > 16*1024*1024:
+                      continue
+                  if not (low.endswith((".js",".html",".json",".txt"))):
+                      continue
+                  data=z.read(info)
+                  found=[]
+                  for needle in needles:
+                      at=data.lower().find(needle.lower())
+                      if at>=0:
+                          found.append((needle.decode("ascii"),at))
+                  if found and (
+                      any(term in low for term in ("wml-core.js","mods.js","cloud-save","cloudsave"))
+                      or any(term in dict(found) for term in ("WML.define","WML.enable","createAuthNonce"))
+                  ):
+                      sha=hashlib.sha256(data).hexdigest()
+                      print(f"SOURCE {info.filename} bytes={len(data)} sha256={sha} hits={found[:20]}")
+                      for term,pos in found[:5]:
+                          left=max(0,pos-240);right=min(len(data),pos+len(term)+520)
+                          excerpt=data[left:right].decode("utf-8","replace")
+                          print("  CONTEXT " + repr(excerpt))
+              z.close()
+          PY
