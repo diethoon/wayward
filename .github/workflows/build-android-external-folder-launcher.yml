@@ -1,0 +1,56 @@
+name: Build Wayward external-folder Android launcher
+
+on:
+  push:
+    branches: [feature/android-external-folder-launcher-v1, feature/android-external-folder-launcher-viewport-fit, feature/android-launcher-zip-mods-multi-sessions, feature/android-imagegen-launcher-one-tap]
+    paths:
+      - "android-external-folder-launcher/**"
+      - ".github/workflows/build-android-external-folder-launcher.yml"
+  pull_request:
+    paths:
+      - "android-external-folder-launcher/**"
+      - ".github/workflows/build-android-external-folder-launcher.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Configure installed Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ANDROID_HOME:-}"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -x "$SDKMANAGER"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Install Gradle 8.9
+        shell: bash
+        run: |
+          curl -fsSL https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /opt
+          echo '/opt/gradle-8.9/bin' >> "$GITHUB_PATH"
+      - name: Verify and build
+        working-directory: android-external-folder-launcher
+        run: bash ./verify.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WaywardLauncher-imagegen-v0.3.0
+          path: android-external-folder-launcher/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
