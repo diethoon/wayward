@@ -1,4 +1,4 @@
-Wayward Google Drive CloudSave — WML v0.7.0
+Wayward Google Drive CloudSave — WML v0.7.1
 
 설치
 1. cloud-save 폴더 전체를 게임의 wml/mods/ 폴더에 복사합니다.
