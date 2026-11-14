@@ -1073,18 +1073,46 @@ WML.define({
       snapshot.memo = String(fields.memo && fields.memo.value || '').trim();
       const envelope = await globalThis.WMLGoogleDriveCrypto.encryptSnapshotEmbedded(snapshot);
       await writeSlotEnvelope(slot, envelope);
+      preparedSlotRead = null;
       show({ page: 'home' }, '저장 슬롯 ' + slot + '에 자동 암호화하여 저장했습니다.');
+    }
+
+    async function prepareSaveSlot(slot) {
+      const file = currentFile(slot);
+      let memo = '';
+      if (file) {
+        // Memo is inside the encrypted snapshot. Download only the slot the user
+        // explicitly selected for overwrite; never fetch slot bodies for the list.
+        const envelope = await readSlotEnvelope(file);
+        if (envelope && envelope.keyMode === 'embedded-addon-v2') {
+          const snapshot = await globalThis.WMLGoogleDriveCrypto.decryptSnapshotEmbedded(envelope);
+          memo = String(snapshot.memo || '');
+        }
+      }
+      show({ page: 'save', slot, memo });
     }
 
     async function prepareLoadSlot(slot) {
       const file = currentFile(slot); if (!file) throw new Error('저장 슬롯이 비어 있습니다.');
       const envelope = await readSlotEnvelope(file);
+      preparedSlotRead = {
+        slot, fileId: file.id, modifiedTime: file.modifiedTime, envelope
+      };
       show({ page: envelope && envelope.keyMode === 'embedded-addon-v2' ? 'load' : 'legacy-load', slot },
         envelope && envelope.keyMode === 'embedded-addon-v2' ? '' : '이전 암호화 세이브입니다. 저장 당시 암호를 입력하면 자동 암호화 형식으로 변환됩니다.');
     }
     async function loadSlot(slot) {
       const file = currentFile(slot); if (!file) throw new Error('저장 슬롯이 비어 있습니다.');
-      const envelope = await readSlotEnvelope(file); let snapshot;
+      let envelope;
+      if (preparedSlotRead && preparedSlotRead.slot === slot &&
+          preparedSlotRead.fileId === file.id &&
+          preparedSlotRead.modifiedTime === file.modifiedTime && preparedSlotRead.envelope) {
+        envelope = preparedSlotRead.envelope;
+      } else {
+        envelope = await readSlotEnvelope(file);
+      }
+      preparedSlotRead = null;
+      let snapshot;
       if (envelope && envelope.keyMode === 'embedded-addon-v2') snapshot = await globalThis.WMLGoogleDriveCrypto.decryptSnapshotEmbedded(envelope);
       else {
         const passphrase = String(fields.passphrase && fields.passphrase.value || '');
@@ -1097,57 +1125,25 @@ WML.define({
 
     async function removeSlot(slot) {
       await deleteSlot(slot);
+      preparedSlotRead = null;
       show({ page: 'home' }, '저장 슬롯 ' + slot + '을 삭제했습니다.');
     }
 
-    function showSessionSettingsPopup() {
-      const overlay = document.createElement('dialog');
-      overlay.className = 'wml-gd-session-overlay';
-      overlay.setAttribute('data-wml-ui', 'true');
-      const box = document.createElement('div');
-      box.className = 'wml-gd-session-box';
-      box.setAttribute('role', 'dialog');
-      box.setAttribute('aria-modal', 'true');
-      const title = document.createElement('h3');
-      title.textContent = '로그인 유지 설정';
-      const description = document.createElement('p');
-      description.textContent =
-        '두 설정은 서로 배타적입니다. 로그인 상태 유지를 켜면 액세스 토큰은 저장하지 않고 Google의 기존 로그인·승인 상태를 다시 사용하도록 시도합니다. 브라우저 Token Model은 매번 사용자 동작이 필요하므로 새로고침 후에는 연결 버튼을 한 번 눌러야 합니다. Android 공식 런처는 기존 Google 권한을 자동 복구하도록 시도합니다. 새로고침할 때마다 로그인 해제를 켜면 다음 페이지 초기화부터 토큰을 복구하지 않고 계정 선택을 요청합니다.';
-      const actions = document.createElement('div');
-      actions.className = 'wml-gd-session-actions';
-      const close = () => { if (overlay.open) overlay.close(); overlay.remove(); document.removeEventListener('keydown', onKeyDown, true); };
-      const addChoice = (label, policy, detail) => {
-        const choice = document.createElement('button');
-        choice.type = 'button';
-        choice.textContent = label;
-        choice.setAttribute('aria-pressed', String(sessionPolicy === policy));
-        choice.title = detail;
-        choice.addEventListener('click', () => {
-          setSessionPolicy(policy);
-          close();
-          show({ page: 'home' }, policy === 'remember'
-            ? '로그인 상태 유지가 켜졌습니다. 다음 초기화에서는 기존 Google 인증 상태 복구를 시도합니다.'
-            : '새로고침할 때마다 로그인 해제가 켜졌습니다. 다음 초기화부터 계정 선택을 요청합니다.');
-        });
-        actions.append(choice);
-      };
-      addChoice('로그인 상태 유지', 'remember', '브라우저는 다음 연결 버튼에서 기존 세션을 재사용하고 Android 런처는 저장된 권한 복구를 시도');
-      addChoice('새로고침할 때마다 로그인 해제', 'reauth', '다음 페이지 초기화부터 인증 상태를 복구하지 않고 Google 계정 선택을 요청');
-      const closeActions = document.createElement('div');
-      closeActions.className = 'wml-gd-session-actions';
-      const closeButton = document.createElement('button');
-      closeButton.type = 'button';
-      closeButton.textContent = '닫기';
-      closeButton.addEventListener('click', close);
-      closeActions.append(closeButton);
-      box.append(title, description, actions, closeActions);
-      overlay.append(box);
-      overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
-      const onKeyDown = event => { if (event.key === 'Escape') { event.preventDefault(); close(); } };
-      document.addEventListener('keydown', onKeyDown, true);
-      document.body.append(overlay);
-      if (typeof overlay.showModal === 'function') overlay.showModal();
-      else { overlay.setAttribute('open', ''); }
+    function formatSlotMetadata(file) {
+      const parts = [];
+      const timestamp = Date.parse(String(file && file.modifiedTime || ''));
+      if (Number.isFinite(timestamp)) {
+        parts.push(new Date(timestamp).toLocaleString('ko-KR', {
+          month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        }));
+      }
+      const size = Number(file && file.size) || 0;
+      if (size > 0) {
+        parts.push(size < 1024 * 1024
+          ? Math.max(1, Math.round(size / 1024)) + ' KB'
+          : (size / (1024 * 1024)).toFixed(1) + ' MB');
+      }
+      return parts.join(' · ');
     }
 
     function showMemoPopup(memo) {
@@ -1171,30 +1167,38 @@ WML.define({
 
     function renderSlots(root) {
       addTitle(root, 'Google Drive 저장 슬롯');
+      const bySlot = new Map(driveSlots.map(file => [
+        Number(file.name.match(/([0-9]+)\.json$/)[1]), file
+      ]));
+      const used = new Set(bySlot.keys());
+      let nextSlot = 1;
+      while (used.has(nextSlot)) nextSlot++;
+      const slots = Array.from(bySlot.keys()).sort((a, b) => a - b);
+      if (!used.has(nextSlot)) slots.push(nextSlot);
 
-      const bySlot = new Map(driveSlots.map(file => [Number(file.name.match(/([0-9]+)\.json$/)[1]), file]));
-      const used = new Set(bySlot.keys()); let nextSlot = 1; while (used.has(nextSlot)) nextSlot++;
-      const slots = Array.from(bySlot.keys()).sort((a,b) => a-b); if (!used.has(nextSlot)) slots.push(nextSlot);
       for (const slot of slots) {
-        const file = bySlot.get(slot), row = h('div', { class: 'wml-gd-slot' });
-        const head = h('div', { class: 'wml-gd-slot-head' }), line = h('div', { class: 'wml-gd-slot-line' });
+        const file = bySlot.get(slot);
+        const row = h('div', { class: 'wml-gd-slot' });
+        const head = h('div', { class: 'wml-gd-slot-head' });
+        const line = h('div', { class: 'wml-gd-slot-line' });
         line.append(h('div', { class: 'wml-gd-slot-title' }, '저장 슬롯 ' + slot));
-        if (file && file.memo) {
-          const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'wml-gd-memo-chip';
-          chip.textContent = '[' + file.memo + ']'; chip.title = '눌러서 메모 전체 보기';
-          chip.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); showMemoPopup(file.memo); });
-          line.append(chip);
+        head.append(line);
+        head.append(h('div', { class: 'wml-gd-small' }, file ? '저장됨' : '저장된 게임이 없습니다.'));
+        row.append(head);
+        if (file) {
+          const metadata = formatSlotMetadata(file);
+          if (metadata) row.append(h('div', { class: 'wml-gd-summary' }, metadata));
         }
-        head.append(line); head.append(h('div', { class: 'wml-gd-small' }, file ? '저장됨' : '저장된 게임이 없습니다.')); row.append(head);
-        if (file && file.summary) row.append(h('div', { class: 'wml-gd-summary', title: file.summary }, file.summary));
-        else if (file && file.unreadable) row.append(h('div', { class: 'wml-gd-small' }, '세이브 정보를 읽을 수 없음 (이전 암호화 형식일 수 있음)'));
         const actions = h('div', { class: 'wml-gd-actions' });
-        actions.append(button(file ? '덮어쓰기' : '저장', () => show({ page: 'save', slot }), { primary: true }));
+        actions.append(button(file ? '덮어쓰기' : '저장', () =>
+          file ? runAction(() => prepareSaveSlot(slot)) : show({ page: 'save', slot, memo: '' }),
+          { primary: true }));
         if (file) {
           actions.append(button('불러오기', () => runAction(() => prepareLoadSlot(slot))));
           actions.append(button('삭제', () => show({ page: 'delete', slot })));
         }
-        row.append(actions); root.append(row);
+        row.append(actions);
+        root.append(row);
       }
     }
 
@@ -1202,51 +1206,49 @@ WML.define({
       if (view.page === 'home') {
         addTitle(root, '개인 Google Drive 세이브');
         addText(root,
-          '구글계정으로 연결하면 현재 진행 상황이 암호화되어 드라이브에 직접 저장됩니다.');
-        const connectLabel = authStatus === 'restore-pending'
-          ? '기존 Google 계정 인증 상태 복구'
-          : (authStatus === 'explicit-logout' || authStatus === 'session-only'
-            ? 'Google 계정 선택 후 로그인'
-            : (authStatus === 'permission-revoked'
-              ? 'Google Drive 권한 다시 승인'
-              : 'Google 계정으로 다시 연결'));
-        addButton(root, hasLogin() ? '저장 목록 새로고침' : connectLabel,
+          'Google 계정을 연결하면 현재 진행 상황이 암호화되어 Drive에 직접 저장됩니다.');
+        addButton(root, hasLogin() ? '저장 목록 새로고침' : '구글 계정으로 연결',
           hasLogin() ? () => runAction(async () => {
             await refreshSlots();
-            show({ page: 'home' }, '저장 목록을 새로고침했습니다.');
+            show({ page: 'home' }, '저장목록을 새로고침했습니다.');
           }) : connectFromClick, true);
-        addButton(root, '로그인 유지 설정', showSessionSettingsPopup);
-        addButton(root, '로그아웃', () => runAction(() => logoutGoogleAccount()));
-        if (hasLogin()) {
-          addButton(root, 'Google 앱 권한 철회', () => runAction(() => revokeGooglePermission()));
-        }
-        const stateText = {
-          connected: sessionPolicy === 'remember'
-            ? '로그인 상태 유지: 켜짐 — 액세스 토큰은 현재 탭 메모리에만 있습니다.'
-            : '새로고침할 때마다 로그인 해제: 켜짐 — 현재 탭에서만 연결되어 있습니다.',
-          restoring: 'Android 런처에서 기존 Google 승인 상태를 복구하고 있습니다.',
-          'restore-pending': '로그인 상태 유지가 켜져 있습니다. 브라우저는 보안상 사용자 동작이 필요하므로 위 버튼을 눌러 기존 Google 계정 상태를 복구하세요.',
-          'session-only': '새로고침할 때마다 로그인 해제가 켜져 있습니다. 다음 연결은 Google 계정 선택 화면을 사용합니다.',
-          'explicit-logout': '명시적으로 로그아웃했습니다. 로그인 유지가 해제되었고 다음 연결은 Google 계정 선택 화면을 사용합니다.',
-          'reauth-required': '액세스 토큰이 만료되었거나 거부되었습니다. 연결 버튼을 눌러 다시 인증하세요.',
-          'google-session-expired': 'Google 계정 세션이 없거나 만료되었습니다. Google 로그인 화면에서 다시 로그인하세요.',
-          'permission-revoked': 'Google Drive 권한이 취소되었거나 승인되지 않았습니다. Drive 권한을 다시 승인해야 합니다.',
-          authenticating: 'Google 인증을 진행하고 있습니다.'
-        };
-        addText(root, stateText[authStatus] || '상태: 연결되지 않음', 'wml-gd-small');
+        // Logout remains usable during an authentication attempt so it can cancel it.
+        addButton(root, '로그아웃', () => logoutGoogleAccount());
+
         if (hasLogin()) {
           if (slotsStatus === 'loaded') {
             renderSlots(root);
+            if (lastListMetrics) {
+              addText(root, '목록 ' + lastListMetrics.slotCount + '개 · ' +
+                lastListMetrics.durationMs + ' ms · API ' + lastListMetrics.apiCalls + '회',
+                'wml-gd-small');
+            }
           } else if (slotsStatus === 'loading') {
-            addText(root, '불러오는 중…');
+            if (driveMetadataCacheAvailable || driveSlots.length) {
+              addText(root, '저장목록 최신 상태를 확인하고 있습니다…', 'wml-gd-small');
+              renderSlots(root);
+            } else addText(root, '저장목록을 확인하고 있습니다…');
           } else if (slotsStatus === 'error') {
-            addText(root, '저장목록 새로고침이 필요합니다.');
+            if (driveMetadataCacheAvailable || driveSlots.length) renderSlots(root);
+            addText(root, '최신 저장목록을 확인하지 못했습니다. 다시 시도해 주세요.');
             addButton(root, '저장목록 새로고침', () => runAction(() => refreshSlots()), true);
           } else {
-            addText(root, '저장목록 새로고침이 필요합니다.');
+            addText(root, '저장목록을 확인하려면 새로고침을 누르세요.');
             addButton(root, '저장목록 새로고침', () => runAction(() => refreshSlots()), true);
           }
-        } else addText(root, '로그인 창에서 Google 계정을 선택해 주세요.');
+        } else {
+          const stateText = {
+            restoring: 'Android 런처에 저장된 Google 승인 상태를 확인하고 있습니다.',
+            'restore-pending': '이전에 연결한 Google 계정의 승인 상태를 다시 확인할 수 있습니다.',
+            'explicit-logout': '로그아웃했습니다. 다음 연결은 Google 계정 선택 화면을 사용합니다.',
+            'reauth-required': 'Google 계정 연결이 필요합니다.',
+            'google-session-expired': 'Google 계정 세션이 만료되었습니다. 다시 연결해 주세요.',
+            'consent-denied': 'Google 인증이 취소되거나 권한 승인이 거부되었습니다. 다시 연결할 수 있습니다.',
+            'permission-revoked': 'Google Drive 권한이 해제되었습니다. Drive 권한을 다시 승인해야 합니다.',
+            authenticating: 'Google 인증을 진행하고 있습니다.'
+          };
+          addText(root, stateText[authStatus] || 'Google 계정 연결이 필요합니다.', 'wml-gd-small');
+        }
         addMessage(root);
       } else if (view.page === 'save') {
         addTitle(root, '저장 슬롯 ' + view.slot + ' 저장');
@@ -1254,7 +1256,7 @@ WML.define({
         const memoWrap = h('label', { class: 'wml-gd-field' }, '저장 메모 (선택 사항)');
         const memoInput = document.createElement('textarea'); memoInput.className = 'wml-gd-memo-area'; memoInput.maxLength = 2000;
         memoInput.placeholder = '';
-        memoInput.value = Object.prototype.hasOwnProperty.call(drafts, 'memo') ? drafts.memo : (currentFile(view.slot) && currentFile(view.slot).memo || '');
+        memoInput.value = Object.prototype.hasOwnProperty.call(drafts, 'memo') ? drafts.memo : String(view.memo || '');
         memoInput.addEventListener('input', () => { drafts.memo = memoInput.value; }); memoInput.setAttribute('data-wml-ui', 'true');
         memoWrap.append(memoInput); root.append(memoWrap); fields.memo = memoInput;
         addButton(root, '자동 암호화하여 저장', () => runAction(() => saveSlot(view.slot)), true);
