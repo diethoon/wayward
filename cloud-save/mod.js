@@ -7,7 +7,7 @@
 WML.define({
   id: 'cloud-save',
   name: '클라우드세이브 (Google Drive)',
-  version: '0.6.1',
+  version: '0.6.2',
   description: 'Google 계정으로 연결해 개인 Drive에 암호화 세이브를 저장합니다. 게임 세이브는 서버를 거치지 않습니다.',
   symbols: {
     "pauseMenu": {
@@ -471,6 +471,31 @@ WML.define({
       }
     }
 
+    function normalizeDriveSlotFiles(files) {
+      const slots = new Map();
+      for (const file of (Array.isArray(files) ? files : [])) {
+        const match = new RegExp('^' + FILE_PREFIX + '([1-9][0-9]*)\\.json$')
+          .exec(String(file && file.name || ''));
+        if (!match || !file.id) continue;
+        const slot = Number(match[1]);
+        if (!Number.isSafeInteger(slot) || slot < 1) continue;
+        const previous = slots.get(slot);
+        if (!previous || String(file.modifiedTime || '') > String(previous.modifiedTime || '')) {
+          slots.set(slot, {
+            id: String(file.id),
+            name: String(file.name),
+            mimeType: String(file.mimeType || 'application/json'),
+            modifiedTime: String(file.modifiedTime || ''),
+            size: Math.max(0, Number(file.size) || 0)
+          });
+        }
+      }
+      return Array.from(slots.values()).sort((a, b) =>
+        Number(a.name.match(/([0-9]+)\\.json$/)[1]) -
+        Number(b.name.match(/([0-9]+)\\.json$/)[1])
+      );
+    }
+
     function validateMetadataCache(value) {
       if (!Array.isArray(value) || value.length > 1000) return null;
       const output = [];
@@ -492,23 +517,40 @@ WML.define({
 
     async function resolveDriveAccountCache() {
       if (driveAccountCacheIdentity) {
-        return Object.assign({ apiCalls: 0 }, driveAccountCacheIdentity);
+        return Object.assign({
+          apiCalls: 0, responseBytes: 0, apiRequestMs: 0, jsonParseMs: 0
+        }, driveAccountCacheIdentity);
       }
+      const now = () => typeof performance !== 'undefined' && performance.now
+        ? performance.now() : Date.now();
+      const requestStarted = now();
       try {
         const response = await driveFetch('/drive/v3/about?fields=user(permissionId)');
-        const about = await response.json();
-        const aboutBytes = JSON.stringify(about).length;
+        const raw = await response.text();
+        const apiRequestMs = Math.max(0, Math.round(now() - requestStarted));
+        let responseBytes = 0;
+        try { responseBytes = new TextEncoder().encode(raw).length; }
+        catch (_) { responseBytes = raw.length; }
+        const parseStarted = now();
+        const about = JSON.parse(raw);
+        const jsonParseMs = Math.max(0, Math.round(now() - parseStarted));
         const permissionId = String(about && about.user && about.user.permissionId || '');
-        if (!permissionId) return { memoryKey: '', storageKey: '', apiCalls: 1, responseBytes: aboutBytes };
+        if (!permissionId) {
+          return { memoryKey: '', storageKey: '', apiCalls: 1, responseBytes, apiRequestMs, jsonParseMs };
+        }
         driveAccountCacheIdentity = {
           memoryKey: permissionId,
           storageKey: await accountCacheStorageKey(permissionId)
         };
-        return Object.assign({ apiCalls: 1, responseBytes: aboutBytes }, driveAccountCacheIdentity);
+        return Object.assign({ apiCalls: 1, responseBytes, apiRequestMs, jsonParseMs },
+          driveAccountCacheIdentity);
       } catch (_) {
-        // Account metadata is an optional cache optimization. A failure here
-        // must not prevent the actual appDataFolder list request from working.
-        return { memoryKey: '', storageKey: '', apiCalls: 1, responseBytes: 0 };
+        // about.get is optional. Failure must not block the core files.list call.
+        return {
+          memoryKey: '', storageKey: '', apiCalls: 1,
+          responseBytes: 0, apiRequestMs: Math.max(0, Math.round(now() - requestStarted)),
+          jsonParseMs: 0
+        };
       }
     }
 
@@ -542,6 +584,7 @@ WML.define({
       const now = () => typeof performance !== 'undefined' && performance.now
         ? performance.now() : Date.now();
       const startedAt = now();
+      const startedAtWall = Date.now();
       const bodyCountAtStart = driveBodyDownloadCount;
       let cacheDisplayMs = null;
       const controller = typeof AbortController === 'function' ? new AbortController() : null;
@@ -556,58 +599,43 @@ WML.define({
         let apiCalls = 0;
         let responseBytes = 0;
         let pageCount = 0;
+        let apiRequestMs = 0;
+        let jsonParseMs = 0;
         try {
-          // Fetch the account namespace and list in parallel. Cache keys are a
-          // SHA-256 digest of Drive permissionId, never an email or access token.
-          const accountTask = (async () => {
-            const cache = await resolveDriveAccountCache();
-            apiCalls += Number(cache.apiCalls) || 0;
-            return cache;
-          })();
+          // Resolve account identity and query metadata in parallel. No save
+          // body, encrypted envelope, account email or access token enters cache.
+          const accountTask = resolveDriveAccountCache();
           const listTask = (async () => {
-            const files = new Map();
+            const byFileId = new Map();
             let pageToken = '';
             do {
               if (generation !== driveListGeneration) return null;
               const params = new URLSearchParams({
                 spaces: 'appDataFolder',
                 pageSize: '1000',
-                q: 'trashed = false',
+                q: "trashed = false and name contains '" + FILE_PREFIX + "'",
                 fields: 'files(id,name,mimeType,modifiedTime,size),nextPageToken'
               });
               if (pageToken) params.set('pageToken', pageToken);
               apiCalls += 1;
               pageCount += 1;
+              const requestStarted = now();
               const response = await driveFetch(
                 '/drive/v3/files?' + params.toString(), requestOptions
               );
-              const data = await response.json();
-              const raw = JSON.stringify(data);
+              const raw = await response.text();
+              apiRequestMs += Math.max(0, Math.round(now() - requestStarted));
               try { responseBytes += new TextEncoder().encode(raw).length; }
               catch (_) { responseBytes += raw.length; }
+              const parseStarted = now();
+              const data = JSON.parse(raw);
+              jsonParseMs += Math.max(0, Math.round(now() - parseStarted));
               for (const file of (Array.isArray(data.files) ? data.files : [])) {
-                const match = new RegExp('^' + FILE_PREFIX + '([1-9][0-9]*)\\.json$')
-                  .exec(String(file.name || ''));
-                if (!match || !file.id) continue;
-                const slot = Number(match[1]);
-                if (!Number.isSafeInteger(slot) || slot < 1) continue;
-                const previous = files.get(slot);
-                if (!previous || String(file.modifiedTime || '') > String(previous.modifiedTime || '')) {
-                  files.set(slot, {
-                    id: String(file.id),
-                    name: String(file.name),
-                    mimeType: String(file.mimeType || 'application/json'),
-                    modifiedTime: String(file.modifiedTime || ''),
-                    size: Math.max(0, Number(file.size) || 0)
-                  });
-                }
+                if (file && file.id) byFileId.set(String(file.id), file);
               }
               pageToken = data.nextPageToken || '';
             } while (pageToken);
-            return Array.from(files.values()).sort((a, b) =>
-              Number(a.name.match(/([0-9]+)\.json$/)[1]) -
-              Number(b.name.match(/([0-9]+)\.json$/)[1])
-            );
+            return normalizeDriveSlotFiles(Array.from(byFileId.values()));
           })();
 
           const cacheKey = await accountTask;
@@ -615,6 +643,11 @@ WML.define({
           driveAccountMemoryKey = cacheKey.memoryKey;
           apiCalls += Number(cacheKey.apiCalls) || 0;
           responseBytes += Number(cacheKey.responseBytes) || 0;
+          apiRequestMs += Number(cacheKey.apiRequestMs) || 0;
+          jsonParseMs += Number(cacheKey.jsonParseMs) || 0;
+
+          // Never display another account's metadata. Read cache only after
+          // Google Drive identifies the active account via permissionId.
           if (!driveSlots.length) {
             const cached = readAccountSlotCache(cacheKey);
             if (cached) {
@@ -636,13 +669,16 @@ WML.define({
             apiCalls,
             pageCount,
             responseBytes,
+            apiRequestMs,
+            jsonParseMs,
             bodyDownloads: driveBodyDownloadCount - bodyCountAtStart,
+            decryptMs: 0,
             slotCount: freshFiles.length,
             durationMs: Math.max(0, Math.round(now() - startedAt)),
             authDurationMs: authStartedAt && authCompletedAt
               ? Math.max(0, authCompletedAt - authStartedAt) : null,
             authToListStartMs: authCompletedAt
-              ? Math.max(0, Math.round(startedAt - authCompletedAt)) : null,
+              ? Math.max(0, startedAtWall - authCompletedAt) : null,
             cacheFirstDisplayMs: cacheDisplayMs
           };
           const renderStartedAt = now();
