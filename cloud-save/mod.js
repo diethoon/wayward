@@ -383,6 +383,7 @@ WML.define({
       if (!host || typeof host.startGoogleDriveAuthWithPolicy !== 'function' ||
           typeof host.takePendingStateForNonce !== 'function') return;
       startupRestoreAttempted = true;
+      const attempt = ++authAttemptSerial;
       let nonce;
       try { nonce = createAuthNonce(); }
       catch (error) {
@@ -392,17 +393,21 @@ WML.define({
         return;
       }
       authStatus = 'restoring';
-      message = 'Android에 저장된 Google 승인 상태를 복구하고 있습니다.';
+      message = 'Android에 저장된 Google 승인 상태를 확인하고 있습니다.';
       render();
       const task = requestNativeGoogleToken(nonce, false);
-      if (!task) { authStatus = 'restore-pending'; return; }
+      if (!task) { authStatus = 'reauth-required'; return; }
       task.then(() => refreshSlots())
         .then(() => {
+          if (attempt !== authAttemptSerial) return;
           message = '기존 Google 인증 상태를 복구했습니다.';
           if (isConnected()) render();
         })
         .catch(error => {
-          if (!['permission-revoked','google-session-expired'].includes(authStatus)) authStatus = 'reauth-required';
+          if (attempt !== authAttemptSerial) return;
+          if (!['permission-revoked','google-session-expired','consent-denied'].includes(authStatus)) {
+            authStatus = 'reauth-required';
+          }
           message = String(error && error.message || error || '기존 Google 인증 상태를 복구하지 못했습니다.');
           if (isConnected()) render();
         });
