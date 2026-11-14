@@ -86,14 +86,7 @@ WML.define({
         '.wml-gd-wrap button{max-width:100%}' +
         '.wml-gd-memo-overlay{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:100%;height:100%;max-width:none;max-height:none;margin:0;padding:20px;border:0;background:rgba(0,0,0,.48);color:inherit}' +
         '.wml-gd-memo-box{box-sizing:border-box;max-width:min(92vw,480px);max-height:75vh;overflow:auto;padding:16px 18px;border:1px solid var(--wml-border,#7778);border-radius:10px;background:var(--wml-panel,Canvas);color:var(--wml-text,CanvasText);white-space:pre-wrap;overflow-wrap:anywhere;box-shadow:0 8px 30px #0005}' +
-        '.wml-gd-session-overlay{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:100%;height:100%;max-width:none;max-height:none;margin:0;padding:20px;border:0;background:rgba(0,0,0,.55);color:inherit}' +
-        '.wml-gd-session-box{box-sizing:border-box;width:min(92vw,440px);max-height:85vh;overflow:auto;padding:18px;border:1px solid var(--wml-border,#7778);border-radius:12px;background:var(--wml-panel,Canvas);color:var(--wml-text,CanvasText);box-shadow:0 8px 30px #0005}' +
-        '.wml-gd-session-box h3{margin:0 0 10px}' +
-        '.wml-gd-session-box p{line-height:1.45}' +
-        '.wml-gd-session-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}' +
-        '.wml-gd-session-actions button{flex:1 1 150px;min-height:40px;padding:8px 12px;border:1px solid var(--wml-border,#7778);border-radius:8px;background:var(--wml-panel,#00000010);color:inherit;font:inherit;cursor:pointer}' +
-        '.wml-gd-session-actions button[aria-pressed="true"]{outline:2px solid var(--wml-accent,#4b8)}';
-      document.head.appendChild(style);
+      document.head.appendChild(style);      document.head.appendChild(style);
     }
 
     function hasToken() {
@@ -101,14 +94,26 @@ WML.define({
     }
 
     function readStorage(key) {
-      try { return window.localStorage.getItem(key); } catch (_) { return null; }
+      try {
+        const value = window.localStorage.getItem(key);
+        if (value != null) return value;
+      } catch (_) {}
+      try { return window.sessionStorage.getItem(key); }
+      catch (_) { return null; }
     }
     function writeStorage(key, value) {
+      let stored = false;
       try {
         if (value == null) window.localStorage.removeItem(key);
         else window.localStorage.setItem(key, value);
-        return true;
-      } catch (_) { return false; }
+        stored = true;
+      } catch (_) {}
+      try {
+        if (value == null) window.sessionStorage.removeItem(key);
+        else window.sessionStorage.setItem(key, value);
+        stored = true;
+      } catch (_) {}
+      return stored;
     }
     function loadLogoutMarker() {
       return readStorage(EXPLICIT_LOGOUT_KEY) || '';
@@ -198,16 +203,18 @@ WML.define({
         else authStatus = 'reauth-required';
         throw new Error(payload.message || 'Google 로그인이 취소되었거나 실패했습니다.');
       }
+      const expiresIn = Number(payload.expiresIn);
       if (payload.type !== 'wayward-cloud-auth-success' ||
-          typeof payload.accessToken !== 'string' || !payload.accessToken) {
+          typeof payload.accessToken !== 'string' ||
+          payload.accessToken.length < 16 || payload.accessToken.length > 8192 ||
+          !Number.isFinite(expiresIn) || expiresIn < 60 || expiresIn > 7200) {
         authStatus = 'reauth-required';
-        throw new Error('Google에서 유효한 액세스 토큰을 반환하지 않았습니다.');
+        throw new Error('Google에서 유효한 액세스 토큰 응답을 반환하지 않았습니다.');
       }
       resetDriveListState();
       accessToken = payload.accessToken;
       authCompletedAt = Date.now();
-      tokenExpiresAt = Date.now() +
-        Math.max(60, Math.min(3600, Number(payload.expiresIn) || 3600)) * 1000;
+      tokenExpiresAt = Date.now() + Math.min(3600, expiresIn) * 1000;
       explicitLogout = false;
       permissionRevoked = false;
       hadPreviousAuth = true;
@@ -490,10 +497,8 @@ WML.define({
           });
         }
       }
-      return Array.from(slots.values()).sort((a, b) =>
-        Number(a.name.match(/([0-9]+)\\.json$/)[1]) -
-        Number(b.name.match(/([0-9]+)\\.json$/)[1])
-      );
+      const slotNumber = file => Number(file.name.slice(FILE_PREFIX.length, -5));
+      return Array.from(slots.values()).sort((a, b) => slotNumber(a) - slotNumber(b));
     }
 
     function validateMetadataCache(value) {
@@ -1311,12 +1316,18 @@ WML.define({
             renderSlots(root);
             if (lastListMetrics) {
               addText(root, '목록 ' + lastListMetrics.slotCount + '개 · ' +
-                lastListMetrics.durationMs + ' ms · API ' + lastListMetrics.apiCalls + '회',
+                lastListMetrics.durationMs + ' ms · API ' + lastListMetrics.apiCalls + '회 · ' +
+                lastListMetrics.bodyDownloads + '개 본문 다운로드',
+                'wml-gd-small');
+              addText(root, 'Drive 요청 ' + lastListMetrics.apiRequestMs + ' ms · JSON 파싱 ' +
+                lastListMetrics.jsonParseMs + ' ms · 렌더링 ' + lastListMetrics.renderMs + ' ms',
                 'wml-gd-small');
             }
           } else if (slotsStatus === 'loading') {
             if (driveMetadataCacheAvailable || driveSlots.length) {
-              addText(root, '저장목록 최신 상태를 확인하고 있습니다…', 'wml-gd-small');
+              addText(root, driveMetadataCacheAvailable
+                ? '저장목록 캐시를 먼저 표시하고 최신 상태를 동기화하고 있습니다…'
+                : '저장목록 최신 상태를 확인하고 있습니다…', 'wml-gd-small');
               renderSlots(root);
             } else addText(root, '저장목록을 확인하고 있습니다…');
           } else if (slotsStatus === 'error') {
