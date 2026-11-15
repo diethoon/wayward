@@ -9,7 +9,7 @@ Wayward Google Drive CloudSave — WML v0.6.2
 인증
 - 브라우저 정적 인증 페이지: https://jeiky224.github.io/cloud/auth-061.html
 - Android 공식 런처: WMLHost.startGoogleDriveAuthWithPolicy(nonce, forceSelectAccount), takePendingStateForNonce(nonce), cancelGoogleDriveAuth(nonce)
-- 취소 API가 없는 구형 런처는 네이티브 요청을 시작하지 않고 정적 GIS 브라우저 인증으로 전환합니다.
+- 0.6.1처럼 cancelGoogleDriveAuth가 없는 경우에는 페이지 측 요청을 nonce별로 중단하고 180초 이내 응답을 기다립니다. 실제 네이티브 작업 취소는 해당 API가 제공되지 않으면 보장할 수 없습니다. 취소 API가 있는 런처는 요청별 취소와 90초 제한을 사용합니다.
 - 0.6.1 일회성 accessToken 응답 구조를 유지합니다. 0.7.x 페이지 소유 세션 브리지와 혼합하지 않습니다.
 - 인증 nonce는 24바이트 난수의 48자리 16진수입니다.
 - Access Token과 Refresh Token은 localStorage, sessionStorage, URL, 게임 세이브에 저장하지 않습니다.
@@ -24,19 +24,22 @@ Wayward Google Drive CloudSave — WML v0.6.2
 - 로그아웃 표식 저장은 localStorage를 우선하고 실패하면 sessionStorage를 시도합니다. 둘 다 차단되면 페이지 메모리에서만 보존됩니다.
 
 목록 성능
-- 저장목록은 Google Drive metadata(files.list)만 사용합니다.
-- 저장 파일 본문 다운로드 및 복호화는 전체 목록 표시에서 수행하지 않습니다.
+- 저장목록은 Google Drive metadata(files.list)와 opaque Sidecar ID/generation 포인터만 조회합니다.
+- 보이는 슬롯만 암호화 Sidecar를 지연 조회하며, Sidecar가 없는 기존 자동 암호화 저장은 보이는 슬롯에서만 backfill을 시도합니다.
+- passphrase 암호화 파일은 목록에서 자동 복호화하지 않습니다.
 - 실제 저장/불러오기/덮어쓰기에서 선택한 슬롯 본문만 읽습니다.
 - 계정별 메타데이터 캐시를 사용하고 목록 조회를 중복 병합합니다.
 - 최신 동기화 측정은 브라우저 개발자 콘솔의 [Wayward CloudSave] metadata list metrics에서 확인합니다.
 
 지원 환경
 - localhost, 127.0.0.1, 0.0.0.0, LAN HTTP, HTTPS
-- file://는 opaque Origin의 opener 기반 handoff를 시도합니다. 브라우저의 팝업/opener 제한으로 성공하지 못할 수 있으므로 실환경 테스트 결과를 확인해야 합니다.
+- file://는 연결 버튼 한 번으로 opener를 유지하는 GIS 인증 팝업을 동기적으로 엽니다. 기존 게임 창 안에서 GIS를 렌더링하지는 않습니다. 브라우저 팝업/opener 제한으로 막히면 팝업 허용 후 재시도해야 하며, 실환경 검증 결과를 확인해야 합니다.
 - Android 런처는 네이티브 인증 API가 있으면 우선 사용하고, API가 없으면 웹 GIS 경로로 전환합니다.
 
 세이브 호환성
-- 기존 Drive appDataFolder, 슬롯 ID, 파일명, JSON envelope 및 AES-256-GCM 형식을 유지합니다.
+- 기존 Drive appDataFolder, primary 슬롯 ID·파일명·JSON envelope 및 AES-256-GCM 형식을 유지합니다.
+- 미리보기 Sidecar도 기존 encryptSnapshotEmbedded 형식으로 별도 암호화합니다. primary appProperties에는 Sidecar ID와 generation 외의 게임 정보가 들어가지 않습니다.
+- 메모 버튼은 메모가 있을 때만 나타나고, 팝업은 줄바꿈·긴 글 스크롤·ESC·바깥 터치·Android 뒤로가기를 지원합니다.
 - crypto.js는 0.6.1 기준과 변경하지 않습니다.
 - 기존 세이브 불러오기 및 삭제 호환성을 유지합니다.
 - 이전 passphrase 방식 세이브는 저장 당시 암호화 비밀번호가 필요할 수 있습니다.
