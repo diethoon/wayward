@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
@@ -11,8 +12,105 @@ const { performance } = require('node:perf_hooks');
 const root = path.resolve(__dirname, '..');
 const modPath = path.join(root, 'cloud-save/mod.js');
 const cryptoPath = path.join(root, 'cloud-save/crypto.js');
-const mod = fs.readFileSync(modPath, 'utf8');
+const outputDir = path.join(root, '.build');
+fs.mkdirSync(outputDir, { recursive: true });
 
+// Stream the pinned 0.6.1 baseline to disk; do not hold git-show output in memory.
+const BASELINE_COMMIT = '0356c7da899b102107ab6988c11a1549de5d209e';
+const baselinePath = path.join(os.tmpdir(), `wayward-cloudsave-061-${process.pid}.js`);
+const baselineFd = fs.openSync(baselinePath, 'w');
+try {
+  execFileSync('git', ['show', `${BASELINE_COMMIT}:cloud-save/mod.js`], {
+    stdio: ['ignore', baselineFd, 'inherit']
+  });
+} finally {
+  fs.closeSync(baselineFd);
+}
+process.on('exit', () => { try { fs.rmSync(baselinePath, { force: true }); } catch (_) {} });
+
+// Search source byte streams with a 4 KiB read buffer and boundary carry.
+function fileContainsText(filePath, value) {
+  const needle = Buffer.from(value, 'utf8');
+  const fd = fs.openSync(filePath, 'r');
+  const buffer = Buffer.alloc(4096);
+  let offset = 0;
+  let carry = Buffer.alloc(0);
+  try {
+    while (true) {
+      const length = fs.readSync(fd, buffer, 0, buffer.length, offset);
+      if (length === 0) break;
+      offset += length;
+      const window = Buffer.concat([carry, buffer.subarray(0, length)]);
+      if (window.indexOf(needle) >= 0) return true;
+      carry = Buffer.from(window.subarray(Math.max(0, window.length - needle.length + 1)));
+    }
+  } finally { fs.closeSync(fd); }
+  return false;
+}
+
+function fileMatchesRegex(filePath, expression) {
+  const flags = expression.flags.replace(/[gy]/g, '');
+  const matcher = new RegExp(expression.source, flags);
+  const fd = fs.openSync(filePath, 'r');
+  const buffer = Buffer.alloc(4096);
+  const overlap = 8192;
+  let offset = 0;
+  let carry = '';
+  try {
+    while (true) {
+      const length = fs.readSync(fd, buffer, 0, buffer.length, offset);
+      if (length === 0) break;
+      offset += length;
+      const window = carry + buffer.subarray(0, length).toString('utf8');
+      matcher.lastIndex = 0;
+      if (matcher.test(window)) return true;
+      carry = window.slice(-overlap);
+    }
+  } finally { fs.closeSync(fd); }
+  return false;
+}
+
+// Keep only a requested function range in memory. Marker matching is byte-based,
+// so a marker split across 4 KiB chunks is still detected.
+function readSectionFromFile(filePath, startMarkerText, endMarkerText) {
+  const startMarker = Buffer.from(startMarkerText, 'utf8');
+  const endMarker = Buffer.from(endMarkerText, 'utf8');
+  const fd = fs.openSync(filePath, 'r');
+  const buffer = Buffer.alloc(4096);
+  const parts = [];
+  let offset = 0;
+  let carry = Buffer.alloc(0);
+  let started = false;
+  let ended = false;
+  try {
+    while (true) {
+      const length = fs.readSync(fd, buffer, 0, buffer.length, offset);
+      if (length === 0) break;
+      offset += length;
+      let window = Buffer.concat([carry, buffer.subarray(0, length)]);
+      if (!started) {
+        const startAt = window.indexOf(startMarker);
+        if (startAt < 0) {
+          carry = Buffer.from(window.subarray(Math.max(0, window.length - startMarker.length + 1)));
+          continue;
+        }
+        started = true;
+        window = window.subarray(startAt + startMarker.length);
+      }
+      const endAt = window.indexOf(endMarker);
+      if (endAt >= 0) {
+        if (endAt > 0) parts.push(Buffer.from(window.subarray(0, endAt)));
+        ended = true;
+        break;
+      }
+      const safeLength = Math.max(0, window.length - endMarker.length + 1);
+      if (safeLength > 0) parts.push(Buffer.from(window.subarray(0, safeLength)));
+      carry = Buffer.from(window.subarray(safeLength));
+    }
+  } finally { fs.closeSync(fd); }
+  assert.ok(started && ended, `missing source section in ${filePath}: ${startMarkerText}`);
+  return Buffer.concat(parts).toString('utf8');
+}
 function section(source, start, end) {
   const a = source.indexOf(start);
   const b = source.indexOf(end, a + start.length);
@@ -21,10 +119,10 @@ function section(source, start, end) {
 }
 
 function requireText(value, label) {
-  assert.ok(mod.includes(value), 'missing required CloudSave contract: ' + label);
+  assert.ok(fileContainsText(modPath, value), 'missing required CloudSave contract: ' + label);
 }
 
-assert.match(mod, /version: '0\.6\.2'/);
+assert.ok(fileMatchesRegex(modPath, /version: '0\\.6\\.2'/), 'CloudSave version must be 0.6.2');
 requireText("https://jeiky224.github.io/cloud/auth-061.html", 'isolated 0.6.1 auth endpoint');
 requireText('startGoogleDriveAuthWithPolicy(nonce, !!forceSelectAccount)', 'Android native policy bridge');
 requireText('takePendingStateForNonce(nonce)', 'nonce-scoped native result retrieval');
@@ -50,11 +148,18 @@ requireText('bodyDownloads:', 'file body download instrumentation');
 requireText('cacheFirstDisplayMs:', 'cache first display instrumentation');
 requireText('apiRequestMs,', 'Drive request time instrumentation');
 requireText('jsonParseMs,', 'JSON parse time instrumentation');
-assert.doesNotMatch(mod, /showSessionSettingsPopup|setSessionPolicy|sessionPolicy|SESSION_POLICY_KEY|로그인 유지 설정|새로고침할 때마다 로그인 해제/);
-assert.doesNotMatch(mod, /localStorage\.setItem\([^\n]*(?:accessToken|refreshToken)/i);
-assert.doesNotMatch(mod, /sessionStorage\.setItem\([^\n]*(?:accessToken|refreshToken)/i);
+assert.equal(fileMatchesRegex(modPath, /showSessionSettingsPopup|setSessionPolicy|sessionPolicy|SESSION_POLICY_KEY/), false,
+  'obsolete login-persistence controls must not remain');
+assert.equal(fileContainsText(modPath, '로그인 유지 설정'), false,
+  'login-persistence settings UI must be removed');
+assert.equal(fileContainsText(modPath, '새로고침할 때마다 로그인 해제'), false,
+  'legacy forced-logout copy must be removed');
+assert.equal(fileMatchesRegex(modPath, /localStorage\\.setItem\\([^\\n]*(?:accessToken|refreshToken)/i), false,
+  'access tokens must not be persisted in localStorage');
+assert.equal(fileMatchesRegex(modPath, /sessionStorage\\.setItem\\([^\\n]*(?:accessToken|refreshToken)/i), false,
+  'access tokens must not be persisted in sessionStorage');
 
-const refresh = section(mod, '    function refreshSlots() {', '    function currentFile(slot) {');
+const refresh = readSectionFromFile(modPath, '    function refreshSlots() {', '    function currentFile(slot) {');
 assert.match(refresh, /files\.list|drive\/v3\/files/);
 assert.doesNotMatch(refresh, /readSlotEnvelope|decryptSnapshot|alt=media/,
   'the list must not download or decrypt save bodies');
@@ -62,8 +167,8 @@ assert.match(refresh, /files\(id,name,mimeType,modifiedTime,size\)/);
 assert.match(refresh, /pageSize: '1000'/);
 assert.match(refresh, /name contains/);
 
-const normalizerSource = section(
-  mod,
+const normalizerSource = readSectionFromFile(
+  modPath,
   '    function normalizeDriveSlotFiles(files) {',
   '    function validateMetadataCache(value) {'
 ).trim();
@@ -103,49 +208,59 @@ assert.equal(duplicateResult[0].size, 2);
 
 // The snapshot serializer/restorer and encrypted file primitives must remain
 // exactly equal to the user's 0.6.1 baseline.
-const baseline = execFileSync('git', [
-  'show', '0356c7da899b102107ab6988c11a1549de5d209e:cloud-save/mod.js'
-], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+// The pinned 0.6.1 baseline is streamed to baselinePath above.
 for (const [start, end] of [
   ['    function buildSnapshot()', '    function firstValue(root'],
   ['    function applySnapshot(snapshot)', '    function isConnected()'],
   ['    async function writeSlotEnvelope(slot, envelope)', '    async function deleteSlot(slot)'],
   ['    async function deleteSlot(slot)', '    function buildSnapshot()']
 ]) {
-  assert.equal(section(mod, start, end), section(baseline, start, end),
+  assert.equal(readSectionFromFile(modPath, start, end), readSectionFromFile(baselinePath, start, end),
     'protected 0.6.1 data/game logic changed: ' + start);
 }
 const cryptoBlob = execFileSync('git', ['hash-object', cryptoPath], { encoding: 'utf8' }).trim();
 assert.equal(cryptoBlob, '7a321b24588d892a02ad9dec7335cf17ce99c8c5',
   'crypto.js must remain byte-for-byte identical to the 0.6.1 baseline');
 
-// Sequential binary scan: every byte is read once in 4096-byte chunks and
-// offset/length/SHA-256 are emitted for the build artifact.
-const outputDir = path.join(root, '.build');
-fs.mkdirSync(outputDir, { recursive: true });
-const fd = fs.openSync(modPath, 'r');
-const buffer = Buffer.alloc(4096);
-const manifest = [];
-let offset = 0;
-try {
-  while (true) {
-    const length = fs.readSync(fd, buffer, 0, buffer.length, offset);
-    if (length === 0) break;
-    const bytes = buffer.subarray(0, length);
-    manifest.push({
-      offset,
-      length,
-      sha256: crypto.createHash('sha256').update(bytes).digest('hex')
-    });
-    offset += length;
-  }
-} finally {
-  fs.closeSync(fd);
+// Sequential binary scan: hash every byte in 4 KiB chunks and preserve the
+// offset/length/hash manifest for both the current module and pinned baseline.
+function scanBinaryFile(filePath, label) {
+  const expectedSize = fs.statSync(filePath).size;
+  const fd = fs.openSync(filePath, 'r');
+  const buffer = Buffer.alloc(4096);
+  const wholeHash = crypto.createHash('sha256');
+  const chunks = [];
+  let offset = 0;
+  try {
+    while (true) {
+      const length = fs.readSync(fd, buffer, 0, buffer.length, offset);
+      if (length === 0) break;
+      const bytes = buffer.subarray(0, length);
+      const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+      wholeHash.update(bytes);
+      chunks.push({ offset, length, sha256 });
+      offset += length;
+    }
+  } finally { fs.closeSync(fd); }
+  assert.equal(offset, expectedSize, label + ' scan must reach EOF exactly');
+  return {
+    file: label,
+    bytes: offset,
+    chunkSize: 4096,
+    sha256: wholeHash.digest('hex'),
+    chunks
+  };
 }
-assert.equal(offset, fs.statSync(modPath).size, 'binary scan must reach EOF exactly');
+
+const sourceScan = scanBinaryFile(modPath, 'cloud-save/mod.js');
+const baselineScan = scanBinaryFile(baselinePath, 'CloudSave 0.6.1 baseline mod.js');
 fs.writeFileSync(
   path.join(outputDir, 'cloudsave-mod-chunks-4096.json'),
-  JSON.stringify({ file: 'cloud-save/mod.js', bytes: offset, chunkSize: 4096, chunks: manifest }, null, 2)
+  JSON.stringify({ baselineCommit: BASELINE_COMMIT, scans: [sourceScan, baselineScan] }, null, 2)
 );
-console.log('BINARY_SCAN', JSON.stringify({ bytes: offset, chunks: manifest.length, chunkSize: 4096 }));
+console.log('BINARY_SCAN', JSON.stringify({
+  source: { bytes: sourceScan.bytes, chunks: sourceScan.chunks.length, sha256: sourceScan.sha256 },
+  baseline: { bytes: baselineScan.bytes, chunks: baselineScan.chunks.length, sha256: baselineScan.sha256 }
+}));
+fs.rmSync(baselinePath, { force: true });
 console.log('CloudSave 0.6.2 source contracts passed');
