@@ -9,7 +9,7 @@ Google Drive `appDataFolder`에 기존 CloudSave 형식으로 세이브를 저�
 
 - **Android 공식 런처:** `window.WMLHost`가 있으면 인증 API의 세부 메서드 유무와 관계없이 `android-native` 어댑터로 고정합니다. 필요한 네이티브 API가 빠져 있으면 명확히 미지원 처리하며 웹 GIS나 `auth-061.html`로 우회하지 않습니다. 최초 연결과 명시적 로그아웃 후 재로그인은 `startGoogleDriveAuthWithPolicy(nonce, true)`가 필요합니다. 정책 오버로드가 없는 구형 브리지는 강제 계정 선택 요청을 거부하고, 비선택 세션 복구에만 legacy `startGoogleDriveAuth(nonce)`를 사용할 수 있습니다. `cancelGoogleDriveAuth`가 없으면 페이지 측 대기만 중단하고 nonce별 늦은 응답을 거부합니다(최대 180초 대기). 네이티브 계정 선택 화면 자체는 취소하지 못할 수 있습니다.
 - **PC HTTP/HTTPS 브라우저:** Google Identity Services Token Model을 게임 화면의 Google 연결 버튼 클릭 이벤트에서 직접 실행합니다. 별도 인증 페이지나 로컬·원격 서버를 거치지 않습니다. 브라우저 GIS 팝업의 성공·취소·팝업 차단 콜백을 게임 세션에서 처리합니다. 최초 연결과 명시적 로그아웃 후에는 `prompt: 'select_account'`를 요청합니다. Google GIS가 팝업 닫힘 때 callback을 생략하는 브라우저 동작에 대비해 120초 응답 watchdog을 두며, 타임아웃·취소·성공 모두 대기 상태와 타이머를 정리합니다.
-- **PC `file://`:** 브라우저의 opaque Origin(`null`)은 Google GIS의 허용된 JavaScript Origin이 아니므로 인증을 시작하지 않고 명시적 오류를 반환합니다. CloudSave는 PC 런처, Remote Host, 로컬 포트, 정적 외부 인증 페이지, 별도 백엔드 또는 CORS/Origin 우회에 의존하지 않습니다. 순수 `file://` 브라우저만으로 한 번의 클릭에서 Google OAuth를 완료하는 공식 no-server 흐름은 확인되지 않았습니다. PC 브라우저 사용은 등록된 HTTPS 게임 Origin에서 실행해야 합니다.
+- **PC `file://`:** 로그인 버튼 클릭 시 `https://wayward-six.vercel.app/auth-page/index.html` 정적 HTTPS 페이지를 팝업으로 엽니다. 중계 페이지는 실제 opener WindowProxy에서 받은 일회성 `MessageChannel`만 수락하고, nonce/requestId/attemptId/sessionId로 해당 게임 창 요청을 묶습니다. 인증 토큰은 URL·query·storage·로그가 아니라 전용 MessagePort로만 반환하며, Drive API 호출은 기존처럼 게임 모드가 Google에 직접 수행합니다. `Origin: null`, wildcard targetOrigin, localhost listener, PC Launcher/Remote Host API는 사용하지 않습니다. Google GIS Token Model은 사용자 동작을 요구하므로 게임 확인은 자동 처리되지만, 브라우저가 팝업에 사용자 활성화를 전달하지 않은 경우 Google 계정 선택 버튼은 중계 창에서 한 번 눌러야 합니다. file Origin은 모든 로컬 파일 문서에 공통인 opaque Origin이므로 이 핸드셰이크는 정확한 opener/session 연결을 확인할 뿐, 실행 중인 로컬 파일이 변조되지 않은 Wayward 바이너리인지 암호학적으로 증명하지는 않습니다. 실제 배포 URL과 실계정 인증은 별도 실환경 검증이 필요합니다.
 - **Drive API:** 게임 페이지가 Google Drive API를 직접 호출합니다. 별도 백엔드, Worker, OAuth Client Secret, Refresh Token 중계는 추가하지 않습니다.
 - **토큰:** access token은 현재 페이지 메모리에만 둡니다. URL, localStorage, sessionStorage, 게임 세이브 및 로그에 저장하지 않습니다.
 
@@ -74,7 +74,7 @@ GIS 응답의 `state`와 세션 generation을 검증합니다. 액세스 토큰�
 1. 배포된 `cloud-save` 폴더를 게임의 `wml/mods/` 안에 복사합니다.
 2. `wml/mods/mods.js`의 `WML.enable([...])`에 `"cloud-save"`가 있는지 확인합니다. 없을 때만 기존 항목을 보존해 추가합니다.
 3. `crypto.js`, `mod.js`, `README.md`, `INSTALL.txt`가 같은 `cloud-save` 폴더에 있어야 합니다.
-4. Android 런처의 네이티브 인증 브리지가 있으면 네이티브 어댑터를 사용합니다. HTTP/HTTPS 브라우저는 GIS 직접 인증을 사용하며, file://만 별도 브리지 어댑터를 사용합니다.
+4. Android 런처는 네이티브 인증, HTTP/HTTPS 브라우저는 GIS 직접 인증, PC file:// 브라우저는 정적 HTTPS 인증 페이지와 일회성 MessageChannel 어댑터를 사용합니다.
 5. 모드를 다시 로드하고 **클라우드세이브 (Google Drive)** 를 엽니다.
 
 실제 Google 실계정 인증·Drive save/load·Android·브라우저 매트릭스 테스트 결과는 배포 전 별도 검증 보고서에서 확인하세요.
