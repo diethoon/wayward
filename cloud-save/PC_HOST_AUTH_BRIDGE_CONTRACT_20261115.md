@@ -1,4 +1,4 @@
-> **상태: 폐기된 제안 / 구현 금지 (2026-11-16)**  
+> **상태: 폐기된 제안 / 구현 금지 (2026-11-16)**
 > 상위 아키텍처 요구사항인 “CloudSave는 런처·Remote Host·로컬 서버·외부 인증 relay 없이 독립 동작”과 충돌하므로 이 Host OAuth + loopback 설계는 채택하지 않습니다. 이 문서는 과거 논의를 위한 기록이며 현재 API 계약이 아닙니다. 새로운 Host OAuth API, 로컬 callback listener 또는 Host 세션 토큰 의존성을 구현하지 마세요. 최신 결정은 `AUTH_UX_20261115.md`의 server-independence decision을 따릅니다.
 >
 > PC `file://` 순수 브라우저 OAuth는 현재 공식 지원 방식으로 충족할 수 없습니다. Desktop App OAuth는 loopback listener를 요구하고, Limited-Input Device Flow는 별도 기기 사용자 코드 입력을 요구합니다. 따라서 현재 제약에서 PC `file://` 인증은 미완료/차단으로 판정합니다.
