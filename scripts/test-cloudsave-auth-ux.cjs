@@ -285,7 +285,7 @@ async function testDirectGISPopupFailureAndStaleState() {
 
 function testAuthFunctionDeclarationsAreUnique() {
   const counts = new Map();
-  for (const match of source.matchAll(/^\\s*function\\s+([A-Za-z_$][\\w$]*)\\s*\\(/gm)) {
+  for (const match of source.matchAll(/^\s*function\s+([A-Za-z_$][\w$]*)\s*\(/gm)) {
     counts.set(match[1], (counts.get(match[1]) || 0) + 1);
   }
   for (const name of ['validateDirectGISOrigin', 'requestBrowserGoogleToken', 'requestFileBridgeGoogleToken']) {
@@ -354,7 +354,7 @@ function testExplicitLogoutSuppressesStartupRestoreAndSlotRefresh() {
     render: () => {},
     Date, Promise, Error, String
   };
-  vm.runInNewContext(restoreSource + '\\n' + openSource + '\\n;open()', context);
+  vm.runInNewContext(restoreSource + '\n' + openSource + '\\n;open()', context);
   assert.equal(opened, 1);
   assert.equal(refreshed, 0, 'explicit logout must not auto-fetch the Drive slot list');
 }
