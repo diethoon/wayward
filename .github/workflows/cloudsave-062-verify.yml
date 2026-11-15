@@ -67,10 +67,10 @@ jobs:
           test -s pages-cloudsave-auth/cloud/file-auth.js
           test -s pages-cloudsave-auth/cloud/file-auth.css
           test -s pages-cloudsave-auth/README.md
-          zip -X -j .build/Wayward_CloudSave_GitHub_Pages_File_Auth_Source.zip \\
-            pages-cloudsave-auth/cloud/file-auth.html \\
-            pages-cloudsave-auth/cloud/file-auth.js \\
-            pages-cloudsave-auth/cloud/file-auth.css \\
+          zip -X -j .build/Wayward_CloudSave_GitHub_Pages_File_Auth_Source.zip \
+            pages-cloudsave-auth/cloud/file-auth.html \
+            pages-cloudsave-auth/cloud/file-auth.js \
+            pages-cloudsave-auth/cloud/file-auth.css \
             pages-cloudsave-auth/README.md
           sha256sum .build/Wayward_CloudSave_GitHub_Pages_File_Auth_Source.zip >> .build/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
