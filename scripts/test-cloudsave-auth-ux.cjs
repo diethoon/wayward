@@ -630,7 +630,7 @@ async function testFileOriginUsesOneTimeMessageChannel() {
     acceptAccessToken(payload, nonce) {
       assert.equal(payload.nonce, nonce);
       accepted.push(payload);
-      sessionGeneration += 1;
+      context.sessionGeneration += 1;
     },
     Promise, Error, String, Date, setTimeout, clearTimeout, setInterval, clearInterval
   };
