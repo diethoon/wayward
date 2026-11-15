@@ -6,7 +6,9 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const modPath = path.join(__dirname, '..', 'cloud-save', 'mod.js');
+const authPagePath = path.join(__dirname, '..', 'auth-page', 'index.html');
 const source = fs.readFileSync(modPath, 'utf8');
+const authPageSource = fs.readFileSync(authPagePath, 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -200,7 +202,7 @@ function createBrowserHarness(options = {}) {
   };
   const code = section(
     '    function validateDirectGISOrigin() {',
-    '    function requestUnsupportedFileGoogleToken() {'
+    '    function requestFileBridgeGoogleToken() {'
   );
   const api = vm.runInNewContext(
     code + '\n;({ validateDirectGISOrigin, requestBrowserGoogleToken })',
@@ -345,7 +347,7 @@ function testAuthFunctionDeclarationsAreUnique() {
   for (const match of source.matchAll(/^\s*function\s+([A-Za-z_$][\w$]*)\s*\(/gm)) {
     counts.set(match[1], (counts.get(match[1]) || 0) + 1);
   }
-  for (const name of ['validateDirectGISOrigin', 'requestBrowserGoogleToken', 'requestUnsupportedFileGoogleToken']) {
+  for (const name of ['validateDirectGISOrigin', 'requestBrowserGoogleToken', 'requestFileBridgeGoogleToken']) {
     assert.equal(counts.get(name), 1, name + ' must have exactly one runtime declaration');
   }
 }
@@ -364,7 +366,7 @@ function testNativeLauncherMarkerKeepsNativeAdapterEvenWithoutAuthMethods() {
     'an embedded launcher with a missing auth surface must not become browser GIS');
   assert.equal(select({ startGoogleDriveAuth() {} }).AUTH_ADAPTER, 'android-native');
   assert.equal(select(undefined).AUTH_ADAPTER, 'browser-gis');
-  assert.equal(select(undefined, 'file:', 'null').AUTH_ADAPTER, 'file-unsupported');
+  assert.equal(select(undefined, 'file:', 'null').AUTH_ADAPTER, 'file-bridge');
 }
 
 function testFirstConnectionAndExplicitLogoutRequirePicker() {
@@ -462,7 +464,7 @@ function testAdapterDispatchDoesNotCrossFallback() {
     createAuthNonce: () => '4'.repeat(48),
     requestNativeGoogleToken: (...args) => { calls.push(['native', ...args]); return 'native-task'; },
     requestBrowserGoogleToken: (...args) => { calls.push(['browser', ...args]); return 'browser-task'; },
-    requestUnsupportedFileGoogleToken: (...args) => { calls.push(['file-unavailable', ...args]); return 'file-unavailable-task'; }
+    requestFileBridgeGoogleToken: (...args) => { calls.push(['file-bridge', ...args]); return 'file-bridge-task'; }
   };
   const route = vm.runInNewContext(dispatch + '\n;requestGoogleToken', context);
   assert.equal(route(true, 23), 'native-task');
@@ -471,34 +473,175 @@ function testAdapterDispatchDoesNotCrossFallback() {
   context.AUTH_ADAPTER = 'browser-gis';
   assert.equal(route(false, 24), 'browser-task');
   assert.equal(calls[1][0], 'browser');
-  context.AUTH_ADAPTER = 'file-unsupported';
-  assert.equal(route(false, 25), 'file-unavailable-task');
-  assert.equal(calls[2][0], 'file-unavailable');
+  context.AUTH_ADAPTER = 'file-bridge';
+  assert.equal(route(false, 25), 'file-bridge-task');
+  assert.equal(calls[2][0], 'file-bridge');
 }
 
-async function testFileOriginFailsClosedWithoutExternalAuthDependency() {
-  const fileSource = section(
-    '    function requestUnsupportedFileGoogleToken() {',
+async function testFileOriginUsesOneTimeMessageChannel() {
+  const bridgeSource = section(
+    '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
     '    function requestGoogleToken(forceSelectAccount, attempt) {'
   );
-  assert.match(fileSource, /file:\/\//);
-  assert.match(fileSource, /PC 런처/);
-  assert.match(fileSource, /외부 인증 페이지에 의존하지 않으므로/);
-  assert.doesNotMatch(fileSource, /window\.open|postMessage|fetch\(|AUTH_BRIDGE_URL|127\.0\.0\.1/);
+  assert.match(source, /FILE_AUTH_BRIDGE_URL = 'https:\/\/wayward-six\.vercel\.app\/auth-page\/index\.html'/);
+  assert.match(source, /FILE_AUTH_BRIDGE_ORIGIN = 'https:\/\/wayward-six\.vercel\.app'/);
+  assert.match(bridgeSource, /window\.open\(/,
+    'the popup must open synchronously in the login click call stack');
+  assert.match(bridgeSource, /new MessageChannel\(\)/);
+  assert.match(bridgeSource, /popup\.postMessage\([\s\S]*FILE_AUTH_BRIDGE_ORIGIN[\s\S]*channel\.port2/);
+  assert.match(bridgeSource, /isCurrentAuthAttempt\(attempt, sessionAtStart\)/);
+  assert.match(bridgeSource, /data\.nonce !== nonce/);
+  assert.match(bridgeSource, /data\.requestId !== requestId/);
+  assert.match(bridgeSource, /data\.attemptId !== attemptId/);
+  assert.match(bridgeSource, /data\.sessionId !== sessionId/);
+  assert.match(bridgeSource, /wayward-cloud-auth-ack-received/);
+  assert.doesNotMatch(bridgeSource, /postMessage\([^,]+,\s*['"]\*['"]/);
+  assert.doesNotMatch(bridgeSource, /event\.origin|origin\s*===\s*['"]null['"]/);
+  assert.doesNotMatch(bridgeSource, /AUTH_BRIDGE_URL|AUTH_BRIDGE_ORIGIN/);
+  assert.doesNotMatch(bridgeSource, /fetch\(|127\.0\.0\.1|localhost/);
 
-  const unsupported = vm.runInNewContext(
-    fileSource + '\n;requestUnsupportedFileGoogleToken',
-    { Promise, Error }
-  );
-  await assert.rejects(unsupported(), /PC file:\/\//);
+  const inlineScripts = [...authPageSource.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
+    .map(match => match[1]).filter(text => text.trim());
+  assert.equal(inlineScripts.length, 1, 'auth page has one inline protocol implementation');
+  new vm.Script(inlineScripts[0], { filename: 'auth-page/index.html' });
 
-  assert.doesNotMatch(source, /AUTH_BRIDGE_URL|AUTH_BRIDGE_ORIGIN|auth-061\.html/);
-  const browserSource = section(
-    '    function requestBrowserGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
-    '    function requestUnsupportedFileGoogleToken() {'
+  assert.match(authPageSource, /event\.source !== window\.opener/,
+    'the relay accepts only its actual opener WindowProxy');
+  assert.match(authPageSource, /incoming\.length !== 1/,
+    'the relay requires exactly one transferred MessagePort');
+  assert.match(authPageSource, /data\.appId !== APP_ID/);
+  assert.match(authPageSource, /data\.nonce|validId\(data\.nonce\)/);
+  assert.match(authPageSource, /response\.state !== oauthState/);
+  assert.match(authPageSource, /navigator\.userActivation/,
+    'the Google token flow must preserve the browser gesture requirement');
+  assert.match(authPageSource, /port\.postMessage/);
+  assert.match(authPageSource, /wayward-cloud-auth-ack-received/);
+  assert.doesNotMatch(authPageSource, /event\.origin|window\.opener\.postMessage|postMessage\([^,]+,\s*['"]\*['"]/);
+  assert.doesNotMatch(authPageSource, /URLSearchParams|location\.search|localStorage|sessionStorage|console\.log/);
+  assert.match(authPageSource, /setTimeout\(\(\) => \{ try \{ window\.close\(\); \}/,
+    'the relay closes only after its acknowledgement path');
+
+  // Execute the actual file-bridge helper with a deterministic MessageChannel
+  // mock. This proves the popup opens synchronously, uses the exact HTTPS
+  // target origin, binds one nonce/request/attempt/session, and accepts only
+  // one current token response after the relay acknowledges receipt.
+  const accepted = [];
+  const sent = [];
+  let opened = 0;
+  let postedOrigin = '';
+  const popup = {
+    closed: false,
+    focus() {},
+    close() { this.closed = true; },
+    postMessage(data, targetOrigin, ports) {
+      opened += 0;
+      postedOrigin = targetOrigin;
+      assert.equal(data.type, 'wayward-cloud-auth-init');
+      assert.equal(data.action, 'login');
+      assert.equal(data.appId, 'wayward-cloudsave');
+      assert.equal(ports.length, 1);
+      assert.equal(Object.prototype.hasOwnProperty.call(data, 'accessToken'), false);
+      const pagePort = ports[0];
+      pagePort.onmessage = event => {
+        const message = event.data;
+        sent.push(message);
+        if (message.type === 'wayward-cloud-auth-ack' && message.accepted === true) {
+          pagePort.postMessage({
+            type: 'wayward-cloud-auth-ack-received',
+            version: message.version, nonce: message.nonce,
+            requestId: message.requestId, attemptId: message.attemptId,
+            sessionId: message.sessionId, accepted: true
+          });
+        }
+      };
+      const base = {
+        version: data.version, nonce: data.nonce,
+        requestId: data.requestId, attemptId: data.attemptId,
+        sessionId: 'd'.repeat(48)
+      };
+      setTimeout(() => pagePort.postMessage({
+        ...base, type: 'wayward-cloud-auth-ready'
+      }), 0);
+      setTimeout(() => pagePort.postMessage({
+        ...base, type: 'wayward-cloud-auth-success',
+        accessToken: 'test-file-bridge-access-token-123456',
+        expiresIn: 3600
+      }), 5);
+      setTimeout(() => pagePort.postMessage({
+        ...base, type: 'wayward-cloud-auth-success',
+        accessToken: 'duplicate-file-bridge-token-123456',
+        expiresIn: 3600
+      }), 10);
+    }
+  };
+  class MockMessageChannel {
+    constructor() {
+      const port1 = { onmessage: null, onmessageerror: null, closed: false, start() {}, close() { this.closed = true; } };
+      const port2 = { onmessage: null, onmessageerror: null, closed: false, start() {}, close() { this.closed = true; } };
+      port1.postMessage = data => {
+        if (!port2.closed && typeof port2.onmessage === 'function') port2.onmessage({ data });
+      };
+      port2.postMessage = data => {
+        if (!port1.closed && typeof port1.onmessage === 'function') port1.onmessage({ data });
+      };
+      this.port1 = port1;
+      this.port2 = port2;
+    }
+  }
+  const context = {
+    AUTH_ADAPTER: 'file-bridge',
+    FILE_AUTH_BRIDGE_VERSION: 2,
+    FILE_AUTH_BRIDGE_URL: 'https://wayward-six.vercel.app/auth-page/index.html',
+    FILE_AUTH_BRIDGE_ORIGIN: 'https://wayward-six.vercel.app',
+    activeAuthCancel: null,
+    MessageChannel: MockMessageChannel,
+    window: {
+      open(url, name, features) {
+        opened++;
+        assert.equal(url, context.FILE_AUTH_BRIDGE_URL);
+        assert.match(name, /^waywardCloudSaveAuth_/);
+        assert.match(features, /popup=yes/);
+        return popup;
+      }
+    },
+    createAuthNonce: (() => {
+      let n = 0;
+      return () => (++n).toString(16).padStart(48, '0');
+    })(),
+    isCurrentAuthAttempt(attempt, session) { return attempt === 27 && session === 31; },
+    acceptAccessToken(payload, nonce) {
+      assert.equal(payload.nonce, nonce);
+      accepted.push(payload);
+    },
+    Promise, Error, String, Date, setTimeout, clearTimeout, setInterval, clearInterval
+  };
+  const api = vm.runInNewContext(
+    bridgeSource + '\n;requestFileBridgeGoogleToken',
+    context
   );
-  assert.doesNotMatch(browserSource, /window\.open|AUTH_BRIDGE|postMessage/);
+  const pending = api('e'.repeat(48), true, 27, 31);
+  assert.equal(opened, 1, 'window.open must run synchronously before the helper returns');
+  await pending;
+  assert.equal(postedOrigin, 'https://wayward-six.vercel.app');
+  assert.equal(accepted.length, 1, 'duplicate/stale result must not be accepted twice');
+  assert.equal(accepted[0].accessToken, 'test-file-bridge-access-token-123456');
+  assert.equal(sent.filter(item => item.type === 'wayward-cloud-auth-ack' && item.accepted === true).length, 1);
+
+  // A changed local session invalidates a delayed ready/result event.
+  const staleAccepted = [];
+  const staleContext = Object.assign({}, context, {
+    activeAuthCancel: null,
+    isCurrentAuthAttempt() { return false; },
+    acceptAccessToken(payload) { staleAccepted.push(payload); }
+  });
+  const staleApi = vm.runInNewContext(
+    bridgeSource + '\n;requestFileBridgeGoogleToken',
+    staleContext
+  );
+  await assert.rejects(staleApi('f'.repeat(48), false, 27, 31), /이전 PC file 인증 응답/);
+  assert.equal(staleAccepted.length, 0);
 }
+
 async function main() {
   testConnectFromClickDispatchesAuthSynchronouslyAndHonorsPickerPolicy();
   testAuthFunctionDeclarationsAreUnique();
@@ -518,8 +661,8 @@ async function main() {
   await testDirectGISPopupFailureAndStaleState();
   testDirectGISOriginRules();
   testAdapterDispatchDoesNotCrossFallback();
-  await testFileOriginFailsClosedWithoutExternalAuthDependency();
-  console.log('CloudSave auth UX tests passed: Android native relogin, direct GIS popup, standalone file:// fail-closed routing and stale-response guards');
+  await testFileOriginUsesOneTimeMessageChannel();
+  console.log('CloudSave auth UX tests passed: Android native, direct GIS, file:// MessageChannel session binding, ack, duplicate and stale-response guards');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; });
