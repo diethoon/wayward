@@ -123,27 +123,23 @@ function requireText(value, label) {
 }
 
 assert.ok(fileMatchesRegex(modPath, /version: '0\.6\.2'/), 'CloudSave version must be 0.6.2');
-requireText("https://jeiky224.github.io/cloud/auth-061.html", 'isolated 0.6.1 auth endpoint');
+assert.equal(fileContainsText(modPath, "https://jeiky224.github.io/cloud/auth-061.html"), false,
+  'standalone CloudSave must not depend on a hosted auth endpoint');
 requireText('startGoogleDriveAuthWithPolicy(nonce, !!forceSelectAccount)', 'Android native policy bridge');
 requireText("const AUTH_ADAPTER = nativeLauncherContext ? 'android-native'", 'immutable environment adapter selection');
 requireText('const nativeLauncherContext = !!nativeAuthHost', 'native launcher marker fails closed without auth API');
 requireText('if (forceSelectAccount && !hasPolicyStart)', 'forced native account selection never degrades to legacy silent login');
 requireText('return explicitLogout || !hadPreviousAuth;', 'first connection and explicit logout account selection');
 requireText('function requestBrowserGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart)', 'direct GIS browser adapter');
-requireText('function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart)', 'isolated file-origin adapter');
+requireText('function requestUnsupportedFileGoogleToken()', 'standalone file-origin fail-closed adapter');
 requireText("client.requestAccessToken({ prompt: forceSelectAccount ? 'select_account' : '', state: nonce });", 'GIS popup directly from game click');
 requireText("const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';", 'least-privilege Drive scope');
 requireText("const GOOGLE_OAUTH_CLIENT_ID =", 'public GIS OAuth client identifier');
 requireText("if (AUTH_ADAPTER === 'browser-gis') {", 'GIS script is loaded only for browser adapter');
 requireText('takePendingStateForNonce(nonce)', 'nonce-scoped native result retrieval');
-requireText('window.open(bridgeUrl.toString()', 'synchronous browser popup open');
-requireText('event.origin !== AUTH_BRIDGE_ORIGIN', 'auth page Origin validation');
-requireText('event.source !== bridge', 'auth popup source validation');
 requireText('payload.nonce !== nonce', 'one-time nonce validation');
 requireText("'구글 계정으로 연결'", 'unified connect button label');
-requireText("bridgeUrl.searchParams.set('login', forceSelectAccount ? 'select_account' : 'remember')", 'browser account selection policy');
 requireText('forceSelectAccount', 'native account selection policy');
-requireText('closeWatch = setInterval', 'closed auth popup cleanup');
 requireText('activeAuthCancel', 'cancellable pending authentication');
 requireText("const canCancel = typeof host.cancelGoogleDriveAuth === 'function';", 'optional native cancellation and 0.6.1 compatibility');
 requireText('host.cancelGoogleDriveAuth(nonce)', 'native request cancellation on timeout or abort');
@@ -188,25 +184,26 @@ assert.doesNotMatch(nativeAuth, /forceSelectAccount\s*&&.*return null/);
 const directBrowserAuth = readSectionFromFile(
   modPath,
   '    function requestBrowserGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
-  '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {'
+  '    function requestUnsupportedFileGoogleToken() {'
 );
 assert.match(directBrowserAuth, /google\.accounts\.oauth2\.initTokenClient/);
 assert.match(directBrowserAuth, /client\.requestAccessToken\(\{ prompt: forceSelectAccount \? 'select_account' : '', state: nonce \}\)/);
 assert.match(directBrowserAuth, /error_callback:/);
 assert.doesNotMatch(directBrowserAuth, /window\.open|AUTH_BRIDGE_URL|postMessage/,
-  'HTTP/HTTPS GIS adapter must not open the auth-061 bridge');
+  'HTTP/HTTPS GIS adapter must not open an auth relay');
 
 const fileAuth = readSectionFromFile(
   modPath,
-  '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
+  '    function requestUnsupportedFileGoogleToken() {',
   '    function requestGoogleToken(forceSelectAccount, attempt) {'
 );
-assert.match(fileAuth, /protocol !== 'file:' && rawOrigin !== 'null'/);
-assert.match(fileAuth, /window\.open\(bridgeUrl\.toString\(/);
-assert.match(fileAuth, /event\.origin !== AUTH_BRIDGE_ORIGIN/);
-assert.match(fileAuth, /event\.source !== bridge/);
-assert.match(fileAuth, /payload\.nonce !== nonce/);
-assert.match(fileAuth, /isCurrentAuthAttempt\(attempt, sessionAtStart\)/);
+assert.match(fileAuth, /Promise\.reject/);
+assert.match(fileAuth, /PC file:/);
+assert.match(fileAuth, /외부 인증 페이지에 의존하지 않으므로/);
+assert.doesNotMatch(fileAuth, /window\.open|fetch\(|postMessage|AUTH_BRIDGE|127\.0\.0\.1/);
+assert.equal(fileContainsText(modPath, 'AUTH_BRIDGE_URL'), false);
+assert.equal(fileContainsText(modPath, 'AUTH_BRIDGE_ORIGIN'), false);
+assert.equal(fileContainsText(modPath, 'auth-061.html'), false);
 
 const authDispatch = readSectionFromFile(
   modPath,
@@ -215,7 +212,7 @@ const authDispatch = readSectionFromFile(
 );
 assert.match(authDispatch, /AUTH_ADAPTER === 'android-native'.*requestNativeGoogleToken/);
 assert.match(authDispatch, /AUTH_ADAPTER === 'browser-gis'.*requestBrowserGoogleToken/);
-assert.match(authDispatch, /requestFileBridgeGoogleToken/);
+assert.match(authDispatch, /requestUnsupportedFileGoogleToken/);
 assert.doesNotMatch(authDispatch, /window\.open|fallback/);
 
 const driveFetchSource = readSectionFromFile(
@@ -306,17 +303,16 @@ requireText('function closeMemoPopup()', 'memo popup idempotent close');
 requireText('if (activeMemoDialog) { closeMemoPopup(); return true; }', 'Android back closes memo before CloudSave window');
 requireText('item.memoButton.hidden = !hasMemo', 'memo button hidden for empty memo');
 requireText("protocol !== 'file:' && rawOrigin !== 'null'", 'file adapter rejects non-file origins');
-requireText('window.open(bridgeUrl.toString()', 'file-origin GIS popup remains user-gesture synchronous');
 
 const fileBridgeAuth = readSectionFromFile(
   modPath,
-  '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
+  '    function requestUnsupportedFileGoogleToken() {',
   '    function requestGoogleToken(forceSelectAccount, attempt) {'
 );
-assert.ok(fileBridgeAuth.includes("protocol !== 'file:' && rawOrigin !== 'null'"));
-assert.ok(fileBridgeAuth.includes('window.open(bridgeUrl.toString('));
-assert.ok(fileBridgeAuth.includes('event.source !== bridge'));
-assert.ok(fileBridgeAuth.includes('payload.nonce !== nonce'));
+assert.ok(fileBridgeAuth.includes('Promise.reject'));
+assert.ok(fileBridgeAuth.includes('PC file://'));
+assert.ok(!fileBridgeAuth.includes('window.open'));
+assert.ok(!fileBridgeAuth.includes('postMessage'));
 
 const extractBody = readSectionFromFile(
   modPath,
