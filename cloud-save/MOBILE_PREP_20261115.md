@@ -135,3 +135,17 @@ Do not report implementation, package, deployment, physical-device, Google-accou
 ### Integration gate
 
 - Do not integrate CloudSave into the PC-linked new mobile launcher or modify its repository/branch until that launcher work has a declared new baseline (branch and HEAD SHA) and the owner explicitly approves final integration. Existing PRs #17, #18, #19 and #58 remain untouched/unmerged.
+
+
+## 공통 시간 효율·독립 검증 표준 적용
+
+이 저장소의 모든 후속 작업은 [Wayward 공통 엔지니어링·검증 운영 표준](../docs/WAYWARD_ENGINEERING_STANDARD.md)을 필수 준수한다. 기존 HANDOFF의 간략한 시간 효율 원칙을 대체·구체화하며, 엔지니어 실행 방법과 도구/플랫폼 선택, 자동화, 병렬화, 테스트 전략뿐 아니라 총괄참모의 독립 검증까지 적용한다.
+
+필수 실행 요약:
+- 최신 HEAD·기존 구현·HANDOFF·테스트·CI·로그·산출물을 먼저 확인하고 재사용한다. 중복 조사·구현·테스트를 금지한다.
+- 작업별 최적 도구를 선택하고 반복 가능한 탐색·검사·빌드·패키징은 스크립트와 CI로 자동화한다. Vercel·Render·Cloudflare·GitHub는 각자의 강점과 실제 권한이 확인된 범위에서만 사용한다.
+- 독립 작업은 충돌 없이 병렬화하고, 의존 작업만 순차 처리한다. 실패 지점만 수정·재검증한다.
+- 총괄참모는 보고를 그대로 승인하지 않고 HEAD·diff·핵심 코드·테스트 유효성·CI Job·artifact·체크섬을 독립 확인한다.
+- Mock/정적 테스트/에뮬레이터/실기기/실서비스 결과를 구분한다. 실환경 검증이 없으면 미검증으로 명시한다.
+- 보안·데이터 무결성·기존 호환성·사용자 승인 경계를 시간 단축을 이유로 생략하지 않는다.
+- 의미 있는 단계마다 HANDOFF를 갱신하고 다음 담당자가 중복 조사 없이 이어갈 증거와 다음 조치를 기록한다.
