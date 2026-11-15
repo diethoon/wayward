@@ -202,7 +202,7 @@ function createBrowserHarness(options = {}) {
   };
   const code = section(
     '    function validateDirectGISOrigin() {',
-    '    function requestFileBridgeGoogleToken() {'
+    '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {'
   );
   const api = vm.runInNewContext(
     code + '\n;({ validateDirectGISOrigin, requestBrowserGoogleToken })',
