@@ -1575,6 +1575,7 @@ WML.define({
       const overlay = document.createElement('dialog');
       overlay.className = 'wml-gd-memo-overlay';
       overlay.setAttribute('aria-label', '저장 메모');
+      overlay.setAttribute('aria-modal', 'true');
       const box = document.createElement('div');
       box.className = 'wml-gd-memo-box';
       box.setAttribute('role', 'document');
