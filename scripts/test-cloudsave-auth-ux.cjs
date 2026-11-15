@@ -200,7 +200,7 @@ function createBrowserHarness(options = {}) {
   };
   const code = section(
     '    function validateDirectGISOrigin() {',
-    '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {'
+    '    function requestUnsupportedFileGoogleToken() {'
   );
   const api = vm.runInNewContext(
     code + '\n;({ validateDirectGISOrigin, requestBrowserGoogleToken })',
@@ -345,7 +345,7 @@ function testAuthFunctionDeclarationsAreUnique() {
   for (const match of source.matchAll(/^\s*function\s+([A-Za-z_$][\w$]*)\s*\(/gm)) {
     counts.set(match[1], (counts.get(match[1]) || 0) + 1);
   }
-  for (const name of ['validateDirectGISOrigin', 'requestBrowserGoogleToken', 'requestFileBridgeGoogleToken']) {
+  for (const name of ['validateDirectGISOrigin', 'requestBrowserGoogleToken', 'requestUnsupportedFileGoogleToken']) {
     assert.equal(counts.get(name), 1, name + ' must have exactly one runtime declaration');
   }
 }
@@ -364,7 +364,7 @@ function testNativeLauncherMarkerKeepsNativeAdapterEvenWithoutAuthMethods() {
     'an embedded launcher with a missing auth surface must not become browser GIS');
   assert.equal(select({ startGoogleDriveAuth() {} }).AUTH_ADAPTER, 'android-native');
   assert.equal(select(undefined).AUTH_ADAPTER, 'browser-gis');
-  assert.equal(select(undefined, 'file:', 'null').AUTH_ADAPTER, 'file-token-bridge');
+  assert.equal(select(undefined, 'file:', 'null').AUTH_ADAPTER, 'file-unsupported');
 }
 
 function testFirstConnectionAndExplicitLogoutRequirePicker() {
@@ -462,7 +462,7 @@ function testAdapterDispatchDoesNotCrossFallback() {
     createAuthNonce: () => '4'.repeat(48),
     requestNativeGoogleToken: (...args) => { calls.push(['native', ...args]); return 'native-task'; },
     requestBrowserGoogleToken: (...args) => { calls.push(['browser', ...args]); return 'browser-task'; },
-    requestFileBridgeGoogleToken: (...args) => { calls.push(['file', ...args]); return 'file-task'; }
+    requestUnsupportedFileGoogleToken: (...args) => { calls.push(['file-unavailable', ...args]); return 'file-unavailable-task'; }
   };
   const route = vm.runInNewContext(dispatch + '\n;requestGoogleToken', context);
   assert.equal(route(true, 23), 'native-task');
@@ -471,28 +471,34 @@ function testAdapterDispatchDoesNotCrossFallback() {
   context.AUTH_ADAPTER = 'browser-gis';
   assert.equal(route(false, 24), 'browser-task');
   assert.equal(calls[1][0], 'browser');
-  context.AUTH_ADAPTER = 'file-token-bridge';
-  assert.equal(route(false, 25), 'file-task');
-  assert.equal(calls[2][0], 'file');
+  context.AUTH_ADAPTER = 'file-unsupported';
+  assert.equal(route(false, 25), 'file-unavailable-task');
+  assert.equal(calls[2][0], 'file-unavailable');
 }
 
-function testFileBridgeIsIsolatedAndOriginChecked() {
+async function testFileOriginFailsClosedWithoutExternalAuthDependency() {
   const fileSource = section(
-    '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
+    '    function requestUnsupportedFileGoogleToken() {',
     '    function requestGoogleToken(forceSelectAccount, attempt) {'
   );
-  assert.match(fileSource, /window\.open\(bridgeUrl\.toString\(/);
-  assert.match(fileSource, /event\.origin !== AUTH_BRIDGE_ORIGIN/);
-  assert.match(fileSource, /event\.source !== bridge/);
-  assert.match(fileSource, /payload\.nonce !== nonce/);
-  assert.match(fileSource, /protocol !== 'file:' && rawOrigin !== 'null'/);
+  assert.match(fileSource, /file:\\/\\//);
+  assert.match(fileSource, /PC 런처/);
+  assert.match(fileSource, /외부 인증 페이지에 의존하지 않으므로/);
+  assert.doesNotMatch(fileSource, /window\\.open|postMessage|fetch\\(|AUTH_BRIDGE_URL|127\\.0\\.0\\.1/);
+
+  const unsupported = vm.runInNewContext(
+    fileSource + '\\n;requestUnsupportedFileGoogleToken',
+    { Promise, Error }
+  );
+  await assert.rejects(unsupported(), /PC file:\\/\\/ 환경은 Google 브라우저 OAuth/);
+
+  assert.doesNotMatch(source, /AUTH_BRIDGE_URL|AUTH_BRIDGE_ORIGIN|auth-061\\.html/);
   const browserSource = section(
     '    function requestBrowserGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
-    '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {'
+    '    function requestUnsupportedFileGoogleToken() {'
   );
-  assert.doesNotMatch(browserSource, /window\.open|AUTH_BRIDGE_URL|postMessage/);
+  assert.doesNotMatch(browserSource, /window\\.open|AUTH_BRIDGE|postMessage/);
 }
-
 async function main() {
   testConnectFromClickDispatchesAuthSynchronouslyAndHonorsPickerPolicy();
   testAuthFunctionDeclarationsAreUnique();
@@ -512,8 +518,8 @@ async function main() {
   await testDirectGISPopupFailureAndStaleState();
   testDirectGISOriginRules();
   testAdapterDispatchDoesNotCrossFallback();
-  testFileBridgeIsIsolatedAndOriginChecked();
-  console.log('CloudSave auth UX tests passed: Android native relogin, direct GIS popup, file-only bridge and stale-response guards');
+  await testFileOriginFailsClosedWithoutExternalAuthDependency();
+  console.log('CloudSave auth UX tests passed: Android native relogin, direct GIS popup, standalone file:// fail-closed routing and stale-response guards');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; });
