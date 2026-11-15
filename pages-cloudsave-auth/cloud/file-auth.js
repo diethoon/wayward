@@ -407,7 +407,9 @@
         } catch (_) {}
       }
     }
-    for (const candidate of pendingPorts) { try { candidate.close(); } catch (_) {} }
+    // Do not close ports in the same task as postMessage: close() can discard
+    // the queued pagehide error before the game receives it. Document teardown
+    // releases the page-side endpoints after the notification is queued.
     pendingPorts = [];
     port = null;
   });
