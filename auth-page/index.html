@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex,nofollow">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://accounts.google.com/gsi/client; connect-src https://accounts.google.com/gsi/ https://oauth2.googleapis.com; frame-src https://accounts.google.com/gsi/; style-src 'unsafe-inline' https://accounts.google.com/gsi/style; base-uri 'none'; object-src 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://accounts.google.com/gsi/client; connect-src https://accounts.google.com/gsi/ https://oauth2.googleapis.com; frame-src https://accounts.google.com/gsi/ https://accounts.google.com/; style-src 'unsafe-inline' https://accounts.google.com/gsi/style; base-uri 'none'; object-src 'none'; form-action 'none'">
 <title>Wayward CloudSave · Google 인증</title>
 <style>
 :root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#111827;color:#f3f4f6}
@@ -14,194 +14,287 @@ body{margin:0;min-height:100svh;display:grid;place-items:center;padding:24px}
 main{width:min(100%,460px);padding:26px;border:1px solid #374151;border-radius:18px;background:#1f2937;box-shadow:0 18px 60px #0006}
 h1{font-size:1.35rem;margin:0 0 12px}
 p{line-height:1.55;color:#d1d5db}
-#status{padding:14px;border-radius:10px;background:#111827;overflow-wrap:anywhere}
+.status{padding:14px;border-radius:10px;background:#111827;overflow-wrap:anywhere}
 button{width:100%;min-height:48px;padding:12px 16px;border:0;border-radius:9px;background:#4285f4;color:#fff;font:600 1rem system-ui;cursor:pointer}
 button:disabled{opacity:.55;cursor:wait}
+button.secondary{margin-top:9px;background:#374151}
 small{color:#9ca3af}
+[hidden]{display:none!important}
 </style>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 <main>
 <h1>Wayward CloudSave Google 인증</h1>
-<p id="status" role="status" aria-live="polite">Google 인증 라이브러리를 불러오고 있습니다.</p>
-<button id="login" type="button" disabled>Google 계정으로 연결</button>
-<p><small>인증은 이 GitHub Pages에서 Google로 직접 요청합니다. 세이브 파일과 액세스 토큰은 이 페이지의 서버로 전송되거나 저장되지 않습니다.</small></p>
+<p id="connection-status" class="status" role="status" aria-live="polite">게임 창 연결 요청을 기다리고 있습니다.</p>
+<section id="auth-stage" hidden>
+<p id="auth-status" class="status" role="status" aria-live="polite">게임 연결을 확인했습니다.</p>
+<button id="login" type="button" disabled>Google 계정 선택 및 연결</button>
+<button id="close" class="secondary" type="button" hidden>창 닫기</button>
+</section>
+<p><small>이 창은 원래 게임 창과 일회성 MessageChannel로만 통신합니다. 토큰은 URL, 브라우저 저장소, 로그에 기록하지 않으며 Google Drive 요청은 게임에서 직접 실행됩니다.</small></p>
 </main>
 <script>
 (() => {
 'use strict';
-const CLIENT_ID='35944231952-p82giir62o28bo001j9uvmqo3kgp9c99.apps.googleusercontent.com';
-const DRIVE_SCOPE='https://www.googleapis.com/auth/drive.appdata';
-const params=new URLSearchParams(location.search);
-const mode=params.get('mode')||'login';
-const nonce=params.get('nonce')||'';
-const gameOrigin=params.get('origin')||'';
-const loginPolicy=params.get('login')==='select_account'?'select_account':'remember';
-const statusNode=document.getElementById('status');
-const loginButton=document.getElementById('login');
-const LEGACY_CENTRAL_KEY='wayward-cloud-auth-session-v1';
-function status(message){statusNode.textContent=String(message||'');}
-try{localStorage.removeItem(LEGACY_CENTRAL_KEY);}catch(_){}
-function validGameOrigin(value){
- if(!/^https?:\/\//.test(value))return false;
- try{
-  const parsed=new URL(value);
-  return (parsed.protocol==='http:'||parsed.protocol==='https:')&&
-   parsed.origin===value&&!parsed.username&&!parsed.password;
- }catch(_){return false;}
+const CLIENT_ID = '35944231952-p82giir62o28bo001j9uvmqo3kgp9c99.apps.googleusercontent.com';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+const VERSION = 2;
+const APP_ID = 'wayward-cloudsave';
+const connectionNode = document.getElementById('connection-status');
+const authStage = document.getElementById('auth-stage');
+const authStatusNode = document.getElementById('auth-status');
+const loginButton = document.getElementById('login');
+const closeButton = document.getElementById('close');
+let locked = false;
+let port = null;
+let nonce = '';
+let requestId = '';
+let attemptId = '';
+let sessionId = '';
+let forceSelectAccount = true;
+let oauthState = '';
+let authTimer = null;
+let ackTimer = null;
+let completed = false;
+let authPending = false;
+
+function setConnectionStatus(message) { connectionNode.textContent = String(message || ''); }
+function setAuthStatus(message) { authStatusNode.textContent = String(message || ''); }
+function validId(value) { return typeof value === 'string' && /^[a-f0-9]{48}$/.test(value); }
+function makeNonce() {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
 }
-function parentIsVerified(){
- if(!window.opener||window.opener.closed)return false;
- if(!/^[a-f0-9]{48}$/.test(nonce)||!validGameOrigin(gameOrigin))return false;
- let referrerOrigin='';
- try{referrerOrigin=document.referrer?new URL(document.referrer).origin:'';}catch(_){}
- // The caller-supplied origin is not trusted by itself. Require the browser's
- // actual cross-origin Referer origin to match it before any token handoff.
- return !!referrerOrigin&&referrerOrigin===gameOrigin;
+function send(type, extra) {
+  if (!port || completed) return false;
+  try {
+    port.postMessage(Object.assign({
+      type, version: VERSION, nonce, requestId, attemptId, sessionId
+    }, extra || {}));
+    return true;
+  } catch (_) { return false; }
 }
-function postToParent(payload){
- try{
-  if(!parentIsVerified())return false;
-  window.opener.postMessage(payload,gameOrigin);
-  return true;
- }catch(_){return false;}
+function clearTimers() {
+  if (authTimer !== null) clearTimeout(authTimer);
+  if (ackTimer !== null) clearTimeout(ackTimer);
+  authTimer = null;
+  ackTimer = null;
 }
-function closeSoon(){setTimeout(()=>{try{window.close();}catch(_){}},900);}
-function readyGIS(){return !!(window.google&&google.accounts&&google.accounts.oauth2);}
-function waitForGIS(deadline){
- return new Promise((resolve,reject)=>{
-  const check=()=>{
-   if(readyGIS()){resolve();return;}
-   if(Date.now()>=deadline){reject(new Error('Google Identity 라이브러리를 불러오지 못했습니다.'));return;}
-   setTimeout(check,75);
-  };
-  check();
- });
+function finishPage(message) {
+  if (completed) return;
+  completed = true;
+  authPending = false;
+  clearTimers();
+  setAuthStatus(message);
+  loginButton.disabled = true;
+  closeButton.hidden = false;
+  setTimeout(() => { try { window.close(); } catch (_) {} }, 650);
 }
-function beginLogin(){
- if(!parentIsVerified()){
-  status('인증 요청의 출처를 확인할 수 없습니다. 게임 안의 Google 연결 버튼에서 다시 여세요. file:// 직접 실행은 보안상 지원하지 않습니다.');
-  loginButton.disabled=true;
-  return;
- }
- if(!readyGIS()){
-  status('Google 인증 라이브러리를 아직 불러오지 못했습니다. 잠시 후 다시 시도하세요.');
-  return;
- }
- loginButton.disabled=true;
- status('Google 계정 선택 및 Drive 앱 데이터 접근 권한을 요청합니다.');
- try{
-  const client=google.accounts.oauth2.initTokenClient({
-   client_id:CLIENT_ID,
-   scope:DRIVE_SCOPE,
-   include_granted_scopes:true,
-   callback:response=>{
-    if(!response||response.error||!response.access_token){
-     const reason=response&&response.error_description||response&&response.error||'Google 액세스 토큰을 받지 못했습니다.';
-     postToParent({type:'wayward-cloud-auth-error',nonce,code:String(response&&response.error||''),message:String(reason)});
-     status('Google 인증 실패: '+String(reason));
-     loginButton.disabled=false;
-     return;
-    }
-    if(response.state&&response.state!==nonce){
-     postToParent({type:'wayward-cloud-auth-error',nonce,message:'Google 인증 state가 일치하지 않습니다.'});
-     status('인증 응답 state 검증에 실패했습니다.');
-     loginButton.disabled=false;
-     return;
-    }
-    if(!google.accounts.oauth2.hasGrantedAllScopes(response,DRIVE_SCOPE)){
-     postToParent({
-      type:'wayward-cloud-auth-error',
-      nonce,
-      code:'scope_missing',
-      message:'Google Drive 앱 데이터(appDataFolder) 접근 권한이 승인되지 않았습니다.'
-     });
-     status('Drive 저장 권한이 승인되지 않아 연결하지 않았습니다. 권한을 허용한 뒤 다시 연결하세요.');
-     loginButton.disabled=false;
-     return;
-    }
-    const delivered=postToParent({
-     type:'wayward-cloud-auth-success',
-     nonce,
-     accessToken:response.access_token,
-     expiresIn:Number(response.expires_in)||3600
-    });
-    if(!delivered){
-     status('Google 인증은 완료했지만 게임의 요청 출처를 확인하지 못해 토큰을 전달하지 않았습니다.');
-     loginButton.disabled=false;
-     return;
-    }
-    status('Google 인증이 완료되었습니다. 게임으로 돌아가세요.');
-    loginButton.disabled=true;
-    closeSoon();
-   },
-   error_callback:error=>{
-    const reason=error&&error.type||'Google 인증 팝업을 시작하지 못했습니다.';
-    postToParent({type:'wayward-cloud-auth-error',nonce,code:String(error&&error.type||''),message:String(reason)});
-    status('Google 인증을 시작하지 못했습니다: '+String(reason));
-    loginButton.disabled=false;
-   }
+function sendAuthError(code, message) {
+  if (completed || !port) return;
+  authPending = false;
+  if (authTimer !== null) clearTimeout(authTimer);
+  authTimer = null;
+  loginButton.disabled = false;
+  setAuthStatus(message || 'Google 인증을 완료하지 못했습니다.');
+  send('wayward-cloud-auth-error', {
+    code: String(code || 'auth-error'),
+    message: String(message || 'Google 인증을 완료하지 못했습니다.')
   });
-  // Keep this call directly in the click handler: Google requires a user gesture.
-  client.requestAccessToken({prompt:loginPolicy==='select_account'?'select_account':'',state:nonce});
- }catch(error){
-  const reason=String(error&&error.message||error);
-  postToParent({type:'wayward-cloud-auth-error',nonce,code:'request_failed',message:reason});
-  status('Google 인증을 시작하지 못했습니다: '+reason);
-  loginButton.disabled=false;
- }
 }
-function beginRevoke(){
- if(!parentIsVerified()){
-  status('로그아웃 요청의 출처를 확인할 수 없습니다. 게임에서 다시 시도하세요.');
-  return;
- }
- window.addEventListener('message',event=>{
-  if(event.source!==window.opener||event.origin!==gameOrigin||!event.data||
-     event.data.type!=='wayward-cloud-revoke'||event.data.nonce!==nonce)return;
-  const token=event.data.accessToken;
-  if(typeof token!=='string'||!token||token.length>4096){
-   postToParent({type:'wayward-cloud-revoke-result',nonce,revoked:false,error:'invalid_token'});
-   status('철회할 토큰이 유효하지 않습니다.');
-   return;
+function readyGIS() {
+  return !!(window.google && google.accounts && google.accounts.oauth2 &&
+    typeof google.accounts.oauth2.initTokenClient === 'function');
+}
+function waitForGIS(deadline) {
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      if (readyGIS()) { resolve(); return; }
+      if (Date.now() >= deadline) {
+        reject(new Error('Google Identity 라이브러리를 불러오지 못했습니다.'));
+        return;
+      }
+      setTimeout(check, 75);
+    };
+    check();
+  });
+}
+function beginLogin() {
+  if (completed || authPending || !port) return;
+  if (!readyGIS()) {
+    setAuthStatus('Google 인증 서비스를 불러오는 중입니다. 잠시 후 다시 시도하세요.');
+    loginButton.disabled = false;
+    return;
   }
-  try{
-   google.accounts.oauth2.revoke(token,response=>{
-    const revoked=!!(response&&response.successful===true);
-    postToParent({
-     type:'wayward-cloud-revoke-result',
-     nonce,
-     revoked,
-     error:response&&response.error||''
+  const activation = navigator.userActivation;
+  if (!activation || activation.isActive !== true) {
+    setAuthStatus('Google 계정 선택은 이 창에서 한 번의 사용자 동작이 필요합니다. 아래 버튼을 눌러 계속하세요.');
+    loginButton.disabled = false;
+    return;
+  }
+  authPending = true;
+  loginButton.disabled = true;
+  setAuthStatus('Google 계정 선택 및 Drive appData 권한을 요청하고 있습니다.');
+  try {
+    oauthState = makeNonce();
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: DRIVE_SCOPE,
+      include_granted_scopes: true,
+      callback: response => {
+        if (completed || !authPending) return;
+        if (!response || response.error || !response.access_token) {
+          sendAuthError(String(response && response.error || 'token-error'),
+            String(response && (response.error_description || response.error) || 'Google 액세스 토큰을 받지 못했습니다.'));
+          return;
+        }
+        if (response.state !== oauthState) {
+          sendAuthError('state-mismatch', 'Google 인증 state가 없거나 일치하지 않습니다.');
+          return;
+        }
+        let granted = false;
+        try { granted = google.accounts.oauth2.hasGrantedAllScopes(response, DRIVE_SCOPE); } catch (_) {}
+        if (!granted) granted = String(response.scope || '').split(/\s+/).includes(DRIVE_SCOPE);
+        if (!granted) {
+          sendAuthError('scope_missing', 'Google Drive appData 권한이 승인되지 않았습니다.');
+          return;
+        }
+        authPending = false;
+        if (authTimer !== null) clearTimeout(authTimer);
+        authTimer = null;
+        setAuthStatus('Google 인증 결과를 원래 게임 세션에 전달하고 확인을 기다리고 있습니다.');
+        if (!send('wayward-cloud-auth-success', {
+          accessToken: response.access_token,
+          expiresIn: Number(response.expires_in) || 3600
+        })) {
+          setAuthStatus('게임 연결이 끊겨 인증 결과를 전달하지 못했습니다. 이 창을 닫고 다시 시작하세요.');
+          loginButton.disabled = true;
+          return;
+        }
+        ackTimer = setTimeout(() => {
+          if (!completed) finishPage('게임의 인증 결과 확인 응답이 도착하지 않았습니다. 다시 연결하세요.');
+        }, 15000);
+      },
+      error_callback: error => {
+        if (completed || !authPending) return;
+        const reason = String(error && error.type || 'popup_error');
+        sendAuthError(reason, reason === 'popup_closed'
+          ? 'Google 계정 선택 창이 닫혔습니다.'
+          : 'Google 인증 UI를 열지 못했습니다: ' + reason);
+      }
     });
-    status(revoked?'Google 앱 권한을 철회했습니다.':'Google 권한 철회에 실패했습니다: '+String(response&&response.error||'unknown'));
-    closeSoon();
-   });
-  }catch(error){
-   const reason=String(error&&error.message||error);
-   postToParent({type:'wayward-cloud-revoke-result',nonce,revoked:false,error:reason});
-   status('Google 권한 철회 실패: '+reason);
+    authTimer = setTimeout(() => {
+      if (!authPending || completed) return;
+      sendAuthError('auth-timeout', 'Google 인증 응답 시간이 초과되었습니다. 게임에서 다시 연결하세요.');
+    }, 120000);
+    // GIS Token Model requires a user gesture in this page's own window.
+    client.requestAccessToken({
+      prompt: forceSelectAccount ? 'select_account' : '',
+      state: oauthState
+    });
+  } catch (error) {
+    sendAuthError('request-failed', String(error && error.message || error));
   }
- });
- if(!postToParent({type:'wayward-cloud-revoke-ready',nonce})){
-  status('게임으로 안전한 로그아웃 응답 채널을 만들 수 없습니다.');
-  return;
- }
- status('Google 권한 철회 요청을 기다리고 있습니다.');
 }
-waitForGIS(Date.now()+15000).then(()=>{
- if(mode==='revoke'){beginRevoke();return;}
- loginButton.disabled=false;
- loginButton.textContent=loginPolicy==='select_account'?'Google 계정 선택':'기존 Google 계정으로 다시 연결';
- status(loginPolicy==='select_account'
-  ? '명시적 로그아웃 또는 새로고침 로그인 해제 설정에 따라 계정 선택 화면을 표시합니다.'
-  : '기존 Google 계정의 로그인 및 승인 상태를 재사용하도록 시도합니다. 이 요청은 사용자 동작이 필요합니다.');
- loginButton.addEventListener('click',beginLogin);
-}).catch(error=>{
- status(String(error&&error.message||error));
- loginButton.disabled=true;
+function onPortMessage(event) {
+  const data = event && event.data;
+  if (!data || typeof data !== 'object' || data.version !== VERSION ||
+      data.nonce !== nonce || data.requestId !== requestId ||
+      data.attemptId !== attemptId || data.sessionId !== sessionId) return;
+  if (data.type === 'wayward-cloud-auth-cancel') {
+    finishPage('게임에서 인증 요청을 취소했습니다.');
+    return;
+  }
+  if (data.type === 'wayward-cloud-auth-ack') {
+    if (ackTimer !== null) clearTimeout(ackTimer);
+    ackTimer = null;
+    if (data.accepted === true) {
+      finishPage('인증 결과가 원래 게임 세션에 안전하게 전달되었습니다.');
+    } else {
+      finishPage(String(data.message || '게임에서 인증 결과를 승인하지 못했습니다.'));
+    }
+  }
+}
+function closeTransferredPorts(event) {
+  try {
+    if (event && event.ports) {
+      for (const candidate of event.ports) {
+        try { candidate.close(); } catch (_) {}
+      }
+    }
+  } catch (_) {}
+}
+function onWindowMessage(event) {
+  const incoming = event && event.ports;
+  if (!incoming || incoming.length !== 1) {
+    closeTransferredPorts(event);
+    return;
+  }
+  const candidatePort = incoming[0];
+  // The opaque file Origin is deliberately not inspected or trusted.
+  // The channel is accepted only from this page's actual opener WindowProxy.
+  if (locked || !window.opener || window.opener.closed || event.source !== window.opener) {
+    try { candidatePort.close(); } catch (_) {}
+    return;
+  }
+  const data = event.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data) ||
+      data.type !== 'wayward-cloud-auth-init' || data.version !== VERSION ||
+      data.appId !== APP_ID || data.action !== 'login' ||
+      !validId(data.nonce) || !validId(data.requestId) || !validId(data.attemptId)) {
+    try { candidatePort.close(); } catch (_) {}
+    return;
+  }
+  let newSessionId = '';
+  try { newSessionId = makeNonce(); }
+  catch (_) {
+    try { candidatePort.close(); } catch (_) {}
+    setConnectionStatus('안전한 세션 ID를 만들지 못했습니다. 게임에서 다시 시작하세요.');
+    return;
+  }
+  locked = true;
+  port = candidatePort;
+  nonce = data.nonce;
+  requestId = data.requestId;
+  attemptId = data.attemptId;
+  forceSelectAccount = data.forceSelectAccount === true;
+  sessionId = newSessionId;
+  port.onmessage = onPortMessage;
+  port.onmessageerror = () => finishPage('게임과의 보안 메시지 채널이 끊겼습니다.');
+  try { if (typeof port.start === 'function') port.start(); }
+  catch (_) {
+    finishPage('게임과의 보안 메시지 채널을 시작하지 못했습니다.');
+    return;
+  }
+  setConnectionStatus('요청한 게임 창과 일회성 인증 세션을 자동으로 연결했습니다.');
+  authStage.hidden = false;
+  if (!send('wayward-cloud-auth-ready')) {
+    finishPage('게임 창에 인증 채널 준비 상태를 전달하지 못했습니다.');
+    return;
+  }
+  waitForGIS(Date.now() + 20000).then(() => {
+    if (completed) return;
+    loginButton.disabled = false;
+    if (navigator.userActivation && navigator.userActivation.isActive === true) {
+      beginLogin();
+    } else {
+      setAuthStatus('게임 인식 및 세션 확인을 마쳤습니다. Google 계정 선택은 브라우저 정책상 아래 버튼을 눌러 시작해야 합니다.');
+    }
+  }).catch(error => sendAuthError('gis-unavailable', String(error && error.message || error)));
+}
+window.addEventListener('message', onWindowMessage);
+loginButton.addEventListener('click', beginLogin);
+closeButton.addEventListener('click', () => { try { window.close(); } catch (_) {} });
+window.addEventListener('pagehide', () => {
+  clearTimers();
+  try { if (port) port.close(); } catch (_) {}
+  port = null;
 });
+if (!window.opener) {
+  setConnectionStatus('게임에서 시작한 요청이 아닙니다. 이 창을 닫고 게임의 CloudSave 로그인 버튼을 누르세요.');
+}
 })();
 </script>
 </body>
