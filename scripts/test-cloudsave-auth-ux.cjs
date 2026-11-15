@@ -483,8 +483,8 @@ async function testFileOriginUsesOneTimeMessageChannel() {
     '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
     '    function requestGoogleToken(forceSelectAccount, attempt) {'
   );
-  assert.match(source, /FILE_AUTH_BRIDGE_URL = 'https:\/\/wayward-six\.vercel\.app\/auth-page\/index\.html'/);
-  assert.match(source, /FILE_AUTH_BRIDGE_ORIGIN = 'https:\/\/wayward-six\.vercel\.app'/);
+  assert.match(source, /FILE_AUTH_BRIDGE_URL = 'https:\/\/jeiky224\.github\.io\/cloud\/file-auth\.html'/);
+  assert.match(source, /FILE_AUTH_BRIDGE_ORIGIN = 'https:\/\/jeiky224\.github\.io'/);
   assert.match(bridgeSource, /window\.open\(/,
     'the popup must open synchronously in the login click call stack');
   assert.match(bridgeSource, /new MessageChannel\(\)/);
@@ -494,6 +494,8 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   assert.match(bridgeSource, /data\.requestId !== requestId/);
   assert.match(bridgeSource, /data\.attemptId !== attemptId/);
   assert.match(bridgeSource, /data\.sessionId !== sessionId/);
+  assert.match(bridgeSource, /wayward-cloud-auth-activate/);
+  assert.match(bridgeSource, /wayward-cloud-auth-active/);
   assert.match(bridgeSource, /wayward-cloud-auth-ack-received/);
   assert.doesNotMatch(bridgeSource, /postMessage\([^,]+,\s*['"]\*['"]/);
   assert.doesNotMatch(bridgeSource, /event\.origin|origin\s*===\s*['"]null['"]/);
@@ -515,6 +517,8 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   assert.match(authPageSource, /navigator\.userActivation/,
     'the Google token flow must preserve the browser gesture requirement');
   assert.match(authPageSource, /port\.postMessage/);
+  assert.match(authPageSource, /wayward-cloud-auth-activate/);
+  assert.match(authPageSource, /wayward-cloud-auth-active/);
   assert.match(authPageSource, /wayward-cloud-auth-ack-received/);
   assert.doesNotMatch(authPageSource, /event\.origin|window\.opener\.postMessage|postMessage\([^,]+,\s*['"]\*['"]/);
   assert.doesNotMatch(authPageSource, /URLSearchParams|location\.search|localStorage|sessionStorage|console\.log/);
@@ -545,6 +549,13 @@ async function testFileOriginUsesOneTimeMessageChannel() {
       pagePort.onmessage = event => {
         const message = event.data;
         sent.push(message);
+        if (message.type === 'wayward-cloud-auth-activate') {
+          pagePort.postMessage({
+            type: 'wayward-cloud-auth-active', version: message.version,
+            nonce: message.nonce, requestId: message.requestId,
+            attemptId: message.attemptId, sessionId: message.sessionId
+          });
+        }
         if (message.type === 'wayward-cloud-auth-ack' && message.accepted === true) {
           pagePort.postMessage({
             type: 'wayward-cloud-auth-ack-received',
@@ -590,9 +601,9 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   }
   const context = {
     AUTH_ADAPTER: 'file-bridge',
-    FILE_AUTH_BRIDGE_VERSION: 2,
-    FILE_AUTH_BRIDGE_URL: 'https://wayward-six.vercel.app/auth-page/index.html',
-    FILE_AUTH_BRIDGE_ORIGIN: 'https://wayward-six.vercel.app',
+    FILE_AUTH_BRIDGE_VERSION: 3,
+    FILE_AUTH_BRIDGE_URL: 'https://jeiky224.github.io/cloud/file-auth.html',
+    FILE_AUTH_BRIDGE_ORIGIN: 'https://jeiky224.github.io',
     activeAuthCancel: null,
     authAttemptSerial: 27,
     sessionGeneration: 31,
@@ -624,9 +635,10 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   const pending = api('e'.repeat(48), true, 27, 31);
   assert.equal(opened, 1, 'window.open must run synchronously before the helper returns');
   await pending;
-  assert.equal(postedOrigin, 'https://wayward-six.vercel.app');
+  assert.equal(postedOrigin, 'https://jeiky224.github.io');
   assert.equal(accepted.length, 1, 'duplicate/stale result must not be accepted twice');
   assert.equal(accepted[0].accessToken, 'test-file-bridge-access-token-123456');
+  assert.equal(sent.filter(item => item.type === 'wayward-cloud-auth-activate').length, 1);
   assert.equal(sent.filter(item => item.type === 'wayward-cloud-auth-ack' && item.accepted === true).length, 1);
 
   // A changed local session invalidates a delayed ready/result event.
