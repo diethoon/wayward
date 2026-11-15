@@ -536,6 +536,9 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   assert.doesNotMatch(authPageScriptSource, /window\.opener\.postMessage|postMessage\([^,]+,\s*['"]\*['"]/);
   assert.doesNotMatch(authPageScriptSource, /URLSearchParams|location\.search|localStorage|sessionStorage|console\.log|wayward-six\.vercel\.app/);
   assert.match(authPageScriptSource, /window\.close\(\)/);
+  assert.match(authPageScriptSource, /auth-page-unloaded/,
+    'a page refresh/close must notify the original game session');
+  assert.match(authPageScriptSource, /pagehide/);
   assert.doesNotMatch(authPageScriptSource, /fetch\(|127\.0\.0\.1|localhost/);
 
   // Execute the actual file-bridge helper with a deterministic MessageChannel
@@ -645,6 +648,19 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   assert.equal(accepted.length, 1, 'duplicate/stale result must not be accepted twice');
   assert.equal(accepted[0].accessToken, 'test-file-bridge-access-token-123456');
   assert.equal(sent.filter(item => item.type === 'wayward-cloud-auth-ack' && item.accepted === true).length, 1);
+
+  const blockedContext = Object.assign({}, context, {
+    activeAuthCancel: null,
+    window: { open() { return null; } }
+  });
+  const blockedApi = vm.runInNewContext(
+    bridgeSource + '\n;requestFileBridgeGoogleToken',
+    blockedContext
+  );
+  await assert.rejects(
+    blockedApi('a'.repeat(48), false, 27, 31),
+    /브라우저가 CloudSave 인증 팝업을 차단했습니다/
+  );
 
   // A changed local session invalidates a delayed ready/result event.
   const staleAccepted = [];
