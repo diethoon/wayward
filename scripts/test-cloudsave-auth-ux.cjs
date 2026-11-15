@@ -405,7 +405,7 @@ function testFileBridgeIsIsolatedAndOriginChecked() {
   assert.match(fileSource, /event\.origin !== AUTH_BRIDGE_ORIGIN/);
   assert.match(fileSource, /event\.source !== bridge/);
   assert.match(fileSource, /payload\.nonce !== nonce/);
-  assert.match(fileSource, /protocol !== 'file:' && origin !== 'null'/);
+  assert.match(fileSource, /protocol !== 'file:' && rawOrigin !== 'null'/);
   const browserSource = section(
     '    function requestBrowserGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
     '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {'
