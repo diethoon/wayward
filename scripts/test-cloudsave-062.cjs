@@ -137,8 +137,8 @@ requireText("const opaqueOrigin = initialOrigin === 'null'", 'non-file opaque or
 requireText("const FILE_AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/file-auth.html'", 'GitHub Pages static authentication URL');
 requireText("const FILE_AUTH_BRIDGE_ORIGIN = 'https://jeiky224.github.io'", 'exact GitHub Pages target origin');
 requireText("opaque-origin-unsupported", 'unrecognized opaque origins fail closed');
-assert.equal(fileContainsText(modPath, 'wayward-six.vercel.app'), false,
-  'PC file auth must not depend on Vercel');
+assert.equal(fileContainsText(modPath, 'auth-page/index.html'), false,
+  'file auth must use the GitHub Pages source URL instead of the legacy relay page');
 requireText("client.requestAccessToken({ prompt: forceSelectAccount ? 'select_account' : '', state: nonce });", 'GIS popup directly from game click');
 requireText("const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';", 'least-privilege Drive scope');
 requireText("const GOOGLE_OAUTH_CLIENT_ID =", 'public GIS OAuth client identifier');
