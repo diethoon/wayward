@@ -14,6 +14,7 @@ on:
       - 'pages-cloudsave-auth/**'
       - 'scripts/test-cloudsave-062.cjs'
       - 'scripts/test-cloudsave-auth-ux.cjs'
+      - 'scripts/test-cloudsave-pages-bridge-integration.cjs'
       - '.github/workflows/cloudsave-062-verify.yml'
   pull_request:
     branches:
@@ -46,11 +47,14 @@ jobs:
           node --check cloud-save/crypto.js
           node --check scripts/test-cloudsave-062.cjs
           node --check scripts/test-cloudsave-auth-ux.cjs
+          node --check scripts/test-cloudsave-pages-bridge-integration.cjs
           node --check pages-cloudsave-auth/cloud/file-auth.js
       - name: Verify 0.6.1 compatibility, auth contracts and synthetic list sizes
         run: node scripts/test-cloudsave-062.cjs
       - name: Verify environment-specific auth UX and relogin routing
         run: node scripts/test-cloudsave-auth-ux.cjs
+      - name: Execute GitHub Pages file bridge integration tests
+        run: node scripts/test-cloudsave-pages-bridge-integration.cjs
       - name: Verify diff whitespace and package structure
         run: |
           git diff --check 0356c7da899b102107ab6988c11a1549de5d209e...HEAD
