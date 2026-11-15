@@ -1,7 +1,8 @@
 /* Personal Google Drive-backed cloud saves for WML.
- * Browser OAuth uses Google's direct Token Model on the fixed GitHub Pages
- * page and a nonce-bound popup postMessage. Android uses the launcher's
- * native Google Identity bridge. No refresh token or auth relay is used.
+ * HTTP/HTTPS browsers use Google's direct GIS Token Model from the game page.
+ * Android may use the launcher's existing native Google Identity bridge.
+ * Standalone PC file:// browsers fail closed: CloudSave does not depend on a
+ * launcher, local/remote server, hosted auth relay, or opaque-Origin messaging.
  * Save contents are encrypted in the game page before direct upload to Drive.
  */
 WML.define({
@@ -70,9 +71,6 @@ WML.define({
 
     const GOOGLE_OAUTH_CLIENT_ID = '35944231952-p82giir62o28bo001j9uvmqo3kgp9c99.apps.googleusercontent.com';
     const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
-    // Only the opaque file:// browser adapter uses this HTTPS bridge.
-    const AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/auth-061.html';
-    const AUTH_BRIDGE_ORIGIN = 'https://jeiky224.github.io';
     const nativeAuthHost = window.WMLHost || null;
     // WMLHost presence identifies the embedded launcher even when this
     // particular runtime has not exposed the CloudSave auth methods yet.
@@ -83,7 +81,7 @@ WML.define({
     const fileOrigin = initialProtocol === 'file:' || initialOrigin === 'null';
     // Freeze the adapter once; account-selection policy never changes transport.
     const AUTH_ADAPTER = nativeLauncherContext ? 'android-native' :
-      (fileOrigin ? 'file-token-bridge' : 'browser-gis');
+      (fileOrigin ? 'file-unsupported' : 'browser-gis');
     let browserGISLoadPromise = null;
     let browserGISLoadError = '';
     const FILE_PREFIX = 'wayward-cloud-slot-';
@@ -436,60 +434,19 @@ WML.define({
       });
     }
 
-    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {
-      return new Promise((resolve, reject) => {
-        const protocol = String(window.location.protocol || ''), rawOrigin = String(window.location.origin || '');
-        if (protocol !== 'file:' && rawOrigin !== 'null') { reject(new Error('file:// 인증 어댑터가 아닌 실행 환경입니다.')); return; }
-        const bridgeUrl = new URL(AUTH_BRIDGE_URL);
-        bridgeUrl.searchParams.set('origin', 'null'); bridgeUrl.searchParams.set('nonce', nonce);
-        bridgeUrl.searchParams.set('login', forceSelectAccount ? 'select_account' : 'remember');
-        let bridge = null, timeout = null, closeWatch = null, settled = false, helloSent = false;
-        const cleanup = () => {
-          window.removeEventListener('message', onMessage);
-          if (timeout !== null) clearTimeout(timeout);
-          if (closeWatch !== null) clearInterval(closeWatch);
-          timeout = null; closeWatch = null;
-          if (activeAuthCancel === cancel) activeAuthCancel = null;
-        };
-        const finishError = error => {
-          if (settled) return; settled = true; cleanup();
-          try { if (bridge && !bridge.closed) bridge.close(); } catch (_) {}
-          reject(error instanceof Error ? error : new Error(String(error || 'Google 연결에 실패했습니다.')));
-        };
-        const cancel = () => finishError(new Error('Google 인증 요청을 취소했습니다.'));
-        activeAuthCancel = cancel;
-        const onMessage = event => {
-          if (!isCurrentAuthAttempt(attempt, sessionAtStart)) { finishError(new Error('이전 file:// 인증 응답을 무시했습니다.')); return; }
-          if (event.origin !== AUTH_BRIDGE_ORIGIN || event.source !== bridge || !event.data || typeof event.data !== 'object') return;
-          const payload = event.data;
-          if (payload.version !== 1 || payload.nonce !== nonce) return;
-          if (payload.type === 'wayward-cloud-auth-061-ready') {
-            if (helloSent) return; helloSent = true;
-            try { bridge.postMessage({ type: 'wayward-cloud-auth-061-hello', version: 1, nonce }, AUTH_BRIDGE_ORIGIN); }
-            catch (_) { finishError(new Error('정적 Google 인증 페이지와 보안 핸드셰이크를 완료하지 못했습니다.')); }
-            return;
-          }
-          if (payload.type === 'wayward-cloud-auth-error') { try { acceptAccessToken(payload, nonce); } catch (error) { finishError(error); } return; }
-          if (payload.type !== 'wayward-cloud-auth-success') return;
-          try { acceptAccessToken(payload, nonce); } catch (error) { finishError(error); return; }
-          settled = true; cleanup();
-          try { if (bridge && !bridge.closed) bridge.close(); } catch (_) {}
-          resolve();
-        };
-        window.addEventListener('message', onMessage);
-        try { bridge = window.open(bridgeUrl.toString(), 'waywardGoogleDriveAuth061', 'popup=yes,width=520,height=720,resizable=yes,scrollbars=yes'); }
-        catch (error) { finishError(new Error('Google 인증 팝업을 열지 못했습니다: ' + String(error && error.message || error))); return; }
-        if (!bridge) { finishError(new Error('Google 로그인 팝업이 차단되었습니다. 팝업을 허용한 뒤 다시 시도하세요.')); return; }
-        timeout = setTimeout(() => finishError(new Error('Google 로그인이 시간 초과되었습니다. 게임으로 돌아가 다시 시도하세요.')), 120000);
-        closeWatch = setInterval(() => { if (bridge && bridge.closed) finishError(new Error('Google 인증 창이 닫혔습니다. 게임에서 다시 시도하세요.')); }, 350);
-      });
+    function requestUnsupportedFileGoogleToken() {
+      return Promise.reject(new Error(
+        'PC file:// 환경은 Google 브라우저 OAuth의 허용된 JavaScript Origin이 아닙니다. ' +
+        'CloudSave는 PC 런처, Remote Host, 로컬 서버 또는 외부 인증 페이지에 의존하지 않으므로 ' +
+        '이 환경에서는 인증을 시작하지 않습니다. HTTPS 웹 Origin에서 실행하거나 공식 네이티브 앱 인증 경로를 사용하세요.'
+      ));
     }
 
     function requestGoogleToken(forceSelectAccount, attempt) {
       const nonce = createAuthNonce(), sessionAtStart = sessionGeneration;
       if (AUTH_ADAPTER === 'android-native') return requestNativeGoogleToken(nonce, !!forceSelectAccount, attempt, sessionAtStart);
       if (AUTH_ADAPTER === 'browser-gis') return requestBrowserGoogleToken(nonce, !!forceSelectAccount, attempt, sessionAtStart);
-      return requestFileBridgeGoogleToken(nonce, !!forceSelectAccount, attempt, sessionAtStart);
+      return requestUnsupportedFileGoogleToken();
     }
     function attemptNativeSessionRestore() {
       if (startupRestoreAttempted || explicitLogout || !hadPreviousAuth || hasToken()) return;
@@ -1344,31 +1301,9 @@ WML.define({
           catch (_) { resolve(false); }
         });
       }
-      if (!token) return Promise.resolve(false);
-      return new Promise(resolve => {
-        const bytes = new Uint8Array(24);
-        try { globalThis.crypto.getRandomValues(bytes); } catch (_) { resolve(false); return; }
-        const nonce = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
-        const url = new URL(AUTH_BRIDGE_URL);
-        url.searchParams.set('mode','revoke'); url.searchParams.set('origin','null'); url.searchParams.set('nonce',nonce);
-        let popup = null, timer = null, watcher = null, settled = false, helloSent = false;
-        const cleanup = () => { window.removeEventListener('message', onMessage); if (timer !== null) clearTimeout(timer); if (watcher !== null) clearInterval(watcher); };
-        const finish = value => { if (settled) return; settled = true; cleanup(); try { if (popup && !popup.closed) popup.close(); } catch (_) {} resolve(value === true); };
-        const onMessage = event => {
-          if (event.origin !== AUTH_BRIDGE_ORIGIN || event.source !== popup || !event.data || event.data.nonce !== nonce || event.data.version !== 1) return;
-          if (event.data.type === 'wayward-cloud-auth-061-ready') {
-            if (helloSent) return; helloSent = true;
-            try { popup.postMessage({type:'wayward-cloud-auth-061-hello',version:1,nonce},AUTH_BRIDGE_ORIGIN); } catch (_) { finish(false); }
-            return;
-          }
-          if (event.data.type === 'wayward-cloud-revoke-result') finish(event.data.revoked === true);
-        };
-        window.addEventListener('message', onMessage);
-        try { popup = window.open(url.toString(), 'waywardGoogleDriveRevoke061', 'popup=yes,width=520,height=520,resizable=yes,scrollbars=yes'); } catch (_) { finish(false); return; }
-        if (!popup) { finish(false); return; }
-        timer = setTimeout(() => finish(false), 30000);
-        watcher = setInterval(() => { if (popup && popup.closed) finish(false); }, 350);
-      });
+      // Only the direct browser adapter can revoke a browser-issued GIS token.
+      // Native and unsupported file:// environments do not use an external relay.
+      return Promise.resolve(false);
     }
     function logoutGoogleAccount() {
       authAttemptSerial += 1;
