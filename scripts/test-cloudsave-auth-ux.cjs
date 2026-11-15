@@ -241,7 +241,7 @@ function testConnectFromClickDispatchesAuthSynchronouslyAndHonorsPickerPolicy() 
       render() { calls.push({ kind: 'render' }); }
     };
     const api = vm.runInNewContext(
-      code + '\\n;({ connectFromClick })',
+      code + '\n;({ connectFromClick })',
       context
     );
 
