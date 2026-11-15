@@ -190,6 +190,15 @@ assert.ok((loadSlotSource.match(/assertDriveSession\(session\)/g) || []).length 
   'loadSlot must re-check the same session after read/decrypt and immediately before applySnapshot');
 assert.match(loadSlotSource, /applySnapshot\(snapshot\)/);
 
+const styleInit = readSectionFromFile(
+  modPath,
+  '    if (!document.getElementById(STYLE_ID)) {',
+  '    function hasToken() {'
+);
+assert.equal((styleInit.match(/document\\.head\\.appendChild\\(style\\)/g) || []).length, 1,
+  'CloudSave style element must be appended exactly once');
+assert.match(styleInit, /box-shadow:0 8px 30px #0005}';\\s*document\\.head\\.appendChild\\(style\\);/);
+
 const refresh = readSectionFromFile(modPath, '    function refreshSlots() {', '    function currentFile(slot) {');
 assert.match(refresh, /files\.list|drive\/v3\/files/);
 assert.doesNotMatch(refresh, /readSlotEnvelope|decryptSnapshot|alt=media/,
