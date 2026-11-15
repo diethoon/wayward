@@ -440,7 +440,8 @@ async function main() {
   testAuthFunctionDeclarationsAreUnique();
   testNativeLauncherMarkerKeepsNativeAdapterEvenWithoutAuthMethods();
   testFirstConnectionAndExplicitLogoutRequirePicker();
-  testExplicitLogoutClearsPreviousAuthRestoreMarker();\n  testExplicitLogoutSuppressesStartupRestoreAndSlotRefresh();
+  testExplicitLogoutClearsPreviousAuthRestoreMarker();
+  testExplicitLogoutSuppressesStartupRestoreAndSlotRefresh();
   await testLegacyAndroidReauthAndForcedPickerFailsClosed();
   await testAndroid061PolicyWithoutNativeCancel();
   await testAndroidStaleResponseRejected();
