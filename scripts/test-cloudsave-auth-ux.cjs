@@ -371,6 +371,8 @@ function testNativeLauncherMarkerKeepsNativeAdapterEvenWithoutAuthMethods() {
   assert.equal(select({ startGoogleDriveAuth() {} }).AUTH_ADAPTER, 'android-native');
   assert.equal(select(undefined).AUTH_ADAPTER, 'browser-gis');
   assert.equal(select(undefined, 'file:', 'null').AUTH_ADAPTER, 'file-bridge');
+  assert.equal(select(undefined, 'data:', 'null').AUTH_ADAPTER, 'opaque-origin-unsupported',
+    'non-file opaque origins must not be treated as local game files');
 }
 
 function testFirstConnectionAndExplicitLogoutRequirePicker() {
@@ -606,8 +608,8 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   const context = {
     AUTH_ADAPTER: 'file-bridge',
     FILE_AUTH_BRIDGE_VERSION: 2,
-    FILE_AUTH_BRIDGE_URL: 'https://wayward-six.vercel.app/auth-page/index.html',
-    FILE_AUTH_BRIDGE_ORIGIN: 'https://wayward-six.vercel.app',
+    FILE_AUTH_BRIDGE_URL: 'https://jeiky224.github.io/cloud/file-auth.html',
+    FILE_AUTH_BRIDGE_ORIGIN: 'https://jeiky224.github.io',
     activeAuthCancel: null,
     authAttemptSerial: 27,
     sessionGeneration: 31,
@@ -639,7 +641,7 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   const pending = api('e'.repeat(48), true, 27, 31);
   assert.equal(opened, 1, 'window.open must run synchronously before the helper returns');
   await pending;
-  assert.equal(postedOrigin, 'https://wayward-six.vercel.app');
+  assert.equal(postedOrigin, 'https://jeiky224.github.io');
   assert.equal(accepted.length, 1, 'duplicate/stale result must not be accepted twice');
   assert.equal(accepted[0].accessToken, 'test-file-bridge-access-token-123456');
   assert.equal(sent.filter(item => item.type === 'wayward-cloud-auth-ack' && item.accepted === true).length, 1);
