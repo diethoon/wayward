@@ -20,7 +20,7 @@ The destination already has cloud/config.js; preserve it. The page reads its pub
 
 1. The game opens the fixed HTTPS URL synchronously from the user's CloudSave click.
 2. The game transfers one fresh MessageChannel port to that exact Pages origin.
-3. The page accepts only one initialization message from its actual opener WindowProxy, with a single transferred port, the wayward-cloudsave app id, and 48-hex nonce/request/attempt values. It also requires an opaque sender origin as a file-context classification; that value is not treated as caller identity.
+3. The page requires event.origin === 'null' (opaque-Origin classification), event.source === window.opener, one transferred MessagePort, appId and 48-hex nonce/request/attempt values. Other Origins and non-opener WindowProxy senders are rejected before GIS. null does not prove the sender is a genuine Wayward build or a particular local file.
 4. The page mints a separate 48-hex session id and returns it over the private port.
 5. The user confirms that they initiated this request from Wayward and manually clicks the Google connect button. GIS state is a fresh random value and must exactly match the callback. The drive.appdata scope is verified.
 6. The access token is sent only over the transferred MessagePort. The page waits for the game's result acknowledgement, sends an acknowledgement-received message, then clears the session and closes.
