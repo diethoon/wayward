@@ -122,7 +122,7 @@ function requireText(value, label) {
   assert.ok(fileContainsText(modPath, value), 'missing required CloudSave contract: ' + label);
 }
 
-assert.ok(fileMatchesRegex(modPath, /version: '0\\.6\\.2'/), 'CloudSave version must be 0.6.2');
+assert.ok(fileMatchesRegex(modPath, /version: '0\.6\.2'/), 'CloudSave version must be 0.6.2');
 requireText("https://jeiky224.github.io/cloud/auth-061.html", 'isolated 0.6.1 auth endpoint');
 requireText('startGoogleDriveAuthWithPolicy(nonce, !!forceSelectAccount)', 'Android native policy bridge');
 requireText('takePendingStateForNonce(nonce)', 'nonce-scoped native result retrieval');
@@ -154,9 +154,9 @@ assert.equal(fileContainsText(modPath, '로그인 유지 설정'), false,
   'login-persistence settings UI must be removed');
 assert.equal(fileContainsText(modPath, '새로고침할 때마다 로그인 해제'), false,
   'legacy forced-logout copy must be removed');
-assert.equal(fileMatchesRegex(modPath, /localStorage\\.setItem\\([^\\n]*(?:accessToken|refreshToken)/i), false,
+assert.equal(fileMatchesRegex(modPath, /localStorage\.setItem\([^\n]*(?:accessToken|refreshToken)/i), false,
   'access tokens must not be persisted in localStorage');
-assert.equal(fileMatchesRegex(modPath, /sessionStorage\\.setItem\\([^\\n]*(?:accessToken|refreshToken)/i), false,
+assert.equal(fileMatchesRegex(modPath, /sessionStorage\.setItem\([^\n]*(?:accessToken|refreshToken)/i), false,
   'access tokens must not be persisted in sessionStorage');
 
 const refresh = readSectionFromFile(modPath, '    function refreshSlots() {', '    function currentFile(slot) {');
