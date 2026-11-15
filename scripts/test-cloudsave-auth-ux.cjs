@@ -230,6 +230,19 @@ async function testDirectGISNormalPrompt() {
   assert.equal(harness.accepted.length, 1);
 }
 
+async function testDirectGISRejectsMissingState() {
+  const harness = createBrowserHarness({ autoResponse: false });
+  const nonce = '5'.repeat(48);
+  const pending = harness.api.requestBrowserGoogleToken(nonce, false, 9, 13);
+  harness.getTokenCallback()({
+    access_token: 'browser-gis-access-token-123456',
+    expires_in: 3600,
+    scope: 'https://www.googleapis.com/auth/drive.appdata'
+  });
+  await assert.rejects(pending, /state가 없거나 일치하지 않습니다/);
+  assert.equal(harness.accepted.length, 0, 'GIS token without matching state must not be applied');
+}
+
 async function testDirectGISPopupFailureAndStaleState() {
   const blocked = createBrowserHarness({ autoResponse: false });
   const blockedPromise = blocked.api.requestBrowserGoogleToken('2'.repeat(48), false, 9, 13);
@@ -312,6 +325,7 @@ async function main() {
   await testBrokenNativeBridgeDoesNotFallback();
   await testDirectGISPromptAndClickCall();
   await testDirectGISNormalPrompt();
+  await testDirectGISRejectsMissingState();
   await testDirectGISPopupFailureAndStaleState();
   testDirectGISOriginRules();
   testAdapterDispatchDoesNotCrossFallback();
