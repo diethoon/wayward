@@ -290,7 +290,7 @@ const previewHelpers = vm.runInNewContext(
 );
 const previewFixture = {
   schema: 'wayward-cloud-save', version: 1, nativeFormat: 1, savedAt: 1794700000123,
-  memo: '한글 메모 첫 줄\\n둘째 줄과 긴 내용',
+  memo: '한글 메모 첫 줄\n둘째 줄과 긴 내용',
   state: {
     primaryCharacterId: 'player-a',
     characters: { 'player-a': { name: '테스트 캐릭터', archetypeId: 'elena_farmgirl' } },
@@ -326,7 +326,7 @@ const cryptoRoundTripScript = [
   "  if (visible.includes('테스트 캐릭터') || visible.includes('한글 메모')) throw new Error('preview plaintext leaked');",
   "  process.stdout.write(JSON.stringify({ encrypted: true, decrypted: true, plaintextHidden: true }));",
   "})().catch(error => { console.error(error); process.exit(1); });"
-].join('\\n');
+].join('\n');
 const cryptoRoundTrip = JSON.parse(execFileSync(process.execPath, ['-e', cryptoRoundTripScript], { encoding: 'utf8', timeout: 20000 }));
 assert.deepEqual(cryptoRoundTrip, { encrypted: true, decrypted: true, plaintextHidden: true });
 
