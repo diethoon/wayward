@@ -6,6 +6,7 @@ on:
       - feat/cloudsave-062-auth-ux-performance-20261114
       - fix/cloudsave-062-cancel-session-races-20261115
       - feat/cloudsave-mobile-prep-preview-20261115
+      - feat/cloudsave-file-auth-ux-20261116
     paths:
       - 'cloud-save/**'
       - 'scripts/test-cloudsave-062.cjs'
