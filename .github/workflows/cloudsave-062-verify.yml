@@ -9,6 +9,7 @@ on:
       - feat/cloudsave-file-auth-ux-20261116
     paths:
       - 'cloud-save/**'
+      - 'auth-page/**'
       - 'scripts/test-cloudsave-062.cjs'
       - 'scripts/test-cloudsave-auth-ux.cjs'
       - '.github/workflows/cloudsave-062-verify.yml'
@@ -17,6 +18,7 @@ on:
       - work/cloudsave-session-policy-20261113
     paths:
       - 'cloud-save/**'
+      - 'auth-page/**'
       - 'scripts/test-cloudsave-062.cjs'
       - 'scripts/test-cloudsave-auth-ux.cjs'
       - '.github/workflows/cloudsave-062-verify.yml'
