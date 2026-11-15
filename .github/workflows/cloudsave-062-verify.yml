@@ -10,6 +10,15 @@ on:
       - 'cloud-save/**'
       - 'scripts/test-cloudsave-062.cjs'
       - 'scripts/test-cloudsave-auth-ux.cjs'
+      - '.github/workflows/cloudsave-062-verify.yml'
+  pull_request:
+    branches:
+      - work/cloudsave-session-policy-20261113
+    paths:
+      - 'cloud-save/**'
+      - 'scripts/test-cloudsave-062.cjs'
+      - 'scripts/test-cloudsave-auth-ux.cjs'
+      - '.github/workflows/cloudsave-062-verify.yml'
 
 permissions:
   contents: read
