@@ -125,6 +125,13 @@ function requireText(value, label) {
 assert.ok(fileMatchesRegex(modPath, /version: '0\.6\.2'/), 'CloudSave version must be 0.6.2');
 requireText("https://jeiky224.github.io/cloud/auth-061.html", 'isolated 0.6.1 auth endpoint');
 requireText('startGoogleDriveAuthWithPolicy(nonce, !!forceSelectAccount)', 'Android native policy bridge');
+requireText("const AUTH_ADAPTER = hasNativeAuthSurface ? 'android-native'", 'immutable environment adapter selection');
+requireText('function requestBrowserGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart)', 'direct GIS browser adapter');
+requireText('function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart)', 'isolated file-origin adapter');
+requireText("client.requestAccessToken({ prompt: forceSelectAccount ? 'select_account' : '', state: nonce });", 'GIS popup directly from game click');
+requireText("const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';", 'least-privilege Drive scope');
+requireText("const GOOGLE_OAUTH_CLIENT_ID =", 'public GIS OAuth client identifier');
+requireText("if (AUTH_ADAPTER === 'browser-gis') {", 'GIS script is loaded only for browser adapter');
 requireText('takePendingStateForNonce(nonce)', 'nonce-scoped native result retrieval');
 requireText('window.open(bridgeUrl.toString()', 'synchronous browser popup open');
 requireText('event.origin !== AUTH_BRIDGE_ORIGIN', 'auth page Origin validation');
@@ -166,12 +173,47 @@ assert.equal(fileMatchesRegex(modPath, /sessionStorage\.setItem\([^\n]*(?:access
 
 const nativeAuth = readSectionFromFile(
   modPath,
-  '    function requestNativeGoogleToken(nonce, forceSelectAccount) {',
-  '    function requestGoogleToken(forceSelectAccount) {'
+  '    function requestNativeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
+  '    function validateDirectGISOrigin() {'
 );
-assert.match(nativeAuth, /host\.cancelGoogleDriveAuth\(nonce\)/);
 assert.match(nativeAuth, /const canCancel = typeof host\.cancelGoogleDriveAuth === 'function'/);
 assert.match(nativeAuth, /canCancel \? 90000 : 180000/);
+assert.match(nativeAuth, /else host\.startGoogleDriveAuth\(nonce\)/);
+assert.match(nativeAuth, /isCurrentAuthAttempt\(attempt, sessionAtStart\)/);
+assert.doesNotMatch(nativeAuth, /forceSelectAccount\s*&&.*return null/);
+
+const directBrowserAuth = readSectionFromFile(
+  modPath,
+  '    function requestBrowserGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
+  '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {'
+);
+assert.match(directBrowserAuth, /google\.accounts\.oauth2\.initTokenClient/);
+assert.match(directBrowserAuth, /client\.requestAccessToken\(\{ prompt: forceSelectAccount \? 'select_account' : '', state: nonce \}\)/);
+assert.match(directBrowserAuth, /error_callback:/);
+assert.doesNotMatch(directBrowserAuth, /window\.open|AUTH_BRIDGE_URL|postMessage/,
+  'HTTP/HTTPS GIS adapter must not open the auth-061 bridge');
+
+const fileAuth = readSectionFromFile(
+  modPath,
+  '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
+  '    function requestGoogleToken(forceSelectAccount, attempt) {'
+);
+assert.match(fileAuth, /protocol !== 'file:' && origin !== 'null'/);
+assert.match(fileAuth, /window\.open\(bridgeUrl\.toString\(/);
+assert.match(fileAuth, /event\.origin !== AUTH_BRIDGE_ORIGIN/);
+assert.match(fileAuth, /event\.source !== bridge/);
+assert.match(fileAuth, /payload\.nonce !== nonce/);
+assert.match(fileAuth, /isCurrentAuthAttempt\(attempt, sessionAtStart\)/);
+
+const authDispatch = readSectionFromFile(
+  modPath,
+  '    function requestGoogleToken(forceSelectAccount, attempt) {',
+  '    function attemptNativeSessionRestore() {'
+);
+assert.match(authDispatch, /AUTH_ADAPTER === 'android-native'.*requestNativeGoogleToken/);
+assert.match(authDispatch, /AUTH_ADAPTER === 'browser-gis'.*requestBrowserGoogleToken/);
+assert.match(authDispatch, /requestFileBridgeGoogleToken/);
+assert.doesNotMatch(authDispatch, /window\.open|fallback/);
 
 const driveFetchSource = readSectionFromFile(
   modPath,
