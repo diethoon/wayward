@@ -385,6 +385,7 @@ const cryptoRoundTripScript = [
 const cryptoRoundTrip = JSON.parse(execFileSync(process.execPath, ['-e', cryptoRoundTripScript], { encoding: 'utf8', timeout: 20000 }));
 assert.deepEqual(cryptoRoundTrip, { encrypted: true, decrypted: true, plaintextHidden: true });
 
+(async () => {
 globalThis.crypto = crypto.webcrypto;
 globalThis.btoa = value => Buffer.from(value, 'binary').toString('base64');
 globalThis.atob = value => Buffer.from(value, 'base64').toString('binary');
@@ -525,3 +526,4 @@ console.log('BINARY_SCAN', JSON.stringify({
 }));
 fs.rmSync(baselinePath, { force: true });
 console.log('CloudSave 0.6.2 source contracts passed');
+})().catch(error => { console.error(error); process.exitCode = 1; });
