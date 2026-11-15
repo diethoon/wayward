@@ -136,6 +136,7 @@ requireText("const fileOrigin = initialProtocol === 'file:'", 'only actual file:
 requireText("const opaqueOrigin = initialOrigin === 'null'", 'non-file opaque origins remain blocked');
 requireText("const FILE_AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/file-auth.html'", 'GitHub Pages static authentication URL');
 requireText("const FILE_AUTH_BRIDGE_ORIGIN = 'https://jeiky224.github.io'", 'exact GitHub Pages target origin');
+requireText('const FILE_AUTH_BRIDGE_VERSION = 4', 'V4 bridge protocol');
 requireText("opaque-origin-unsupported", 'unrecognized opaque origins fail closed');
 assert.equal(fileContainsText(modPath, 'auth-page/index.html'), false,
   'file auth must use the GitHub Pages source URL instead of the legacy relay page');
@@ -208,6 +209,9 @@ assert.match(fileAuth, /window\.open\(/);
 assert.match(fileAuth, /new MessageChannel\(\)/);
 assert.match(fileAuth, /popup\.postMessage\([\s\S]*FILE_AUTH_BRIDGE_ORIGIN[\s\S]*channel\.port2/);
 assert.match(fileAuth, /isBridgeSessionCurrent\(\)/);
+assert.match(fileAuth, /pendingPorts/);
+assert.match(fileAuth, /sourcePort !== port/);
+assert.match(fileAuth, /data.appId !== 'wayward-cloudsave'/);
 assert.match(fileAuth, /wayward-cloud-auth-ack-received/);
 assert.doesNotMatch(fileAuth, /event\.origin|origin\s*===\s*['"]null['"]|postMessage\([^,]+,\s*['"]\*['"]/);
 assert.doesNotMatch(fileAuth, /fetch\(|127\.0\.0\.1|localhost/);
