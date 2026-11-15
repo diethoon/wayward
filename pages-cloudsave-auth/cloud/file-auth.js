@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = 2;
+  const VERSION = 3;
   const APP_ID = 'wayward-cloudsave';
   const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
   const CLIENT_ID = String(window.WAYWARD_GOOGLE_CLIENT_ID || '').trim();
@@ -15,6 +15,7 @@
   const connectButton = $('connect');
   const cancelButton = $('cancel');
 
+  let initialized = false;
   let locked = false;
   let completed = false;
   let authPending = false;
@@ -134,7 +135,8 @@
     });
   }
   function beginLogin() {
-    if (completed || authPending || resultSent || errorSent || !port || !confirmRequest.checked) return;
+    if (completed || !locked || authPending || resultSent || errorSent ||
+        !port || !confirmRequest.checked) return;
     if (!readyGIS()) {
       setAuth('Google 인증 서비스를 아직 불러오지 못했습니다. 잠시 후 다시 시도하세요.', true);
       return;
@@ -184,9 +186,8 @@
           if (authTimer !== null) clearTimeout(authTimer);
           authTimer = null;
           setAuth('Google 인증 결과를 원래 게임 창에 전달하고 수신 확인을 기다립니다.');
-          const accessToken = response.access_token;
           const sent = send('wayward-cloud-auth-success', {
-            accessToken,
+            accessToken: response.access_token,
             expiresIn: Number(response.expires_in) || 3600
           });
           if (!sent) {
@@ -224,6 +225,27 @@
   function onPortMessage(event) {
     const data = event && event.data;
     if (!validEnvelope(data)) return;
+
+    if (data.type === 'wayward-cloud-auth-activate') {
+      if (locked || !initialized) return;
+      locked = true;
+      connectionTitle.textContent = '일회성 게임 세션 연결됨';
+      setConnection('원래 게임 창과 일회성 인증 세션을 확인했습니다. 로컬 파일의 정품 여부는 브라우저가 증명할 수 없습니다.');
+      authPanel.hidden = false;
+      requestDescription.textContent = 'Wayward CloudSave가 Google Drive appData 접근을 요청했습니다. 직접 시작한 게임 요청인지 확인한 뒤 계속하세요.';
+      if (!send('wayward-cloud-auth-active')) {
+        finishPage('게임 창에 인증 채널 활성화 상태를 전달하지 못했습니다.');
+        return;
+      }
+      waitForGIS(Date.now() + 20000).then(() => {
+        if (completed || !locked) return;
+        connectButton.disabled = !confirmRequest.checked;
+        setAuth('게임 연결을 활성화했습니다. 요청 확인 후 Google 계정을 연결하세요.');
+      }).catch(error => sendAuthError('gis-unavailable', String(error && error.message || error)));
+      return;
+    }
+
+    if (!locked) return;
     if (data.type === 'wayward-cloud-auth-cancel') {
       finishPage('게임에서 인증 요청을 취소했습니다.');
       return;
@@ -249,18 +271,15 @@
       return;
     }
     const candidatePort = incoming[0];
-    // event.origin === "null" only classifies the required opaque file context.
-    // It is not trusted as an identity claim. Session identity uses the opener
-    // WindowProxy, one transferred port, random request IDs and user confirmation.
-    if (locked || !window.opener || window.opener.closed ||
-        event.source !== window.opener || event.origin !== 'null') {
+    // Do not inspect or trust an opaque file Origin. Bind only to this exact
+    // opener WindowProxy, a single transferred port and one-time request IDs.
+    if (locked || !window.opener || window.opener.closed || event.source !== window.opener) {
       try { candidatePort.close(); } catch (_) {}
       return;
     }
     const data = event.data;
     const allowedKeys = ['type', 'version', 'appId', 'action', 'nonce', 'requestId', 'attemptId', 'forceSelectAccount'];
-    if (!exactKeys(data, allowedKeys) ||
-        Object.keys(data).length !== allowedKeys.length ||
+    if (!exactKeys(data, allowedKeys) || Object.keys(data).length !== allowedKeys.length ||
         data.type !== 'wayward-cloud-auth-init' || data.version !== VERSION ||
         data.appId !== APP_ID || data.action !== 'login' ||
         !validId(data.nonce) || !validId(data.requestId) || !validId(data.attemptId) ||
@@ -268,51 +287,54 @@
       try { candidatePort.close(); } catch (_) {}
       return;
     }
+    if (initialized && (data.nonce !== nonce || data.requestId !== requestId ||
+        data.attemptId !== attemptId)) {
+      try { candidatePort.close(); } catch (_) {}
+      return;
+    }
 
-    let freshSessionId = '';
-    try { freshSessionId = makeNonce(); }
+    let newSessionId = '';
+    try { newSessionId = makeNonce(); }
     catch (_) {
       try { candidatePort.close(); } catch (_) {}
       setConnection('안전한 세션을 생성하지 못했습니다. 게임에서 다시 시작하세요.', true);
       return;
     }
-    locked = true;
+    // The game retries init during popup loading. Replace the port for the same
+    // request until the game confirms activation; then the channel is locked.
+    if (port) { try { port.close(); } catch (_) {} }
+    initialized = true;
     port = candidatePort;
     nonce = data.nonce;
     requestId = data.requestId;
     attemptId = data.attemptId;
     forceSelectAccount = data.forceSelectAccount;
-    sessionId = freshSessionId;
+    sessionId = newSessionId;
     port.onmessage = onPortMessage;
     port.onmessageerror = () => finishPage('게임과의 보안 메시지 채널이 손상되었습니다.');
     try { if (typeof port.start === 'function') port.start(); }
     catch (_) { finishPage('게임과의 보안 메시지 채널을 시작하지 못했습니다.'); return; }
 
-    connectionTitle.textContent = '일회성 게임 세션 연결됨';
-    setConnection('실제 opener 창과 전송된 메시지 포트를 연결했습니다. file:// 파일 자체의 정품 여부는 브라우저가 증명할 수 없습니다. Wayward에서 직접 시작한 요청일 때만 승인하세요.');
-    requestDescription.textContent = 'Wayward CloudSave가 Google Drive appData 접근을 요청했습니다. 로컬 게임 파일의 신원은 확인할 수 없으므로 요청을 직접 시작했는지 확인하세요.';
-    authPanel.hidden = false;
+    connectionTitle.textContent = '게임 연결 요청 수신';
+    setConnection('Wayward 게임이 시작한 일회성 요청을 받았습니다. 세션 활성화를 확인하고 있습니다.');
     if (!send('wayward-cloud-auth-ready')) {
       finishPage('원래 게임 창에 인증 채널 준비 상태를 전달하지 못했습니다.');
       return;
     }
-    openerWatchTimer = window.setInterval(() => {
-      try {
-        if (!window.opener || window.opener.closed) finishPage('게임 창이 닫혀 인증 세션을 종료했습니다.');
-      } catch (_) {
-        finishPage('게임 창을 확인할 수 없어 인증 세션을 종료했습니다.');
-      }
-    }, 500);
-    waitForGIS(Date.now() + 20000).then(() => {
-      if (!completed && !authPending && !resultSent && !errorSent) {
-        connectButton.disabled = !confirmRequest.checked;
-        setAuth('게임 세션이 연결되었습니다. 요청을 확인한 뒤 Google 계정을 연결하세요.');
-      }
-    }).catch(error => sendAuthError('gis-unavailable', String(error && error.message || error)));
+    if (openerWatchTimer === null) {
+      openerWatchTimer = window.setInterval(() => {
+        try {
+          if (!window.opener || window.opener.closed) finishPage('게임 창이 닫혀 인증 세션을 종료했습니다.');
+        } catch (_) {
+          finishPage('게임 창을 확인할 수 없어 인증 세션을 종료했습니다.');
+        }
+      }, 500);
+    }
   }
 
   confirmRequest.addEventListener('change', () => {
-    connectButton.disabled = !confirmRequest.checked || !readyGIS() || completed || authPending || resultSent || errorSent;
+    connectButton.disabled = !locked || !confirmRequest.checked || !readyGIS() ||
+      completed || authPending || resultSent || errorSent;
     if (confirmRequest.checked) setAuth('확인했습니다. Google 계정 연결을 시작할 수 있습니다.');
   });
   connectButton.addEventListener('click', beginLogin);
@@ -345,6 +367,8 @@
     try { if (port) port.close(); } catch (_) {}
     port = null;
   });
-  if (!window.opener) setConnection('Wayward 게임에서 시작한 인증 요청이 아닙니다. 이 페이지를 닫고 게임의 CloudSave 로그인 버튼을 누르세요.', true);
-  if (typeof CLIENT_ID !== 'string' || !CLIENT_ID) setConnection('Google OAuth Web Client 설정을 불러오지 못했습니다.', true);
+  if (!window.opener) {
+    setConnection('Wayward 게임에서 시작한 인증 요청이 아닙니다. 이 페이지를 닫고 게임의 CloudSave 로그인 버튼을 누르세요.', true);
+  }
+  if (!CLIENT_ID) setConnection('Google OAuth Web Client 설정을 불러오지 못했습니다.', true);
 })();
