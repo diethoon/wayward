@@ -361,6 +361,9 @@ WML.define({
     function validateDirectGISOrigin() {
       const protocol = String(window.location.protocol || '');
       const origin = String(window.location.origin || '');
+      if (protocol === 'file:' || origin === 'null') {
+        throw new Error('Google GIS 직접 인증에 사용할 수 없는 게임 Origin입니다.');
+      }
       let parsed;
       try { parsed = new URL(origin); } catch (_) { throw new Error('현재 게임 Origin을 확인할 수 없습니다.'); }
       if (parsed.origin !== origin || parsed.username || parsed.password || origin === 'null')
