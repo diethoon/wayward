@@ -321,6 +321,12 @@ async function testDirectGISPopupFailureAndStaleState() {
   await assert.rejects(blockedPromise, /팝업이 차단/);
   assert.equal(blocked.accepted.length, 0);
 
+  const closed = createBrowserHarness({ autoResponse: false });
+  const closedPromise = closed.api.requestBrowserGoogleToken('8'.repeat(48), false, 9, 13);
+  closed.getErrorCallback()({ type: 'popup_closed' });
+  await assert.rejects(closedPromise, /Google 인증 창이 닫혔습니다/);
+  assert.equal(closed.accepted.length, 0, 'closing the GIS window must not accept a token');
+
   const stale = createBrowserHarness({ autoResponse: false });
   const stalePromise = stale.api.requestBrowserGoogleToken('3'.repeat(48), false, 9, 13);
   stale.context.authAttemptSerial += 1;
