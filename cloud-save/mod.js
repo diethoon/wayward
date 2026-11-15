@@ -562,7 +562,9 @@ WML.define({
     }
 
     async function resolveDriveAccountCache() {
+      const generation = sessionGeneration;
       if (driveAccountCacheIdentity) {
+        assertDriveSession(generation);
         return Object.assign({
           apiCalls: 0, responseBytes: 0, apiRequestMs: 0, jsonParseMs: 0
         }, driveAccountCacheIdentity);
@@ -573,6 +575,7 @@ WML.define({
       try {
         const response = await driveFetch('/drive/v3/about?fields=user(permissionId)');
         const raw = await response.text();
+        assertDriveSession(generation);
         const apiRequestMs = Math.max(0, Math.round(now() - requestStarted));
         let responseBytes = 0;
         try { responseBytes = new TextEncoder().encode(raw).length; }
@@ -581,16 +584,17 @@ WML.define({
         const about = JSON.parse(raw);
         const jsonParseMs = Math.max(0, Math.round(now() - parseStarted));
         const permissionId = String(about && about.user && about.user.permissionId || '');
+        assertDriveSession(generation);
         if (!permissionId) {
           return { memoryKey: '', storageKey: '', apiCalls: 1, responseBytes, apiRequestMs, jsonParseMs };
         }
-        driveAccountCacheIdentity = {
-          memoryKey: permissionId,
-          storageKey: await accountCacheStorageKey(permissionId)
-        };
+        const storageKey = await accountCacheStorageKey(permissionId);
+        assertDriveSession(generation);
+        driveAccountCacheIdentity = { memoryKey: permissionId, storageKey };
         return Object.assign({ apiCalls: 1, responseBytes, apiRequestMs, jsonParseMs },
           driveAccountCacheIdentity);
       } catch (_) {
+        assertDriveSession(generation);
         // about.get is optional. Failure must not block the core files.list call.
         return {
           memoryKey: '', storageKey: '', apiCalls: 1,
@@ -627,6 +631,7 @@ WML.define({
     function refreshSlots() {
       if (driveListPromise) return driveListPromise;
       const generation = ++driveListGeneration;
+      const session = sessionGeneration;
       const now = () => typeof performance !== 'undefined' && performance.now
         ? performance.now() : Date.now();
       const startedAt = now();
@@ -670,6 +675,8 @@ WML.define({
                 '/drive/v3/files?' + params.toString(), requestOptions
               );
               const raw = await response.text();
+              if (generation !== driveListGeneration) return null;
+              assertDriveSession(session);
               apiRequestMs += Math.max(0, Math.round(now() - requestStarted));
               try { responseBytes += new TextEncoder().encode(raw).length; }
               catch (_) { responseBytes += raw.length; }
