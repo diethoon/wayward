@@ -378,15 +378,20 @@ WML.define({
       try { validateDirectGISOrigin(); } catch (error) { return Promise.reject(error); }
       if (!isGoogleIdentityReady()) return Promise.reject(new Error(browserGISLoadError || 'Google Identity 라이브러리가 준비되지 않았습니다. CloudSave를 다시 여세요.'));
       return new Promise((resolve, reject) => {
-        let settled = false;
+        let settled = false, timeout = null;
         const finishError = error => {
           if (settled) return;
           settled = true;
+          if (timeout !== null) clearTimeout(timeout);
+          timeout = null;
           if (activeAuthCancel === cancel) activeAuthCancel = null;
           reject(error instanceof Error ? error : new Error(String(error || 'Google 인증에 실패했습니다.')));
         };
         const cancel = () => finishError(new Error('Google 인증 요청을 취소했습니다.'));
         activeAuthCancel = cancel;
+        // GIS may omit the callback when the account/sign-in chooser is closed.
+        // Bound the pending state so CloudSave can recover and allow retry.
+        timeout = setTimeout(() => finishError(new Error('Google 인증 응답이 도착하지 않았습니다. 창을 닫았거나 인증이 중단되었을 수 있습니다. 다시 연결해 주세요.')), 120000);
         try {
           const client = window.google.accounts.oauth2.initTokenClient({
             client_id: GOOGLE_OAUTH_CLIENT_ID,
@@ -414,6 +419,8 @@ WML.define({
               try { acceptAccessToken({ type: 'wayward-cloud-auth-success', nonce, accessToken: response.access_token, expiresIn: Number(response.expires_in) || 3600 }, nonce); }
               catch (error) { finishError(error); return; }
               settled = true;
+              if (timeout !== null) clearTimeout(timeout);
+              timeout = null;
               if (activeAuthCancel === cancel) activeAuthCancel = null;
               resolve();
             },
