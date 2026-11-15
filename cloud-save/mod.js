@@ -56,6 +56,12 @@ WML.define({
     let driveMetadataCacheAvailable = false;
     let preparedSlotRead = null;
     let lastListMetrics = null;
+    let activeMemoDialog = null;
+    let previewObserver = null;
+    let previewTargets = new WeakMap();
+    let previewLoadPromises = new Map();
+    let previewCache = new Map();
+    let drivePreviewDownloadCount = 0;
     let driveBodyDownloadCount = 0;
     let authStartedAt = 0;
     let authCompletedAt = 0;
@@ -157,8 +163,7 @@ WML.define({
 
     function resetDriveListState() {
       driveListGeneration += 1;
-      if (driveListAbortController) {
-        try { driveListAbortController.abort(); } catch (_) {}
+      if (driveListAbortController) {        try { driveListAbortController.abort(); } catch (_) {}
       }
       driveListAbortController = null;
       driveListPromise = null;
@@ -177,6 +182,13 @@ WML.define({
         try { controller.abort(); } catch (_) {}
       }
       driveRequestControllers.clear();
+      if (previewObserver) {
+        try { previewObserver.disconnect(); } catch (_) {}
+        previewObserver = null;
+      }
+      previewLoadPromises.clear();
+      previewCache.clear();
+      if (activeMemoDialog) closeMemoPopup();
     }
 
     function assertDriveSession(generation) {
@@ -250,27 +262,29 @@ WML.define({
         typeof host.startGoogleDriveAuthWithPolicy === 'function' ||
         typeof host.startGoogleDriveAuth === 'function'
       );
-      if (!hasNativeStart || typeof host.takePendingStateForNonce !== 'function' ||
-          typeof host.cancelGoogleDriveAuth !== 'function') return null;
-      // Older launchers without cancellation use the static GIS route instead.
+      if (!hasNativeStart || typeof host.takePendingStateForNonce !== 'function') return null;
+      const canCancel = typeof host.cancelGoogleDriveAuth === 'function';
+      // 0.6.1 launchers expose nonce-scoped result retrieval but may not expose
+      // native cancellation. Keep their native auth UX; local cancellation and
+      // per-attempt nonce isolation still reject late results safely.
       if (forceSelectAccount && typeof host.startGoogleDriveAuthWithPolicy !== 'function') return null;
 
       return new Promise((resolve, reject) => {
         let settled = false;
         let pollTimer = null;
-        const deadline = Date.now() + 90000;
+        const deadline = Date.now() + (canCancel ? 90000 : 180000);
         const finish = (error, payload) => {
           if (settled) return;
           settled = true;
           if (pollTimer !== null) clearTimeout(pollTimer);
           if (activeAuthCancel === cancel) activeAuthCancel = null;
           if (error) {
-            try { host.cancelGoogleDriveAuth(nonce); } catch (_) {}
+            if (canCancel) { try { host.cancelGoogleDriveAuth(nonce); } catch (_) {} }
             reject(error);
           } else {
             try { acceptAccessToken(payload, nonce); resolve(); }
             catch (failure) {
-              try { host.cancelGoogleDriveAuth(nonce); } catch (_) {}
+              if (canCancel) { try { host.cancelGoogleDriveAuth(nonce); } catch (_) {} }
               reject(failure);
             }
           }
@@ -317,8 +331,7 @@ WML.define({
       const nativeTask = requestNativeGoogleToken(nonce, !!forceSelectAccount);
       if (nativeTask) return nativeTask;
 
-      return new Promise((resolve, reject) => {
-        const protocol = String(window.location.protocol || '');
+      return new Promise((resolve, reject) => {        const protocol = String(window.location.protocol || '');
         const rawOrigin = String(window.location.origin || '');
         const fileMode = protocol === 'file:' || rawOrigin === 'null';
         const gameOrigin = fileMode ? 'null' : rawOrigin;
@@ -477,8 +490,7 @@ WML.define({
         assertDriveSession(generation);
         if (response.status === 401) {
           clearToken();
-          authStatus = 'reauth-required';
-          throw new Error('Google 액세스 토큰이 만료되었거나 Google 권한이 취소되었습니다. 연결 버튼을 눌러 재인증하세요.');
+          authStatus = 'reauth-required';          throw new Error('Google 액세스 토큰이 만료되었거나 Google 권한이 취소되었습니다. 연결 버튼을 눌러 재인증하세요.');
         }
         if (!response.ok) {
           let detail = '';
@@ -534,7 +546,15 @@ WML.define({
             name: String(file.name),
             mimeType: String(file.mimeType || 'application/json'),
             modifiedTime: String(file.modifiedTime || ''),
-            size: Math.max(0, Number(file.size) || 0)
+            size: Math.max(0, Number(file.size) || 0),
+            previewId: String(file.appProperties && file.appProperties.wmlPreviewId || ''),
+            previewGeneration: String(file.appProperties && file.appProperties.wmlPreviewGeneration || ''),
+            appProperties: file.appProperties && typeof file.appProperties === 'object'
+              ? {
+                  wmlPreviewId: String(file.appProperties.wmlPreviewId || ''),
+                  wmlPreviewGeneration: String(file.appProperties.wmlPreviewGeneration || '')
+                }
+              : {}
           });
         }
       }
@@ -555,7 +575,13 @@ WML.define({
           name: item.name,
           modifiedTime: String(item.modifiedTime || ''),
           size: Math.max(0, Number(item.size) || 0),
-          mimeType: String(item.mimeType || 'application/json')
+          mimeType: String(item.mimeType || 'application/json'),
+          previewId: String(item.previewId || item.appProperties && item.appProperties.wmlPreviewId || ''),
+          previewGeneration: String(item.previewGeneration || item.appProperties && item.appProperties.wmlPreviewGeneration || ''),
+          appProperties: {
+            wmlPreviewId: String(item.previewId || item.appProperties && item.appProperties.wmlPreviewId || ''),
+            wmlPreviewGeneration: String(item.previewGeneration || item.appProperties && item.appProperties.wmlPreviewGeneration || '')
+          }
         });
       }
       return output;
@@ -637,8 +663,8 @@ WML.define({
       const startedAt = now();
       const startedAtWall = Date.now();
       const bodyCountAtStart = driveBodyDownloadCount;
-      let cacheDisplayMs = null;
-      const controller = typeof AbortController === 'function' ? new AbortController() : null;
+      const previewCountAtStart = drivePreviewDownloadCount;
+      let cacheDisplayMs = null;      const controller = typeof AbortController === 'function' ? new AbortController() : null;
       driveListAbortController = controller;
       const requestOptions = controller ? { signal: controller.signal } : undefined;
       slotsStatus = 'loading';
@@ -665,7 +691,7 @@ WML.define({
                 spaces: 'appDataFolder',
                 pageSize: '1000',
                 q: "trashed = false and name contains '" + FILE_PREFIX + "'",
-                fields: 'files(id,name,mimeType,modifiedTime,size),nextPageToken'
+                fields: 'files(id,name,mimeType,modifiedTime,size,appProperties),nextPageToken'
               });
               if (pageToken) params.set('pageToken', pageToken);
               apiCalls += 1;
@@ -725,6 +751,7 @@ WML.define({
             apiRequestMs,
             jsonParseMs,
             bodyDownloads: driveBodyDownloadCount - bodyCountAtStart,
+            previewDownloads: drivePreviewDownloadCount - previewCountAtStart,
             decryptMs: 0,
             slotCount: freshFiles.length,
             durationMs: Math.max(0, Math.round(now() - startedAt)),
@@ -797,8 +824,7 @@ WML.define({
           '--' + boundary + '\r\n' +
           'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
           body + '\r\n' +
-          '--' + boundary + '--';
-        await driveFetch('/upload/drive/v3/files?uploadType=multipart', {
+          '--' + boundary + '--';        await driveFetch('/upload/drive/v3/files?uploadType=multipart', {
           method: 'POST',
           headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
           body: multipart
@@ -814,6 +840,204 @@ WML.define({
       await refreshSlots();
     }
 
+    function extractSnapshotPreview(snapshot) {
+      const state = snapshot && snapshot.state && typeof snapshot.state === 'object' ? snapshot.state : {};
+      const activeId = String(state.primaryCharacterId || '');
+      const active = activeId && state.characters && typeof state.characters === 'object' ? state.characters[activeId] : null;
+      const name = active && typeof active.name === 'string' ? active.name.trim() : '';
+      const archetypeId = active && typeof active.archetypeId === 'string' ? active.archetypeId : '';
+      const originNames = { elena_farmgirl: '엘레나', mara_citygirl: '마라', pippa_waif: '피파' };
+      const dayValue = state.day;
+      const day = (typeof dayValue === 'number' && Number.isFinite(dayValue)) ||
+        (typeof dayValue === 'string' && /^-?\d+(?:\.\d+)?$/.test(dayValue.trim())) ? Number(dayValue) : null;
+      const goldValue = state.economy && state.economy.gold;
+      const gold = (typeof goldValue === 'number' && Number.isFinite(goldValue)) ||
+        (typeof goldValue === 'string' && /^-?\d+(?:\.\d+)?$/.test(goldValue.trim())) ? Number(goldValue) : null;
+      const savedAtValue = Number(snapshot && snapshot.savedAt);
+      return {
+        characterName: name, day, gold,
+        origin: Object.prototype.hasOwnProperty.call(originNames, archetypeId) ? originNames[archetypeId] : '',
+        savedAt: Number.isFinite(savedAtValue) && savedAtValue > 0 ? savedAtValue : null,
+        memo: snapshot && typeof snapshot.memo === 'string' ? snapshot.memo : ''
+      };
+    }
+
+    function buildPreviewSnapshot(snapshot, generation) {
+      const preview = extractSnapshotPreview(snapshot);
+      const sourceState = snapshot && snapshot.state && typeof snapshot.state === 'object' ? snapshot.state : {};
+      const activeId = String(sourceState.primaryCharacterId || '');
+      const active = activeId && sourceState.characters && typeof sourceState.characters === 'object' ? sourceState.characters[activeId] : null;
+      const state = {};
+      if (activeId) state.primaryCharacterId = activeId;
+      if (active && typeof active === 'object') {
+        const character = {};
+        if (typeof active.name === 'string') character.name = active.name;
+        if (typeof active.archetypeId === 'string') character.archetypeId = active.archetypeId;
+        state.characters = { [activeId]: character };
+      }
+      if (preview.day !== null) state.day = preview.day;
+      if (preview.gold !== null) state.economy = { gold: preview.gold };
+      return { schema: 'wayward-cloud-save', version: 1, gameFamily: 'wayward', nativeFormat: 1,
+        savedAt: preview.savedAt, memo: preview.memo, previewGeneration: String(generation || ''), state };
+    }
+
+    function formatPreviewSummary(preview) {
+      if (!preview) return '';
+      const parts = [];
+      if (preview.characterName) parts.push(preview.characterName);
+      if (preview.day !== null && preview.day !== undefined) parts.push('진행 ' + preview.day + '일');
+      if (preview.gold !== null && preview.gold !== undefined) parts.push('소지 ' + Number(preview.gold).toLocaleString('ko-KR') + '골드');
+      if (preview.origin) parts.push('출신 ' + preview.origin);
+      if (preview.savedAt) {
+        const timestamp = Number(preview.savedAt);
+        if (Number.isFinite(timestamp) && timestamp > 0) parts.push('저장 ' + new Date(timestamp).toLocaleString('ko-KR', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
+      }
+      return parts.join(' · ');
+    }
+
+    async function clearSlotPreview(file) {
+      if (!file || !file.id || !file.previewId) return;
+      const session = sessionGeneration;
+      const oldPreviewId = file.previewId;
+      await driveFetch('/drive/v3/files/' + encodeURIComponent(file.id) + '?fields=id%2CappProperties', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+        body: JSON.stringify({ appProperties: {} })
+      });
+      assertDriveSession(session);
+      file.previewId = ''; file.previewGeneration = ''; file.appProperties = {};
+      if (driveAccountCacheIdentity) writeAccountSlotCache(driveAccountCacheIdentity, driveSlots);
+      try {
+        await driveFetch('/drive/v3/files/' + encodeURIComponent(oldPreviewId), { method: 'DELETE' });
+        assertDriveSession(session);
+      } catch (error) {
+        try { if (console && console.warn) console.warn('[Wayward CloudSave] preview cleanup failed', error); } catch (_) {}
+      }
+    }
+
+    async function uploadPreviewSidecar(file, snapshot) {
+      if (!file || !file.id) throw new Error('미리보기와 연결할 저장 파일을 찾지 못했습니다.');
+      const session = sessionGeneration; assertDriveSession(session);
+      const generation = createAuthNonce();
+      const previewSnapshot = buildPreviewSnapshot(snapshot, generation);
+      const envelope = await globalThis.WMLGoogleDriveCrypto.encryptSnapshotEmbedded(previewSnapshot);
+      assertDriveSession(session);
+      const boundary = 'wml_preview_' + generation;
+      const metadata = { name: 'wayward-cloud-preview-' + generation + '.json', mimeType: 'application/json', parents: ['appDataFolder'] };
+      const multipart = '--' + boundary + '\r\n' +
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(metadata) + '\r\n' +
+        '--' + boundary + '\r\n' +
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(envelope) + '\r\n' +
+        '--' + boundary + '--';
+      const uploadResponse = await driveFetch('/upload/drive/v3/files?uploadType=multipart&fields=id', {
+        method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body: multipart
+      });
+      const created = await uploadResponse.json(); assertDriveSession(session);
+      const previewId = String(created && created.id || '');
+      if (!previewId) throw new Error('암호화 미리보기 파일 ID를 받지 못했습니다.');
+      const previousId = file.previewId;
+      try {
+        await driveFetch('/drive/v3/files/' + encodeURIComponent(file.id) + '?fields=id%2CappProperties', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+          body: JSON.stringify({ appProperties: { wmlPreviewId: previewId, wmlPreviewGeneration: generation } })
+        });
+        assertDriveSession(session);
+      } catch (error) {
+        try { await driveFetch('/drive/v3/files/' + encodeURIComponent(previewId), { method: 'DELETE' }); } catch (_) {}
+        throw error;
+      }
+      file.previewId = previewId; file.previewGeneration = generation;
+      file.appProperties = { wmlPreviewId: previewId, wmlPreviewGeneration: generation };
+      if (driveAccountCacheIdentity) writeAccountSlotCache(driveAccountCacheIdentity, driveSlots);
+      if (previousId && previousId !== previewId) {
+        try { await driveFetch('/drive/v3/files/' + encodeURIComponent(previousId), { method: 'DELETE' }); }
+        catch (error) { try { if (console && console.warn) console.warn('[Wayward CloudSave] old preview cleanup failed', error); } catch (_) {} }
+      }
+      assertDriveSession(session); return previewSnapshot;
+    }
+
+    async function readSlotPreviewSidecar(file, session) {
+      if (!file || !file.previewId || !file.previewGeneration) return null;
+      drivePreviewDownloadCount += 1;
+      const response = await driveFetch('/drive/v3/files/' + encodeURIComponent(file.previewId) + '?alt=media');
+      const envelope = await response.json(); assertDriveSession(session);
+      const snapshot = await globalThis.WMLGoogleDriveCrypto.decryptSnapshotEmbedded(envelope);
+      assertDriveSession(session);
+      if (snapshot.previewGeneration !== file.previewGeneration) throw new Error('미리보기 generation이 저장 파일 메타데이터와 일치하지 않습니다.');
+      return snapshot;
+    }
+
+    function previewCacheKey(file) { return [file.id, file.modifiedTime, file.previewId, file.previewGeneration].join('|'); }
+
+    function applySlotPreview(item, preview) {
+      if (!item || !item.row.isConnected || item.session !== sessionGeneration) return;
+      const summary = formatPreviewSummary(preview);
+      item.summaryNode.textContent = summary || (preview ? '표시할 저장 정보가 없습니다.' : '이전 암호화 세이브입니다. 암호를 입력해 불러온 뒤 미리보기를 생성할 수 있습니다.');
+      item.memo = preview && typeof preview.memo === 'string' ? preview.memo : '';
+      if (item.memoButton) {
+        const hasMemo = !!item.memo.trim(); item.memoButton.hidden = !hasMemo;
+        item.memoButton.textContent = hasMemo ? '메모: ' + item.memo.replace(/\s+/g, ' ').trim() : '';
+        item.memoButton.title = hasMemo ? item.memo : '';
+      }
+    }
+
+    async function loadSlotPreview(item) {
+      if (!item || !item.row.isConnected || item.session !== sessionGeneration) return;
+      const file = item.file, session = item.session, key = previewCacheKey(file);
+      if (previewCache.has(key)) { applySlotPreview(item, previewCache.get(key)); return; }
+      let task = previewLoadPromises.get(key);
+      if (!task) {
+        task = (async () => {
+          let previewSnapshot = null;
+          if (file.previewId && file.previewGeneration) {
+            try { previewSnapshot = await readSlotPreviewSidecar(file, session); }
+            catch (_) { assertDriveSession(session); previewSnapshot = null; }
+          }
+          if (!previewSnapshot) {
+            const envelope = await readSlotEnvelope(file); assertDriveSession(session);
+            if (!envelope || envelope.keyMode !== 'embedded-addon-v2') return null;
+            const originalSnapshot = await globalThis.WMLGoogleDriveCrypto.decryptSnapshotEmbedded(envelope);
+            assertDriveSession(session);
+            previewSnapshot = buildPreviewSnapshot(originalSnapshot, createAuthNonce());
+            try { await uploadPreviewSidecar(file, originalSnapshot); assertDriveSession(session); }
+            catch (error) {
+              assertDriveSession(session);
+              try { if (console && console.warn) console.warn('[Wayward CloudSave] preview sidecar backfill failed', error); } catch (_) {}
+            }
+          }
+          return extractSnapshotPreview(previewSnapshot);
+        })();
+        previewLoadPromises.set(key, task);
+      }
+      try {
+        const preview = await task; assertDriveSession(session);
+        previewCache.set(key, preview); applySlotPreview(item, preview);
+      } catch (error) {
+        if (session !== sessionGeneration || !item.row.isConnected) return;
+        item.summaryNode.textContent = '저장 미리보기 정보를 불러오지 못했습니다.';
+        if (item.memoButton) item.memoButton.hidden = true;
+        try { if (console && console.warn) console.warn('[Wayward CloudSave] preview load failed', error); } catch (_) {}
+      } finally { if (previewLoadPromises.get(key) === task) previewLoadPromises.delete(key); }
+    }
+
+    function observeSlotPreview(file, row, summaryNode, memoButton) {
+      const item = { file, row, summaryNode, memoButton, memo: '', session: sessionGeneration };
+      previewTargets.set(row, item);
+      if (previewObserver) previewObserver.observe(row);
+      else if (typeof IntersectionObserver === 'function') {
+        previewObserver = new IntersectionObserver(entries => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            previewObserver.unobserve(entry.target);
+            const target = previewTargets.get(entry.target); if (target) loadSlotPreview(target);
+          }
+        }, { root: null, rootMargin: '100px 0px', threshold: 0 });
+        previewObserver.observe(row);
+      } else {
+        const rect = row.getBoundingClientRect();
+        const height = Number(window.innerHeight) || (document.documentElement && document.documentElement.clientHeight) || 0;
+        if (rect.bottom >= 0 && rect.top <= height) loadSlotPreview(item);
+      }
+    }
     function buildSnapshot() {
       const state = api.store.game();
       if (!state || typeof state !== 'object' || Array.isArray(state)) {
@@ -869,18 +1093,7 @@ WML.define({
       return '';
     }
     function makeSummary(snapshot) {
-      const state = snapshot && snapshot.state || {};
-      const day = firstValue(state, [/^(day|days|currentDay|progressDay|dayCount|elapsedDays|daysPassed)$/i, /^(gameDay|storyDay)$/i]);
-      const gold = firstValue(state, [/^(gold|money|coins|currency|playerGold|currentGold|goldAmount|cash)$/i, /gold|money|currency/i]);
-      const role = firstValue(state, [/^(role|occupation|job|origin|background|statusName|className|socialClass|characterRole)$/i]);
-      const character = firstValue(state, [/^(characterName|playerName|protagonistName|heroName|mainCharacterName|girlName)$/i]);
-      const parts = [];
-      if (character) parts.push(String(character) + ' 진행일:'); else if (day !== '') parts.push('진행일:');
-      if (day !== '') parts.push(String(day) + '일');
-      if (gold !== '') parts.push(String(gold) + '골드');
-      if (role) parts.push(String(role));
-      parts.push(new Date(Number(snapshot.savedAt) || Date.now()).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }));
-      return parts.join(' · ');
+      return formatPreviewSummary(extractSnapshotPreview(snapshot));
     }
     function defaultTitle(state) {
       const day = Number(state && state.day);
@@ -957,8 +1170,7 @@ WML.define({
         // Browser GIS is user-gesture gated, so its restore is offered as a
         // one-click action rather than auto-opening a blocked popup.
         attemptNativeSessionRestore();
-      }
-      if (hasLogin() && slotsStatus !== 'loaded' && slotsStatus !== 'loading') {
+      }      if (hasLogin() && slotsStatus !== 'loaded' && slotsStatus !== 'loading') {
         runAction(() => refreshSlots());
       }
     }
@@ -1117,8 +1329,7 @@ WML.define({
           popup = window.open(revokeUrl.toString(), 'waywardGoogleDriveRevoke061',
             'popup=yes,width=520,height=520,resizable=yes,scrollbars=yes');
         } catch (_) { finish(false); return; }
-        if (!popup) { finish(false); return; }
-        timer = setTimeout(() => finish(false), 30000);
+        if (!popup) { finish(false); return; }        timer = setTimeout(() => finish(false), 30000);
         closeWatch = setInterval(() => {
           if (popup && popup.closed) finish(false);
         }, 350);
@@ -1218,10 +1429,29 @@ WML.define({
       snapshot.memo = String(fields.memo && fields.memo.value || '').trim();
       const envelope = await globalThis.WMLGoogleDriveCrypto.encryptSnapshotEmbedded(snapshot);
       assertDriveSession(session);
+      let previewWarning = '';
+      const previousFile = currentFile(slot);
+      if (previousFile && previousFile.previewId) {
+        try { await clearSlotPreview(previousFile); assertDriveSession(session); }
+        catch (error) { previewWarning = '미리보기 기존 포인터 정리는 실패했습니다.'; }
+      }
       await writeSlotEnvelope(slot, envelope);
       assertDriveSession(session);
+      const savedFile = currentFile(slot);
+      if (savedFile) {
+        try {
+          await uploadPreviewSidecar(savedFile, snapshot); assertDriveSession(session);
+          await refreshSlots(); assertDriveSession(session);
+        } catch (error) {
+          previewWarning = '세이브는 저장했지만 미리보기 갱신은 실패했습니다.';
+          try { const latestFile = currentFile(slot); if (latestFile && latestFile.previewId) await clearSlotPreview(latestFile); } catch (_) {}
+          try { if (console && console.warn) console.warn('[Wayward CloudSave] preview update failed', error); } catch (_) {}
+        }
+      } else previewWarning = '세이브는 저장했지만 미리보기 연결 파일을 찾지 못했습니다.';
       preparedSlotRead = null;
-      show({ page: 'home' }, '저장 슬롯 ' + slot + '에 자동 암호화하여 저장했습니다.');
+      show({ page: 'home' }, previewWarning
+        ? '저장 슬롯 ' + slot + '에 저장했습니다. ' + previewWarning
+        : '저장 슬롯 ' + slot + '에 자동 암호화하여 저장했습니다.');
     }
 
     async function prepareSaveSlot(slot) {
@@ -1277,8 +1507,7 @@ WML.define({
         assertDriveSession(session);
       } else {
         const passphrase = String(fields.passphrase && fields.passphrase.value || '');
-        if (!passphrase) throw new Error('이전 세이브의 암호화 비밀번호를 입력해 주세요.');
-        snapshot = await globalThis.WMLGoogleDriveCrypto.decryptSnapshot(envelope, passphrase);
+        if (!passphrase) throw new Error('이전 세이브의 암호화 비밀번호를 입력해 주세요.');        snapshot = await globalThis.WMLGoogleDriveCrypto.decryptSnapshot(envelope, passphrase);
         assertDriveSession(session);
         const migratedEnvelope = await globalThis.WMLGoogleDriveCrypto.encryptSnapshotEmbedded(snapshot);
         assertDriveSession(session);
@@ -1293,85 +1522,119 @@ WML.define({
     async function removeSlot(slot) {
       const session = sessionGeneration;
       assertDriveSession(session);
+      const file = currentFile(slot);
+      const previewId = file && file.previewId || '';
       await deleteSlot(slot);
       assertDriveSession(session);
+      let cleanupWarning = '';
+      if (previewId) {
+        try { await driveFetch('/drive/v3/files/' + encodeURIComponent(previewId), { method: 'DELETE' }); assertDriveSession(session); }
+        catch (error) {
+          cleanupWarning = '연결된 암호화 미리보기 파일 정리는 실패했지만 기본 저장 파일은 삭제했습니다.';
+          try { if (console && console.warn) console.warn('[Wayward CloudSave] deleted-slot sidecar cleanup failed', error); } catch (_) {}
+        }
+      }
       preparedSlotRead = null;
-      show({ page: 'home' }, '저장 슬롯 ' + slot + '을 삭제했습니다.');
+      show({ page: 'home' }, cleanupWarning || ('저장 슬롯 ' + slot + '을 삭제했습니다.'));
     }
 
     function formatSlotMetadata(file) {
-      const parts = [];
-      const timestamp = Date.parse(String(file && file.modifiedTime || ''));
-      if (Number.isFinite(timestamp)) {
-        parts.push(new Date(timestamp).toLocaleString('ko-KR', {
-          month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
-        }));
-      }
       const size = Number(file && file.size) || 0;
-      if (size > 0) {
-        parts.push(size < 1024 * 1024
-          ? Math.max(1, Math.round(size / 1024)) + ' KB'
-          : (size / (1024 * 1024)).toFixed(1) + ' MB');
+      if (size <= 0) return '';
+      return 'Drive 파일 ' + (size < 1024 * 1024
+        ? Math.max(1, Math.round(size / 1024)) + ' KB'
+        : (size / (1024 * 1024)).toFixed(1) + ' MB');
+    }
+
+    function closeMemoPopup() {
+      const overlay = activeMemoDialog;
+      if (!overlay) return;
+      activeMemoDialog = null;
+      if (overlay._wmlMemoKeyHandler) {
+        document.removeEventListener('keydown', overlay._wmlMemoKeyHandler, true);
+        overlay._wmlMemoKeyHandler = null;
       }
-      return parts.join(' · ');
+      try { if (overlay.open && typeof overlay.close === 'function') overlay.close(); } catch (_) {}
+      overlay.remove();
     }
 
     function showMemoPopup(memo) {
+      const value = String(memo || '');
+      if (!value.trim()) return;
+      closeMemoPopup();
       const overlay = document.createElement('dialog');
       overlay.className = 'wml-gd-memo-overlay';
+      overlay.setAttribute('aria-label', '저장 메모');
       const box = document.createElement('div');
       box.className = 'wml-gd-memo-box';
-      box.setAttribute('role', 'dialog');
-      box.setAttribute('aria-modal', 'true');
-      box.textContent = String(memo || '');
+      box.setAttribute('role', 'document');
+      const content = document.createElement('div');
+      content.textContent = value;
+      const closeButton = document.createElement('button');
+      closeButton.type = 'button';
+      closeButton.className = 'wml-gd-memo-close';
+      closeButton.textContent = '닫기';
+      box.append(content, closeButton);
       overlay.append(box);
-      const close = () => { if (overlay.open) overlay.close(); overlay.remove(); document.removeEventListener('keydown', onKeyDown, true); };
-      const onKeyDown = event => { if (event.key === 'Escape') { event.preventDefault(); close(); } };
-      overlay.addEventListener('click', close);
-      box.addEventListener('click', event => event.stopPropagation());
+      const onKeyDown = event => {
+        if (event.key === 'Escape' && activeMemoDialog === overlay) { event.preventDefault(); closeMemoPopup(); }
+      };
+      overlay._wmlMemoKeyHandler = onKeyDown;
+      overlay.addEventListener('click', event => { if (event.target === overlay) closeMemoPopup(); });
+      overlay.addEventListener('cancel', event => { event.preventDefault(); closeMemoPopup(); });
+      overlay.addEventListener('close', () => { if (activeMemoDialog === overlay) closeMemoPopup(); });
+      closeButton.addEventListener('click', closeMemoPopup);
       document.addEventListener('keydown', onKeyDown, true);
+      activeMemoDialog = overlay;
       document.body.append(overlay);
-      if (typeof overlay.showModal === 'function') overlay.showModal();
-      else { overlay.setAttribute('open', ''); }
+      if (typeof overlay.showModal === 'function') {
+        try { overlay.showModal(); } catch (_) { overlay.setAttribute('open', ''); }
+      } else overlay.setAttribute('open', '');
     }
 
     function renderSlots(root) {
+      if (previewObserver) { try { previewObserver.disconnect(); } catch (_) {} previewObserver = null; }
+      previewTargets = new WeakMap();
       addTitle(root, 'Google Drive 저장 슬롯');
-      const bySlot = new Map(driveSlots.map(file => [
-        Number(file.name.match(/([0-9]+)\.json$/)[1]), file
-      ]));
+      const bySlot = new Map(driveSlots.map(file => [Number(file.name.match(/([0-9]+)\.json$/)[1]), file]));
       const used = new Set(bySlot.keys());
-      let nextSlot = 1;
-      while (used.has(nextSlot)) nextSlot++;
+      let nextSlot = 1; while (used.has(nextSlot)) nextSlot++;
       const slots = Array.from(bySlot.keys()).sort((a, b) => a - b);
       if (!used.has(nextSlot)) slots.push(nextSlot);
-
       for (const slot of slots) {
         const file = bySlot.get(slot);
         const row = h('div', { class: 'wml-gd-slot' });
         const head = h('div', { class: 'wml-gd-slot-head' });
         const line = h('div', { class: 'wml-gd-slot-line' });
         line.append(h('div', { class: 'wml-gd-slot-title' }, '저장 슬롯 ' + slot));
+        let memoButton = null;
+        if (file) {
+          memoButton = document.createElement('button');
+          memoButton.type = 'button'; memoButton.className = 'wml-gd-memo-chip'; memoButton.hidden = true;
+          memoButton.setAttribute('aria-label', '저장 메모 보기'); memoButton.setAttribute('data-wml-ui', 'true');
+          memoButton.addEventListener('click', () => { const target = previewTargets.get(row); if (target && target.memo) showMemoPopup(target.memo); });
+          line.append(memoButton);
+        }
         head.append(line);
         head.append(h('div', { class: 'wml-gd-small' }, file ? '저장됨' : '저장된 게임이 없습니다.'));
         row.append(head);
+        let summaryNode = null;
         if (file) {
+          summaryNode = h('div', { class: 'wml-gd-summary' }, '저장 정보 미리보기를 불러오는 중…');
+          row.append(summaryNode);
           const metadata = formatSlotMetadata(file);
-          if (metadata) row.append(h('div', { class: 'wml-gd-summary' }, metadata));
+          if (metadata) row.append(h('div', { class: 'wml-gd-small' }, metadata));
         }
         const actions = h('div', { class: 'wml-gd-actions' });
-        actions.append(button(file ? '덮어쓰기' : '저장', () =>
-          file ? runAction(() => prepareSaveSlot(slot)) : show({ page: 'save', slot, memo: '' }),
-          { primary: true }));
+        actions.append(button(file ? '덮어쓰기' : '저장', () => file ? runAction(() => prepareSaveSlot(slot)) : show({ page: 'save', slot, memo: '' }), { primary: true }));
         if (file) {
           actions.append(button('불러오기', () => runAction(() => prepareLoadSlot(slot))));
           actions.append(button('삭제', () => show({ page: 'delete', slot })));
         }
-        row.append(actions);
-        root.append(row);
+        row.append(actions); root.append(row);
+        if (file) observeSlotPreview(file, row, summaryNode, memoButton);
       }
     }
-
     function renderView(root) {
       if (view.page === 'home') {
         addTitle(root, '개인 Google Drive 세이브');
@@ -1437,8 +1700,7 @@ WML.define({
         memoWrap.append(memoInput); root.append(memoWrap); fields.memo = memoInput;
         addButton(root, '자동 암호화하여 저장', () => runAction(() => saveSlot(view.slot)), true);
         addButton(root, '취소', () => show({ page: 'home' }));
-        addMessage(root);
-      } else if (view.page === 'load') {
+        addMessage(root);      } else if (view.page === 'load') {
         addTitle(root, '저장 슬롯 ' + view.slot + ' 불러오기');
         addText(root, '세이브를 자동으로 복호화한 뒤 게임을 불러옵니다.');
         addButton(root, '자동 복호화하고 불러오기', () => runAction(() => loadSlot(view.slot)), true);
@@ -1597,8 +1859,7 @@ WML.define({
     let fallbackDockButton = null;
     let nativeMenuEntrySeen = false;
     function ensureDockFallback() {
-      if (fallbackDockButton || nativeMenuEntrySeen) return;
-      fallbackDockButton = api.ui.addButton({
+      if (fallbackDockButton || nativeMenuEntrySeen) return;      fallbackDockButton = api.ui.addButton({
         label: '클라우드세이브',
         title: '개인 Google Drive 저장 및 불러오기',
         onClick: open
@@ -1675,6 +1936,7 @@ WML.define({
     } else ensureDockFallback();
 
     api.onBack(() => {
+      if (activeMemoDialog) { closeMemoPopup(); return true; }
       if (!isConnected()) return false;
       if (view.page === 'home') { win.close(); return true; }
       show({ page: 'home' });
@@ -1682,7 +1944,6 @@ WML.define({
     });
   }
 });
-
 
 
 
