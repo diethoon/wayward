@@ -82,9 +82,9 @@ WML.define({
     // Freeze the adapter once; account-selection policy never changes transport.
     const AUTH_ADAPTER = nativeLauncherContext ? 'android-native' :
       (fileOrigin ? 'file-bridge' : 'browser-gis');
-    const FILE_AUTH_BRIDGE_URL = 'https://wayward-six.vercel.app/auth-page/index.html';
-    const FILE_AUTH_BRIDGE_ORIGIN = 'https://wayward-six.vercel.app';
-    const FILE_AUTH_BRIDGE_VERSION = 2;
+    const FILE_AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/file-auth.html';
+    const FILE_AUTH_BRIDGE_ORIGIN = 'https://jeiky224.github.io';
+    const FILE_AUTH_BRIDGE_VERSION = 3;
     let browserGISLoadPromise = null;
     let browserGISLoadError = '';
     const FILE_PREFIX = 'wayward-cloud-slot-';
@@ -460,6 +460,8 @@ WML.define({
         let popupWatchTimer = null;
         let ackTimer = null;
         let sessionId = '';
+        let bridgeActive = false;
+        let activationTimer = null;
         let settled = false;
         let resultAccepted = false;
         let acceptedSessionGeneration = null;
@@ -492,6 +494,8 @@ WML.define({
           handshakeTimer = clearTimer(handshakeTimer);
           requestTimer = clearTimer(requestTimer);
           ackTimer = clearTimer(ackTimer);
+          activationTimer = clearTimer(activationTimer);
+          bridgeActive = false;
           if (popupWatchTimer !== null) clearInterval(popupWatchTimer);
           popupWatchTimer = null;
           if (port) {
@@ -534,11 +538,26 @@ WML.define({
             sessionId = data.sessionId;
             retryTimer = clearTimer(retryTimer);
             handshakeTimer = clearTimer(handshakeTimer);
+            if (!sendToBridge('wayward-cloud-auth-activate')) {
+              finish(new Error('CloudSave 인증 페이지 활성화 요청을 전달하지 못했습니다.'));
+              return;
+            }
+            activationTimer = setTimeout(() => {
+              if (!settled && !bridgeActive)
+                finish(new Error('CloudSave 인증 채널 활성화 응답 시간이 초과되었습니다.'));
+            }, 15000);
             return;
           }
           if (!sessionId || data.sessionId !== sessionId) return;
 
-          if (data.type === 'wayward-cloud-auth-ack-received' && resultAccepted) {
+          if (data.type === 'wayward-cloud-auth-active') {
+            if (bridgeActive) return;
+            bridgeActive = true;
+            activationTimer = clearTimer(activationTimer);
+            return;
+          }
+
+          if (data.type === 'wayward-cloud-auth-ack-received' && resultAccepted && bridgeActive) {
             if (data.accepted !== true) {
               clearToken();
               finish(new Error('인증 중계 창에서 게임 세션의 수신 확인을 받지 못했습니다.'));
@@ -553,7 +572,7 @@ WML.define({
             finish(new Error(message));
             return;
           }
-          if (data.type !== 'wayward-cloud-auth-success' || resultAccepted) return;
+          if (data.type !== 'wayward-cloud-auth-success' || resultAccepted || !bridgeActive) return;
 
           resultAccepted = true;
           try {
