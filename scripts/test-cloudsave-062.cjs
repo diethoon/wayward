@@ -195,9 +195,9 @@ const styleInit = readSectionFromFile(
   '    if (!document.getElementById(STYLE_ID)) {',
   '    function hasToken() {'
 );
-assert.equal((styleInit.match(/document\\.head\\.appendChild\\(style\\)/g) || []).length, 1,
+assert.equal((styleInit.match(/document\.head\.appendChild\(style\)/g) || []).length, 1,
   'CloudSave style element must be appended exactly once');
-assert.match(styleInit, /box-shadow:0 8px 30px #0005}';\\s*document\\.head\\.appendChild\\(style\\);/);
+assert.match(styleInit, /box-shadow:0 8px 30px #0005}';\s*document\.head\.appendChild\(style\);/);
 
 const refresh = readSectionFromFile(modPath, '    function refreshSlots() {', '    function currentFile(slot) {');
 assert.match(refresh, /files\.list|drive\/v3\/files/);
