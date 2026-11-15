@@ -25,6 +25,7 @@ on:
       - 'pages-cloudsave-auth/**'
       - 'scripts/test-cloudsave-062.cjs'
       - 'scripts/test-cloudsave-auth-ux.cjs'
+      - 'scripts/test-cloudsave-pages-bridge-integration.cjs'
       - '.github/workflows/cloudsave-062-verify.yml'
 
 permissions:
