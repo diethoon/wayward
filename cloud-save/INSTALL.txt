@@ -9,8 +9,8 @@ Wayward Google Drive CloudSave — WML v0.6.2
 인증
 - Android 공식 런처: window.WMLHost가 있으면 네이티브 어댑터로 고정합니다. 인증 API가 없거나 불완전하면 웹 인증으로 우회하지 않고 미지원 오류를 표시합니다. 최초 연결과 로그아웃 후 재로그인은 startGoogleDriveAuthWithPolicy(nonce, true) 및 takePendingStateForNonce가 필요합니다. 정책 API가 없는 구형 startGoogleDriveAuth(nonce) 브리지는 강제 계정 선택 로그인에 사용할 수 없으며, 필요한 경우 비선택 세션 복구에만 사용할 수 있습니다.
 - 0.6.1처럼 cancelGoogleDriveAuth가 없는 경우 페이지 측 대기만 nonce별로 중단하며, 실제 네이티브 계정 선택 UI는 취소할 수 없습니다. 최대 180초 대기합니다. 취소 API가 있는 브리지는 요청별 취소와 90초 제한을 사용합니다.
-- HTTP/HTTPS: Google Identity Services Token Model을 게임 화면의 연결 버튼 클릭에서 직접 실행합니다. `auth-061.html` 브리지는 사용하지 않습니다. 최초 연결과 명시적 로그아웃 후 재로그인에서 계정 선택을 요청합니다. GIS callback이 누락될 때를 대비해 120초 watchdog으로 재시도 가능하게 복구합니다. HTTPS의 실제 게임 Origin은 Google OAuth Web Client의 Authorized JavaScript origins에 등록되어야 합니다. HTTP 직접 인증은 localhost loopback만 허용하며 LAN IP HTTP는 지원하지 않습니다.
-- file://: opaque Origin 제한으로 게임 내 직접 GIS를 사용할 수 없어 별도 HTTPS 파일 브리지가 필요합니다. 현재 호출 URL `https://jeiky224.github.io/cloud/auth-061.html`은 GitHub Pages main 소스에서 확인되지 않았고 실배포 응답도 검증되지 않았습니다. file:// 로그인 완료 또는 중간 화면 제거를 보장하지 않습니다.
+- HTTP/HTTPS: Google Identity Services Token Model을 게임 화면의 연결 버튼 클릭에서 직접 실행합니다. 외부 인증 브리지나 로컬 서버는 사용하지 않습니다. 최초 연결과 명시적 로그아웃 후 재로그인에서 계정 선택을 요청합니다. GIS callback이 누락될 때를 대비해 120초 watchdog으로 재시도 가능하게 복구합니다. HTTPS의 실제 게임 Origin은 Google OAuth Web Client의 Authorized JavaScript origins에 등록되어야 합니다. HTTP 직접 인증은 localhost loopback만 허용하며 LAN IP HTTP는 지원하지 않습니다.
+- file://: 브라우저의 opaque Origin은 Google GIS의 허용 Origin이 아니므로 CloudSave는 인증을 시작하지 않고 명시적 오류를 표시합니다. PC 런처·Remote Host·localhost 서비스·외부 인증 페이지를 요구하지 않습니다. Google의 Desktop OAuth는 loopback listener를 요구하고, Limited-Input Device Flow는 별도 기기에서 사용자 코드를 입력해야 하므로 이 조건의 한 번 클릭 PC 브라우저 인증 경로가 아닙니다.
 - 0.6.1 일회성 accessToken 응답 구조를 유지합니다. 0.7.x 페이지 소유 세션 브리지와 혼합하지 않습니다.
 - 인증 nonce는 24바이트 난수의 48자리 16진수입니다.
 - Access Token과 Refresh Token은 localStorage, sessionStorage, URL, 게임 세이브에 저장하지 않습니다.
@@ -35,7 +35,7 @@ Wayward Google Drive CloudSave — WML v0.6.2
 지원 환경
 - HTTPS 브라우저: 게임 Origin에서 direct GIS
 - HTTP: localhost, 127.0.0.1, [::1] loopback에서만 direct GIS 허용. LAN IP/원격 HTTP는 거부
-- file://: 별도 static bridge 필요. 호출된 auth-061 file is not in current Pages main tree; 실환경 경로 및 단계 수 미검증
+- file://: 현재 일반 브라우저만으로는 서버 없는 공식 인증 경로 없음. CloudSave는 외부 relay나 로컬 서버로 fallback하지 않고 인증을 거부
 - Android: window.WMLHost 런처 식별자가 있으면 native only; 인증 API가 없거나 불완전해도 web fallback 금지. 식별자 자체가 없는 WebView는 런처 측 식별자 제공 여부를 확인해야 합니다.
 
 세이브 호환성
