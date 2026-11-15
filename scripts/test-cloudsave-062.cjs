@@ -307,7 +307,7 @@ requireText('window.open(bridgeUrl.toString()', 'file-origin GIS popup remains u
 
 const browserAuth = readSectionFromFile(
   modPath,
-  '    function requestGoogleToken(forceSelectAccount) {',
+  '    function requestGoogleToken(forceSelectAccount, attempt) {',
   '    function attemptNativeSessionRestore() {'
 );
 assert.match(browserAuth, /protocol === 'file:' \|\| rawOrigin === 'null'/);
