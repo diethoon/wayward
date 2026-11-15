@@ -7,9 +7,11 @@ on:
       - fix/cloudsave-062-cancel-session-races-20261115
       - feat/cloudsave-mobile-prep-preview-20261115
       - feat/cloudsave-file-auth-ux-20261116
+      - feat/cloudsave-pages-bridge-20261116
     paths:
       - 'cloud-save/**'
       - 'auth-page/**'
+      - 'pages-cloudsave-auth/**'
       - 'scripts/test-cloudsave-062.cjs'
       - 'scripts/test-cloudsave-auth-ux.cjs'
       - '.github/workflows/cloudsave-062-verify.yml'
@@ -19,6 +21,7 @@ on:
     paths:
       - 'cloud-save/**'
       - 'auth-page/**'
+      - 'pages-cloudsave-auth/**'
       - 'scripts/test-cloudsave-062.cjs'
       - 'scripts/test-cloudsave-auth-ux.cjs'
       - '.github/workflows/cloudsave-062-verify.yml'
