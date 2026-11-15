@@ -302,17 +302,15 @@ requireText('event.target === overlay', 'memo popup outside click handling');
 requireText('function closeMemoPopup()', 'memo popup idempotent close');
 requireText('if (activeMemoDialog) { closeMemoPopup(); return true; }', 'Android back closes memo before CloudSave window');
 requireText('item.memoButton.hidden = !hasMemo', 'memo button hidden for empty memo');
-requireText("protocol !== 'file:' && rawOrigin !== 'null'", 'file adapter rejects non-file origins');
-
-const fileBridgeAuth = readSectionFromFile(
+const standaloneFileAuth = readSectionFromFile(
   modPath,
   '    function requestUnsupportedFileGoogleToken() {',
   '    function requestGoogleToken(forceSelectAccount, attempt) {'
 );
-assert.ok(fileBridgeAuth.includes('Promise.reject'));
-assert.ok(fileBridgeAuth.includes('PC file://'));
-assert.ok(!fileBridgeAuth.includes('window.open'));
-assert.ok(!fileBridgeAuth.includes('postMessage'));
+assert.ok(standaloneFileAuth.includes('Promise.reject'));
+assert.ok(standaloneFileAuth.includes('PC file://'));
+assert.ok(!standaloneFileAuth.includes('window.open'));
+assert.ok(!standaloneFileAuth.includes('postMessage'));
 
 const extractBody = readSectionFromFile(
   modPath,
