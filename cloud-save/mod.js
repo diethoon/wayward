@@ -557,7 +557,7 @@ WML.define({
 
           resultAccepted = true;
           try {
-            if (!isCurrentAuthAttempt(attempt, sessionAtStart)) {
+            if (!isBridgeSessionCurrent()) {
               throw new Error('이전 PC file 인증 응답을 무시했습니다.');
             }
             acceptAccessToken({
