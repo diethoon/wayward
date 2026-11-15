@@ -399,7 +399,7 @@ WML.define({
                 catch (error) { finishError(error); }
                 return;
               }
-              if (response.state && response.state !== nonce) { finishError(new Error('Google 인증 state가 일치하지 않습니다.')); return; }
+              if (response.state !== nonce) { finishError(new Error('Google 인증 state가 없거나 일치하지 않습니다.')); return; }
               let granted = false;
               try { granted = window.google.accounts.oauth2.hasGrantedAllScopes(response, GOOGLE_DRIVE_SCOPE); } catch (_) {}
               if (!granted) granted = String(response.scope || '').split(/\s+/).includes(GOOGLE_DRIVE_SCOPE);
@@ -1472,7 +1472,7 @@ WML.define({
     }
 
     function requestNativeGoogleRevoke() {
-      const host = window.WMLHost;
+      const host = nativeAuthHost;
       if (!host || typeof host.revokeGoogleDriveAccess !== 'function' ||
           typeof host.takePendingStateForNonce !== 'function') return null;
       const nonce = createAuthNonce();
