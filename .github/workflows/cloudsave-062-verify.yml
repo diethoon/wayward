@@ -5,6 +5,7 @@ on:
     branches:
       - feat/cloudsave-062-auth-ux-performance-20261114
       - fix/cloudsave-062-cancel-session-races-20261115
+      - feat/cloudsave-mobile-prep-preview-20261115
     paths:
       - 'cloud-save/**'
       - 'scripts/test-cloudsave-062.cjs'
