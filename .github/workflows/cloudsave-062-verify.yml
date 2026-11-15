@@ -9,14 +9,7 @@ on:
     paths:
       - 'cloud-save/**'
       - 'scripts/test-cloudsave-062.cjs'
-      - '.github/workflows/cloudsave-062-verify.yml'
-  pull_request:
-    branches:
-      - work/cloudsave-session-policy-20261113
-    paths:
-      - 'cloud-save/**'
-      - 'scripts/test-cloudsave-062.cjs'
-      - '.github/workflows/cloudsave-062-verify.yml'
+      - 'scripts/test-cloudsave-auth-ux.cjs'
 
 permissions:
   contents: read
@@ -37,8 +30,11 @@ jobs:
           node --check cloud-save/mod.js
           node --check cloud-save/crypto.js
           node --check scripts/test-cloudsave-062.cjs
+          node --check scripts/test-cloudsave-auth-ux.cjs
       - name: Verify 0.6.1 compatibility, auth contracts and synthetic list sizes
         run: node scripts/test-cloudsave-062.cjs
+      - name: Verify environment-specific auth UX and relogin routing
+        run: node scripts/test-cloudsave-auth-ux.cjs
       - name: Verify diff whitespace and package structure
         run: |
           git diff --check 0356c7da899b102107ab6988c11a1549de5d209e...HEAD
