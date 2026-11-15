@@ -6,9 +6,13 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const modPath = path.join(__dirname, '..', 'cloud-save', 'mod.js');
-const authPagePath = path.join(__dirname, '..', 'auth-page', 'index.html');
+const authPagePath = path.join(__dirname, '..', 'pages-cloudsave-auth', 'cloud', 'file-auth.html');
+const authPageScriptPath = path.join(__dirname, '..', 'pages-cloudsave-auth', 'cloud', 'file-auth.js');
+const authPageCssPath = path.join(__dirname, '..', 'pages-cloudsave-auth', 'cloud', 'file-auth.css');
 const source = fs.readFileSync(modPath, 'utf8');
 const authPageSource = fs.readFileSync(authPagePath, 'utf8');
+const authPageScriptSource = fs.readFileSync(authPageScriptPath, 'utf8');
+const authPageCssSource = fs.readFileSync(authPageCssPath, 'utf8');
 
 function section(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -483,13 +487,13 @@ async function testFileOriginUsesOneTimeMessageChannel() {
     '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
     '    function requestGoogleToken(forceSelectAccount, attempt) {'
   );
-  assert.match(source, /FILE_AUTH_BRIDGE_URL = 'https:\/\/wayward-six\.vercel\.app\/auth-page\/index\.html'/);
-  assert.match(source, /FILE_AUTH_BRIDGE_ORIGIN = 'https:\/\/wayward-six\.vercel\.app'/);
+  assert.match(source, /FILE_AUTH_BRIDGE_URL = 'https:\/\/jeiky224\.github\.io\/cloud\/file-auth\.html'/);
+  assert.match(source, /FILE_AUTH_BRIDGE_ORIGIN = 'https:\/\/jeiky224\.github\.io'/);
   assert.match(bridgeSource, /window\.open\(/,
     'the popup must open synchronously in the login click call stack');
   assert.match(bridgeSource, /new MessageChannel\(\)/);
   assert.match(bridgeSource, /popup\.postMessage\([\s\S]*FILE_AUTH_BRIDGE_ORIGIN[\s\S]*channel\.port2/);
-  assert.match(bridgeSource, /isCurrentAuthAttempt\(attempt, sessionAtStart\)/);
+  assert.match(bridgeSource, /isBridgeSessionCurrent\(\)/);
   assert.match(bridgeSource, /data\.nonce !== nonce/);
   assert.match(bridgeSource, /data\.requestId !== requestId/);
   assert.match(bridgeSource, /data\.attemptId !== attemptId/);
@@ -500,26 +504,37 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   assert.doesNotMatch(bridgeSource, /(?<!FILE_)AUTH_BRIDGE_URL|(?<!FILE_)AUTH_BRIDGE_ORIGIN/);
   assert.doesNotMatch(bridgeSource, /fetch\(|127\.0\.0\.1|localhost/);
 
-  const inlineScripts = [...authPageSource.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
-    .map(match => match[1]).filter(text => text.trim());
-  assert.equal(inlineScripts.length, 1, 'auth page has one inline protocol implementation');
-  new vm.Script(inlineScripts[0], { filename: 'auth-page/index.html' });
+  assert.match(authPageSource, /file-auth\.js/);
+  assert.match(authPageSource, /file-auth\.css/);
+  assert.match(authPageSource, /config\.js/);
+  assert.match(authPageSource, /script-src 'self' https:\/\/accounts\.google\.com\/gsi\/client/);
+  assert.doesNotMatch(authPageSource, /unsafe-inline/);
+  new vm.Script(authPageScriptSource, { filename: 'pages-cloudsave-auth/cloud/file-auth.js' });
+  assert.match(authPageCssSource, /\.confirm/);
 
-  assert.match(authPageSource, /event\.source !== window\.opener/,
+  assert.match(authPageScriptSource, /event\.source !== window\.opener/,
     'the relay accepts only its actual opener WindowProxy');
-  assert.match(authPageSource, /incoming\.length !== 1/,
+  assert.match(authPageScriptSource, /incoming\.length !== 1/,
     'the relay requires exactly one transferred MessagePort');
-  assert.match(authPageSource, /data\.appId !== APP_ID/);
-  assert.match(authPageSource, /data\.nonce|validId\(data\.nonce\)/);
-  assert.match(authPageSource, /response\.state !== oauthState/);
-  assert.match(authPageSource, /navigator\.userActivation/,
+  assert.match(authPageScriptSource, /event\.origin !== 'null'/,
+    'opaque file Origin is classified as a context only and is never accepted as identity');
+  assert.match(authPageScriptSource, /It is not trusted as an identity claim|not trusted as an identity claim|never an identity claim/i);
+  assert.match(authPageScriptSource, /data\.appId !== APP_ID/);
+  assert.match(authPageScriptSource, /validId\(data\.nonce\)/);
+  assert.match(authPageScriptSource, /validId\(data\.requestId\)/);
+  assert.match(authPageScriptSource, /validId\(data\.attemptId\)/);
+  assert.match(authPageScriptSource, /response\.state !== oauthState/);
+  assert.match(authPageScriptSource, /state: oauthState/);
+  assert.match(authPageScriptSource, /navigator\.userActivation/,
     'the Google token flow must preserve the browser gesture requirement');
-  assert.match(authPageSource, /port\.postMessage/);
-  assert.match(authPageSource, /wayward-cloud-auth-ack-received/);
-  assert.doesNotMatch(authPageSource, /event\.origin|window\.opener\.postMessage|postMessage\([^,]+,\s*['"]\*['"]/);
-  assert.doesNotMatch(authPageSource, /URLSearchParams|location\.search|localStorage|sessionStorage|console\.log/);
-  assert.match(authPageSource, /setTimeout\(\(\) => \{ try \{ window\.close\(\); \}/,
-    'the relay closes only after its acknowledgement path');
+  assert.match(authPageScriptSource, /port\.postMessage/);
+  assert.match(authPageScriptSource, /wayward-cloud-auth-ack-received/);
+  assert.match(authPageScriptSource, /typeof data\.forceSelectAccount !== 'boolean'/);
+  assert.match(authPageScriptSource, /data\.type !== 'wayward-cloud-auth-init'/);
+  assert.doesNotMatch(authPageScriptSource, /window\.opener\.postMessage|postMessage\([^,]+,\s*['"]\*['"]/);
+  assert.doesNotMatch(authPageScriptSource, /URLSearchParams|location\.search|localStorage|sessionStorage|console\.log|wayward-six\.vercel\.app/);
+  assert.match(authPageScriptSource, /window\.close\(\)/);
+  assert.doesNotMatch(authPageScriptSource, /fetch\(|127\.0\.0\.1|localhost/);
 
   // Execute the actual file-bridge helper with a deterministic MessageChannel
   // mock. This proves the popup opens synchronously, uses the exact HTTPS
