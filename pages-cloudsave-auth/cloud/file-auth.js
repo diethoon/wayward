@@ -287,8 +287,15 @@
       try { candidatePort.close(); } catch (_) {}
       return;
     }
-    if (initialized && (data.nonce !== nonce || data.requestId !== requestId ||
-        data.attemptId !== attemptId)) {
+    if (initialized) {
+      // Keep the first channel for this request. Retransmitted init messages
+      // are expected while the popup is loading; rotating the accepted port
+      // after ready could detach the game's pending activation response.
+      if (data.nonce !== nonce || data.requestId !== requestId ||
+          data.attemptId !== attemptId) {
+        try { candidatePort.close(); } catch (_) {}
+        return;
+      }
       try { candidatePort.close(); } catch (_) {}
       return;
     }
@@ -300,9 +307,8 @@
       setConnection('안전한 세션을 생성하지 못했습니다. 게임에서 다시 시작하세요.', true);
       return;
     }
-    // The game retries init during popup loading. Replace the port for the same
-    // request until the game confirms activation; then the channel is locked.
-    if (port) { try { port.close(); } catch (_) {} }
+    // First accepted port is retained until explicit activation. Duplicate
+    // init messages were closed above without rotating this page session.
     initialized = true;
     port = candidatePort;
     nonce = data.nonce;
