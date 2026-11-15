@@ -210,6 +210,7 @@ function onPortMessage(event) {
   if (data.type === 'wayward-cloud-auth-ack') {
     if (ackTimer !== null) clearTimeout(ackTimer);
     ackTimer = null;
+    send('wayward-cloud-auth-ack-received', { accepted: data.accepted === true });
     if (data.accepted === true) {
       finishPage('인증 결과가 원래 게임 세션에 안전하게 전달되었습니다.');
     } else {
