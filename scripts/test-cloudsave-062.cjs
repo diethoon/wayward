@@ -135,6 +135,11 @@ requireText("bridgeUrl.searchParams.set('login', forceSelectAccount ? 'select_ac
 requireText('forceSelectAccount', 'native account selection policy');
 requireText('closeWatch = setInterval', 'closed auth popup cleanup');
 requireText('activeAuthCancel', 'cancellable pending authentication');
+requireText("typeof host.cancelGoogleDriveAuth !== 'function'", 'native cancellation capability gate');
+requireText('host.cancelGoogleDriveAuth(nonce)', 'native request cancellation on timeout or abort');
+requireText('function invalidateDriveSession()', 'session generation invalidation');
+requireText('driveRequestControllers', 'in-flight Drive request tracking');
+requireText('assertDriveSession(session)', 'pre-apply session checks');
 requireText('markExplicitLogout(false)', 'explicit logout state marker');
 requireText("'wml-google-drive-slot-metadata-v1:'", 'metadata-only cache namespace');
 requireText('drive/v3/about?fields=user(permissionId)', 'account-separated cache identity');
@@ -158,6 +163,32 @@ assert.equal(fileMatchesRegex(modPath, /localStorage\.setItem\([^\n]*(?:accessTo
   'access tokens must not be persisted in localStorage');
 assert.equal(fileMatchesRegex(modPath, /sessionStorage\.setItem\([^\n]*(?:accessToken|refreshToken)/i), false,
   'access tokens must not be persisted in sessionStorage');
+
+const nativeAuth = readSectionFromFile(
+  modPath,
+  '    function requestNativeGoogleToken(nonce, forceSelectAccount) {',
+  '    function requestGoogleToken(forceSelectAccount) {'
+);
+assert.match(nativeAuth, /host\.cancelGoogleDriveAuth\(nonce\)/);
+assert.match(nativeAuth, /typeof host\.cancelGoogleDriveAuth !== 'function'/);
+
+const driveFetchSource = readSectionFromFile(
+  modPath,
+  '    async function driveFetch(path, options) {',
+  '    async function accountCacheStorageKey(permissionId) {'
+);
+assert.match(driveFetchSource, /new AbortController\(\)/);
+assert.match(driveFetchSource, /driveRequestControllers\.add\(requestController\)/);
+assert.match(driveFetchSource, /assertDriveSession\(generation\)/);
+
+const loadSlotSource = readSectionFromFile(
+  modPath,
+  '    async function loadSlot(slot) {',
+  '    async function removeSlot(slot) {'
+);
+assert.ok((loadSlotSource.match(/assertDriveSession\(session\)/g) || []).length >= 4,
+  'loadSlot must re-check the same session after read/decrypt and immediately before applySnapshot');
+assert.match(loadSlotSource, /applySnapshot\(snapshot\)/);
 
 const refresh = readSectionFromFile(modPath, '    function refreshSlots() {', '    function currentFile(slot) {');
 assert.match(refresh, /files\.list|drive\/v3\/files/);
