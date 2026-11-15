@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = 3;
+  const VERSION = 4;
   const APP_ID = 'wayward-cloudsave';
   const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
   const CLIENT_ID = String(window.WAYWARD_GOOGLE_CLIENT_ID || '').trim();
@@ -22,6 +22,7 @@
   let resultSent = false;
   let errorSent = false;
   let port = null;
+  let pendingPorts = [];
   let nonce = '';
   let requestId = '';
   let attemptId = '';
@@ -53,20 +54,23 @@
   }
   function validEnvelope(value) {
     return !!value && typeof value === 'object' && !Array.isArray(value) &&
-      value.version === VERSION && value.nonce === nonce &&
+      value.version === VERSION && value.appId === APP_ID && value.nonce === nonce &&
       value.requestId === requestId && value.attemptId === attemptId &&
       value.sessionId === sessionId;
   }
-  function send(type, extra) {
-    if (!port || completed) return false;
+  function sendOn(targetPort, type, extra) {
+    if (!targetPort || completed) return false;
     try {
-      port.postMessage(Object.assign({
-        type, version: VERSION, nonce, requestId, attemptId, sessionId
+      targetPort.postMessage(Object.assign({
+        type, version: VERSION, appId: APP_ID, nonce, requestId, attemptId, sessionId
       }, extra || {}));
       return true;
     } catch (_) {
       return false;
     }
+  }
+  function send(type, extra) {
+    return sendOn(port, type, extra);
   }
   function clearTimers() {
     if (authTimer !== null) clearTimeout(authTimer);
@@ -86,7 +90,9 @@
     connectButton.disabled = true;
     cancelButton.disabled = true;
     window.setTimeout(() => {
-      try { if (port) port.close(); } catch (_) {}
+      for (const candidate of pendingPorts) { try { candidate.close(); } catch (_) {} }
+      pendingPorts = [];
+      port = null;
       try { window.close(); } catch (_) {}
     }, 700);
   }
@@ -222,13 +228,37 @@
       sendAuthError('request-failed', String(error && error.message || error));
     }
   }
-  function onPortMessage(event) {
+  function attachPendingPort(candidatePort) {
+    if (pendingPorts.includes(candidatePort)) return true;
+    if (pendingPorts.length >= 96) {
+      try { candidatePort.close(); } catch (_) {}
+      return false;
+    }
+    pendingPorts.push(candidatePort);
+    candidatePort.onmessage = event => onPortMessage(event, candidatePort);
+    candidatePort.onmessageerror = () => {
+      pendingPorts = pendingPorts.filter(item => item !== candidatePort);
+      if (port === candidatePort) finishPage('게임과의 보안 메시지 채널이 손상되었습니다.');
+      else { try { candidatePort.close(); } catch (_) {} }
+    };
+    try { if (typeof candidatePort.start === 'function') candidatePort.start(); }
+    catch (_) {
+      pendingPorts = pendingPorts.filter(item => item !== candidatePort);
+      try { candidatePort.close(); } catch (_) {}
+      return false;
+    }
+    return true;
+  }
+  function onPortMessage(event, sourcePort) {
     const data = event && event.data;
     if (!validEnvelope(data)) return;
-
     if (data.type === 'wayward-cloud-auth-activate') {
-      if (locked || !initialized) return;
+      if (locked || !initialized || !pendingPorts.includes(sourcePort)) return;
       locked = true;
+      port = sourcePort;
+      const unusedPorts = pendingPorts.filter(candidate => candidate !== port);
+      pendingPorts = [port];
+      for (const candidate of unusedPorts) { try { candidate.close(); } catch (_) {} }
       connectionTitle.textContent = '일회성 게임 세션 연결됨';
       setConnection('원래 게임 창과 일회성 인증 세션을 확인했습니다. 로컬 파일의 정품 여부는 브라우저가 증명할 수 없습니다.');
       authPanel.hidden = false;
@@ -244,8 +274,7 @@
       }).catch(error => sendAuthError('gis-unavailable', String(error && error.message || error)));
       return;
     }
-
-    if (!locked) return;
+    if (!locked || sourcePort !== port) return;
     if (data.type === 'wayward-cloud-auth-cancel') {
       finishPage('게임에서 인증 요청을 취소했습니다.');
       return;
@@ -271,8 +300,15 @@
       return;
     }
     const candidatePort = incoming[0];
-    // Do not inspect or trust an opaque file Origin. Bind only to this exact
-    // opener WindowProxy, a single transferred port and one-time request IDs.
+    // A file:// sender normally serializes to the opaque Origin "null".
+    // This is only an Origin class, not proof of a genuine Wayward binary.
+    if (!event || event.origin !== 'null') {
+      try { candidatePort.close(); } catch (_) {}
+      setConnection('허용되지 않은 발신 Origin입니다. PC 로컬 file:// 게임에서 다시 시작하세요.', true);
+      return;
+    }
+    // Opaque Origin does not identify which local file sent the request.
+    // Bind to the exact opener WindowProxy as a separate required condition.
     if (locked || !window.opener || window.opener.closed || event.source !== window.opener) {
       try { candidatePort.close(); } catch (_) {}
       return;
@@ -288,18 +324,17 @@
       return;
     }
     if (initialized) {
-      // Keep the first channel for this request. Retransmitted init messages
-      // are expected while the popup is loading; rotating the accepted port
-      // after ready could detach the game's pending activation response.
-      if (data.nonce !== nonce || data.requestId !== requestId ||
-          data.attemptId !== attemptId) {
+      if (locked || data.nonce !== nonce || data.requestId !== requestId ||
+          data.attemptId !== attemptId || data.forceSelectAccount !== forceSelectAccount) {
         try { candidatePort.close(); } catch (_) {}
         return;
       }
-      try { candidatePort.close(); } catch (_) {}
+      if (!attachPendingPort(candidatePort) ||
+          !sendOn(candidatePort, 'wayward-cloud-auth-ready')) {
+        try { candidatePort.close(); } catch (_) {}
+      }
       return;
     }
-
     let newSessionId = '';
     try { newSessionId = makeNonce(); }
     catch (_) {
@@ -307,23 +342,22 @@
       setConnection('안전한 세션을 생성하지 못했습니다. 게임에서 다시 시작하세요.', true);
       return;
     }
-    // First accepted port is retained until explicit activation. Duplicate
-    // init messages were closed above without rotating this page session.
     initialized = true;
-    port = candidatePort;
     nonce = data.nonce;
     requestId = data.requestId;
     attemptId = data.attemptId;
     forceSelectAccount = data.forceSelectAccount;
     sessionId = newSessionId;
-    port.onmessage = onPortMessage;
-    port.onmessageerror = () => finishPage('게임과의 보안 메시지 채널이 손상되었습니다.');
-    try { if (typeof port.start === 'function') port.start(); }
-    catch (_) { finishPage('게임과의 보안 메시지 채널을 시작하지 못했습니다.'); return; }
-
+    if (!attachPendingPort(candidatePort)) {
+      initialized = false;
+      setConnection('메시지 채널을 시작하지 못했습니다. 게임에서 다시 시작하세요.', true);
+      return;
+    }
     connectionTitle.textContent = '게임 연결 요청 수신';
     setConnection('Wayward 게임이 시작한 일회성 요청을 받았습니다. 세션 활성화를 확인하고 있습니다.');
-    if (!send('wayward-cloud-auth-ready')) {
+    if (!sendOn(candidatePort, 'wayward-cloud-auth-ready')) {
+      pendingPorts = pendingPorts.filter(item => item !== candidatePort);
+      try { candidatePort.close(); } catch (_) {}
       finishPage('원래 게임 창에 인증 채널 준비 상태를 전달하지 못했습니다.');
       return;
     }
@@ -337,7 +371,6 @@
       }, 500);
     }
   }
-
   confirmRequest.addEventListener('change', () => {
     connectButton.disabled = !locked || !confirmRequest.checked || !readyGIS() ||
       completed || authPending || resultSent || errorSent;
@@ -361,6 +394,7 @@
         port.postMessage({
           type: 'wayward-cloud-auth-error',
           version: VERSION,
+          appId: APP_ID,
           nonce,
           requestId,
           attemptId,
@@ -370,7 +404,8 @@
         });
       } catch (_) {}
     }
-    try { if (port) port.close(); } catch (_) {}
+    for (const candidate of pendingPorts) { try { candidate.close(); } catch (_) {} }
+    pendingPorts = [];
     port = null;
   });
   if (!window.opener) {
