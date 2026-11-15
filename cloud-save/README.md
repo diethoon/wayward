@@ -7,20 +7,20 @@ Google Drive `appDataFolder`에 기존 CloudSave 형식으로 세이브를 저�
 
 ## 인증 구성
 
-- **Android 공식 런처:** `WMLHost`에 네이티브 인증 API가 있으면 세션 시작 때 `android-native` 어댑터로 고정합니다. 로그아웃 후 `forceSelectAccount=true`여도 웹 GIS나 `auth-061.html`로 전환하지 않습니다. 0.6.1 브리지처럼 `cancelGoogleDriveAuth`가 없으면 페이지 측 대기만 중단하고 nonce별 늦은 응답을 거부합니다(최대 180초 대기). 이 경우 네이티브 계정 선택 화면 자체를 취소할 수는 없습니다. 계정 선택 정책 오버로드가 없는 아주 오래된 브리지에서는 기존 `startGoogleDriveAuth(nonce)`를 유지하므로 계정 강제 선택 힌트만 사용할 수 없습니다.
-- **PC HTTP/HTTPS 브라우저:** Google Identity Services Token Model을 게임 화면의 Google 연결 버튼 클릭 이벤트에서 직접 실행합니다. 별도 `auth-061.html` 인증 팝업이나 연결 확인 중간 페이지를 거치지 않습니다. 브라우저 GIS 팝업의 성공·취소·팝업 차단 콜백을 게임 세션에서 처리합니다. `prompt: 'select_account'`는 명시적 로그아웃 후에만 적용합니다. Google GIS가 팝업 닫힘 때 callback을 생략하는 브라우저 동작에 대비해 120초 응답 watchdog을 두며, 타임아웃·취소·성공 모두 대기 상태와 타이머를 정리합니다.
+- **Android 공식 런처:** `window.WMLHost`가 있으면 인증 API의 세부 메서드 유무와 관계없이 `android-native` 어댑터로 고정합니다. 필요한 네이티브 API가 빠져 있으면 명확히 미지원 처리하며 웹 GIS나 `auth-061.html`로 우회하지 않습니다. 최초 연결과 명시적 로그아웃 후 재로그인은 `startGoogleDriveAuthWithPolicy(nonce, true)`가 필요합니다. 정책 오버로드가 없는 구형 브리지는 강제 계정 선택 요청을 거부하고, 비선택 세션 복구에만 legacy `startGoogleDriveAuth(nonce)`를 사용할 수 있습니다. `cancelGoogleDriveAuth`가 없으면 페이지 측 대기만 중단하고 nonce별 늦은 응답을 거부합니다(최대 180초 대기). 네이티브 계정 선택 화면 자체는 취소하지 못할 수 있습니다.
+- **PC HTTP/HTTPS 브라우저:** Google Identity Services Token Model을 게임 화면의 Google 연결 버튼 클릭 이벤트에서 직접 실행합니다. 별도 `auth-061.html` 인증 팝업이나 연결 확인 중간 페이지를 거치지 않습니다. 브라우저 GIS 팝업의 성공·취소·팝업 차단 콜백을 게임 세션에서 처리합니다. 최초 연결과 명시적 로그아웃 후에는 `prompt: 'select_account'`를 요청합니다. Google GIS가 팝업 닫힘 때 callback을 생략하는 브라우저 동작에 대비해 120초 응답 watchdog을 두며, 타임아웃·취소·성공 모두 대기 상태와 타이머를 정리합니다.
 - **PC `file://`:** opaque Origin(`null`)에서는 게임 문서가 웹 GIS를 직접 호출할 수 없어 파일 전용 정적 인증 브리지 경로만 사용합니다. 이 경로는 메시지 source·Origin·nonce를 검증하는 opener 핸드셰이크를 유지합니다. 현재 GitHub Pages `main` 소스에는 과거 호출 URL `cloud/auth-061.html` 파일이 없고, PC Host에도 OAuth API가 없으므로 file 환경의 실제 브리지 가용성과 연결 확인 단계 제거는 실환경 검증 전까지 완료로 보지 않습니다.
 - **Drive API:** 게임 페이지가 Google Drive API를 직접 호출합니다. 별도 백엔드, Worker, OAuth Client Secret, Refresh Token 중계는 추가하지 않습니다.
 - **토큰:** access token은 현재 페이지 메모리에만 둡니다. URL, localStorage, sessionStorage, 게임 세이브 및 로그에 저장하지 않습니다.
 
-연결되지 않은 상태의 버튼 문구는 **구글 계정으로 연결**입니다. 로그인 유지 설정 UI는 없습니다. 일반 연결은 가능한 범위에서 기존 Google 브라우저 세션과 승인을 재사용하도록 요청합니다. Android 런처는 이전 연결 성공 기록이 있는 경우 기존 승인 상태 복구를 먼저 시도합니다.
+연결되지 않은 상태의 버튼 문구는 **구글 계정으로 연결**입니다. 로그인 유지 설정 UI는 없습니다. 최초 연결은 계정 선택을 요청합니다. 이전 연결 성공 이력이 있고 명시적 로그아웃이 아닌 경우에만 Android 런처의 기존 승인 상태 복구를 시도할 수 있습니다. 명시적 로그아웃 이후에는 이 복구를 금지합니다.
 
 브라우저의 GIS Token Model access token은 장기 로그인 토큰이 아닙니다. 브라우저 세션이 유지되더라도 토큰 만료 후에는 사용자 동작을 통한 새 토큰 발급이 필요할 수 있습니다.
 
 ## 로그아웃
 
 - 로그아웃은 메모리 access token과 Android 런처의 해당 토큰 캐시를 정리하고, 명시적 로그아웃 표식을 남깁니다.
-- 다음 연결은 브라우저 GIS에서 `prompt: 'select_account'`, Android 런처에서 `forceSelectAccount=true`를 요청합니다. 이는 계정 선택 정책만 바꾸며, 이미 결정된 인증 어댑터를 바꾸지 않습니다.
+- 로그아웃은 `hadPreviousAuth` 복구 이력도 제거합니다. 다음 연결은 브라우저 GIS에서 `prompt: 'select_account'`, Android 런처에서 `forceSelectAccount=true`를 요청합니다. 이는 계정 선택 정책만 바꾸며, 이미 결정된 인증 어댑터를 바꾸지 않습니다.
 - 일반 로그아웃은 Google 앱 권한 철회와 다릅니다. 권한 철회는 별도 동작이며, 철회 성공 응답을 확인하지 못하면 성공으로 표시하지 않습니다.
 - 로그아웃 표식과 이전 연결 표식에는 비밀이 아닌 상태값만 저장합니다. localStorage를 사용할 수 없으면 sessionStorage를 시도합니다. 두 저장소가 모두 차단된 환경에서는 현재 실행 중 메모리 상태만 보장할 수 있습니다.
 
@@ -31,7 +31,7 @@ Google Drive `appDataFolder`에 기존 CloudSave 형식으로 세이브를 저�
 - HTTPS: 게임 Origin에서 Google GIS를 직접 실행합니다. Google OAuth Web Client의 **Authorized JavaScript origins**에 실제 게임 Origin을 등록해야 합니다. 원격 LAN HTTP와 raw IP Origin은 사용할 수 없으며, HTTP 예외는 localhost loopback에 한정됩니다. 현재 알려진 배포 홈은 `https://wayward-six.vercel.app`이지만 이 Origin의 Google Cloud 등록 여부는 확인되지 않았습니다.
 - HTTP: Google 정책에 따라 `localhost`, `127.0.0.1`, `[::1]` loopback만 직접 GIS를 허용합니다. LAN IP, `0.0.0.0` 또는 일반 원격 HTTP는 보안 컨텍스트가 아니므로 직접 GIS를 거부합니다.
 - `file://`: `null` Origin은 웹 OAuth의 허용된 JavaScript Origin이 아니므로 게임 창에서 GIS를 직접 호출하지 않습니다. 별도 HTTPS 브리지가 필요하지만, 저장소의 현재 Pages `main` 트리에서 `cloud/auth-061.html`은 찾을 수 없고 실제 배포 응답도 이 환경에서 확인하지 못했습니다. 브리지 페이지가 열려도 브라우저 사용자 활성화는 교차 출처 팝업으로 자동 이전되지 않으므로 페이지 내부의 추가 사용자 동작이 요구될 수 있습니다. 이 환경의 UX 제거는 미완료입니다.
-- Android WebView: 공식 런처가 제공하는 네이티브 Google Identity 브리지를 우선 사용합니다. Android에서는 웹 GIS 경로를 자동 fallback으로 사용하지 않습니다.
+- Android WebView: 공식 런처는 `window.WMLHost` 런처 식별자를 제공해야 합니다. 이 객체가 있으면 CloudSave는 네이티브 어댑터만 사용하고, 인증 메서드가 빠져 있어도 웹 GIS fallback을 하지 않습니다. 런처가 식별자 자체를 제공하지 않는 환경은 모드 단독으로 Android WebView와 일반 모바일 브라우저를 안전하게 구분할 수 없으므로 런처 통합 검증이 필요합니다.
 
 GIS 응답의 `state`와 세션 generation을 검증합니다. 액세스 토큰은 게임 페이지 메모리에만 보관합니다. Google의 웹 OAuth 정책은 HTTPS JavaScript Origin과 신뢰 가능한 브라우저를 요구하며, embedded user-agent 우회는 허용되지 않습니다.
 
