@@ -343,14 +343,17 @@ assert.equal(duplicateResult[0].size, 2);
 // The snapshot serializer/restorer and encrypted file primitives must remain
 // exactly equal to the user's 0.6.1 baseline.
 // The pinned 0.6.1 baseline is streamed to baselinePath above.
-for (const [start, end] of [
-  ['    function buildSnapshot()', '    function firstValue(root'],
-  ['    function applySnapshot(snapshot)', '    function isConnected()'],
-  ['    async function writeSlotEnvelope(slot, envelope)', '    async function deleteSlot(slot)'],
-  ['    async function deleteSlot(slot)', '    function extractSnapshotPreview(snapshot)']
+for (const [start, currentEnd, baselineEnd] of [
+  ['    function buildSnapshot()', '    function firstValue(root', '    function firstValue(root'],
+  ['    function applySnapshot(snapshot)', '    function isConnected()', '    function isConnected()'],
+  ['    async function writeSlotEnvelope(slot, envelope)', '    async function deleteSlot(slot)', '    async function deleteSlot(slot)'],
+  ['    async function deleteSlot(slot)', '    function extractSnapshotPreview(snapshot)', '    function buildSnapshot()']
 ]) {
-  assert.equal(readSectionFromFile(modPath, start, end), readSectionFromFile(baselinePath, start, end),
-    'protected 0.6.1 data/game logic changed: ' + start);
+  assert.equal(
+    readSectionFromFile(modPath, start, currentEnd),
+    readSectionFromFile(baselinePath, start, baselineEnd),
+    'protected 0.6.1 data/game logic changed: ' + start
+  );
 }
 const cryptoBlob = execFileSync('git', ['hash-object', cryptoPath], { encoding: 'utf8' }).trim();
 assert.equal(cryptoBlob, '7a321b24588d892a02ad9dec7335cf17ce99c8c5',
