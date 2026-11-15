@@ -533,7 +533,11 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   assert.match(authPageScriptSource, /wayward-cloud-auth-ack-received/);
   assert.match(authPageScriptSource, /wayward-cloud-auth-activate/);
   assert.match(authPageScriptSource, /wayward-cloud-auth-active/);
-  assert.match(authPageScriptSource, /if \(initialized && \(data\.nonce !== nonce/);
+  assert.match(authPageScriptSource, /if \(initialized\) \{/);
+  assert.match(authPageScriptSource, /try \{ candidatePort\.close\(\); \} catch \(_\) \{\}/,
+    'duplicate init ports are closed instead of replacing the accepted channel');
+  assert.match(authPageSource, /file-auth\.js\?v=20261116-3/);
+  assert.match(authPageSource, /file-auth\.css\?v=20261116-3/);
   assert.match(authPageScriptSource, /typeof data\.forceSelectAccount !== 'boolean'/);
   assert.match(authPageScriptSource, /data\.type !== 'wayward-cloud-auth-init'/);
   assert.doesNotMatch(authPageScriptSource, /window\.opener\.postMessage|postMessage\([^,]+,\s*['"]\*['"]/);
