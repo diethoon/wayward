@@ -29,7 +29,7 @@ Google Drive `appDataFolder`에 기존 CloudSave 형식으로 세이브를 저�
 
 지원 가능한 환경 및 제한:
 
-- HTTPS: 게임 Origin에서 Google GIS를 직접 실행합니다. Google OAuth Web Client의 **Authorized JavaScript origins**에 실제 게임 Origin을 등록해야 합니다. 원격 LAN HTTP와 raw IP Origin은 사용할 수 없으며, HTTP 예외는 localhost loopback에 한정됩니다. 현재 알려진 배포 홈은 `https://wayward-six.vercel.app`이지만 이 Origin의 Google Cloud 등록 여부는 확인되지 않았습니다.
+- HTTPS: 게임 Origin에서 Google GIS를 직접 실행합니다. Google OAuth Web Client의 **Authorized JavaScript origins**에 실제 게임 Origin을 등록해야 합니다. 원격 LAN HTTP와 raw IP Origin은 사용할 수 없으며, HTTP 예외는 localhost loopback에 한정됩니다. 실제 게임 Origin은 Google OAuth Web Client의 Authorized JavaScript origins에 등록되어야 합니다. 현재 운영 Origin 등록 상태는 이 작업에서 확인하지 않았습니다.
 - HTTP: Google 정책에 따라 `localhost`, `127.0.0.1`, `[::1]` loopback만 직접 GIS를 허용합니다. LAN IP, `0.0.0.0` 또는 일반 원격 HTTP는 보안 컨텍스트가 아니므로 직접 GIS를 거부합니다.
 - `file://`: 독립 브라우저 인증은 지원되지 않으며 CloudSave는 안전하게 실패 처리합니다. Desktop App OAuth는 loopback listener(로컬 서버)를 요구하고, Limited-Input Device Flow는 별도 기기에서 사용자 코드를 입력하는 흐름이므로 현재의 한 번 클릭·서버 없음 조건을 충족하지 않습니다. 외부 인증 relay나 localhost 서비스를 추가하지 않습니다.
 - Android WebView: 공식 런처는 `window.WMLHost` 런처 식별자를 제공해야 합니다. 이 객체가 있으면 CloudSave는 네이티브 어댑터만 사용하고, 인증 메서드가 빠져 있어도 웹 GIS fallback을 하지 않습니다. 런처가 식별자 자체를 제공하지 않는 환경은 모드 단독으로 Android WebView와 일반 모바일 브라우저를 안전하게 구분할 수 없으므로 런처 통합 검증이 필요합니다.
