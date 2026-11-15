@@ -18,6 +18,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   verify-and-package:
@@ -56,3 +57,63 @@ jobs:
             .build/Wayward_Google_Drive_CloudSave_v0.6.2.zip
             .build/SHA256SUMS.txt
             .build/cloudsave-mod-chunks-4096.json
+
+      - name: Open the verified CloudSave 0.6.2 pull request
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/cloudsave-062-auth-ux-performance-20261114'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > .build/PR_BODY.md <<'PR_BODY'
+          ## Summary
+
+          CloudSave 0.6.2 restores the 0.6.1 one-time GIS access-token handoff flow, improves reconnect/logout handling and optimizes Google Drive slot listing.
+
+          - Uses the isolated static endpoint https://jeiky224.github.io/cloud/auth-061.html; does not mix the 0.7.x page-owned session protocol into 0.6.2.
+          - Preserves the 48-hex nonce contract, opener/source/Origin validation, one-time token handoff and nonce-scoped Android result retrieval.
+          - Unifies disconnected/reconnect button text as **구글 계정으로 연결** and removes login-persistence preferences.
+          - Cancels stale auth/list work, forces account selection after explicit logout and coalesces duplicate Drive-list requests.
+          - Lists Drive slot metadata only. Listing does not download or decrypt save-file bodies.
+          - Uses per-account metadata cache with memory fallback and stale-response generation guards.
+          - Keeps crypto.js byte-for-byte identical and preserves protected save/restore and encrypted slot IO sections.
+
+          ## Validation
+
+          - node --check cloud-save/mod.js
+          - node --check cloud-save/crypto.js
+          - node --check scripts/test-cloudsave-062.cjs
+          - node scripts/test-cloudsave-062.cjs
+          - git diff --check
+          - Pinned 0.6.1 protected-section equality
+          - crypto.js blob SHA-1: 7a321b24588d892a02ad9dec7335cf17ce99c8c5
+          - 4 KiB streamed source/baseline scans with per-chunk SHA-256 manifest
+          - Package ZIP and artifact upload
+
+          Synthetic metadata-normalizer timings (not live Google Drive latency):
+          | Slots | CPU | Body downloads | Decryptions |
+          |---:|---:|---:|---:|
+          | 0 | 0.006 ms | 0 | 0 |
+          | 20 | 0.225 ms | 0 | 0 |
+          | 100 | 0.251 ms | 0 | 0 |
+          | 500 | 1.131 ms | 0 | 0 |
+
+          Static auth PR #4 was merged as b0bb82d030084b33a1cd54c3560e8272a055b32d and GitHub Pages deployment run #21 succeeded: https://github.com/jeiky224/cloud/actions/runs/43656626000
+
+          ## Remaining runtime validation
+
+          This PR does not claim live Google-account OAuth/Drive, Android physical-device, browser matrix, file:// manual, or real 0/20/100/500 slot tests. Real-world 70% latency reduction is not yet measured. The public Pages URL's HTTP response could not be fetched from the current execution environment after the successful deployment job.
+
+          Launcher PR #18 (native SELECT_ACCOUNT API) remains Draft/unmerged. The module retains compatibility with the old startGoogleDriveAuth(nonce) call and falls back to the static browser route where the extended native API is unavailable.
+          PR_BODY
+
+          existing="$(gh pr list --repo diethoon/wayward --head "${GITHUB_REPOSITORY_OWNER}:${GITHUB_REF_NAME}" --base work/cloudsave-session-policy-20261113 --state open --json number --jq '.[0].number // empty')"
+          if [[ -z "${existing}" ]]; then
+            gh pr create --repo diethoon/wayward \
+              --base work/cloudsave-session-policy-20261113 \
+              --head "${GITHUB_REF_NAME}" \
+              --title "feat(cloudsave): restore 0.6.1 auth UX and optimize Drive save listing (0.6.2)" \
+              --body-file .build/PR_BODY.md
+          else
+            echo "CloudSave 0.6.2 PR already exists: #${existing}"
+          fi
