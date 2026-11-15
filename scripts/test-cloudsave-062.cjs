@@ -310,10 +310,10 @@ const fileBridgeAuth = readSectionFromFile(
   '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
   '    function requestGoogleToken(forceSelectAccount, attempt) {'
 );
-assert.match(fileBridgeAuth, /protocol !== 'file:' && origin !== 'null'/);
-assert.match(fileBridgeAuth, /window\\.open\\(bridgeUrl\\.toString\\(/);
-assert.match(fileBridgeAuth, /event\\.source !== bridge/);
-assert.match(fileBridgeAuth, /payload\\.nonce !== nonce/);
+assert.ok(fileBridgeAuth.includes("protocol !== 'file:' && origin !== 'null'"));
+assert.ok(fileBridgeAuth.includes('window.open(bridgeUrl.toString('));
+assert.ok(fileBridgeAuth.includes('event.source !== bridge'));
+assert.ok(fileBridgeAuth.includes('payload.nonce !== nonce'));
 
 const extractBody = readSectionFromFile(
   modPath,
