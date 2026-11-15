@@ -8,7 +8,7 @@ Google Drive `appDataFolder`에 기존 CloudSave 형식으로 세이브를 저�
 ## 인증 구성
 
 - **Android 공식 런처:** `WMLHost`에 네이티브 인증 API가 있으면 세션 시작 때 `android-native` 어댑터로 고정합니다. 로그아웃 후 `forceSelectAccount=true`여도 웹 GIS나 `auth-061.html`로 전환하지 않습니다. 0.6.1 브리지처럼 `cancelGoogleDriveAuth`가 없으면 페이지 측 대기만 중단하고 nonce별 늦은 응답을 거부합니다(최대 180초 대기). 이 경우 네이티브 계정 선택 화면 자체를 취소할 수는 없습니다. 계정 선택 정책 오버로드가 없는 아주 오래된 브리지에서는 기존 `startGoogleDriveAuth(nonce)`를 유지하므로 계정 강제 선택 힌트만 사용할 수 없습니다.
-- **PC HTTP/HTTPS 브라우저:** Google Identity Services Token Model을 게임 화면의 Google 연결 버튼 클릭 이벤트에서 직접 실행합니다. 별도 `auth-061.html` 인증 팝업이나 연결 확인 중간 페이지를 거치지 않습니다. 브라우저 GIS 팝업의 성공·취소·팝업 차단 콜백을 게임 세션에서 처리합니다. `prompt: 'select_account'`는 명시적 로그아웃 후에만 적용합니다.
+- **PC HTTP/HTTPS 브라우저:** Google Identity Services Token Model을 게임 화면의 Google 연결 버튼 클릭 이벤트에서 직접 실행합니다. 별도 `auth-061.html` 인증 팝업이나 연결 확인 중간 페이지를 거치지 않습니다. 브라우저 GIS 팝업의 성공·취소·팝업 차단 콜백을 게임 세션에서 처리합니다. `prompt: 'select_account'`는 명시적 로그아웃 후에만 적용합니다. Google GIS가 팝업 닫힘 때 callback을 생략하는 브라우저 동작에 대비해 120초 응답 watchdog을 두며, 타임아웃·취소·성공 모두 대기 상태와 타이머를 정리합니다.
 - **PC `file://`:** opaque Origin(`null`)에서는 게임 문서가 웹 GIS를 직접 호출할 수 없어 파일 전용 정적 인증 브리지 경로만 사용합니다. 이 경로는 메시지 source·Origin·nonce를 검증하는 opener 핸드셰이크를 유지합니다. 현재 GitHub Pages `main` 소스에는 과거 호출 URL `cloud/auth-061.html` 파일이 없고, PC Host에도 OAuth API가 없으므로 file 환경의 실제 브리지 가용성과 연결 확인 단계 제거는 실환경 검증 전까지 완료로 보지 않습니다.
 - **Drive API:** 게임 페이지가 Google Drive API를 직접 호출합니다. 별도 백엔드, Worker, OAuth Client Secret, Refresh Token 중계는 추가하지 않습니다.
 - **토큰:** access token은 현재 페이지 메모리에만 둡니다. URL, localStorage, sessionStorage, 게임 세이브 및 로그에 저장하지 않습니다.
@@ -28,7 +28,7 @@ Google Drive `appDataFolder`에 기존 CloudSave 형식으로 세이브를 저�
 
 지원 가능한 환경 및 제한:
 
-- HTTPS: 게임 Origin에서 Google GIS를 직접 실행합니다. Google OAuth Web Client의 **Authorized JavaScript origins**에 실제 게임 Origin을 등록해야 합니다. 현재 알려진 배포 홈은 `https://wayward-six.vercel.app`이지만 이 Origin의 Google Cloud 등록 여부는 확인되지 않았습니다.
+- HTTPS: 게임 Origin에서 Google GIS를 직접 실행합니다. Google OAuth Web Client의 **Authorized JavaScript origins**에 실제 게임 Origin을 등록해야 합니다. 원격 LAN HTTP와 raw IP Origin은 사용할 수 없으며, HTTP 예외는 localhost loopback에 한정됩니다. 현재 알려진 배포 홈은 `https://wayward-six.vercel.app`이지만 이 Origin의 Google Cloud 등록 여부는 확인되지 않았습니다.
 - HTTP: Google 정책에 따라 `localhost`, `127.0.0.1`, `[::1]` loopback만 직접 GIS를 허용합니다. LAN IP, `0.0.0.0` 또는 일반 원격 HTTP는 보안 컨텍스트가 아니므로 직접 GIS를 거부합니다.
 - `file://`: `null` Origin은 웹 OAuth의 허용된 JavaScript Origin이 아니므로 게임 창에서 GIS를 직접 호출하지 않습니다. 별도 HTTPS 브리지가 필요하지만, 저장소의 현재 Pages `main` 트리에서 `cloud/auth-061.html`은 찾을 수 없고 실제 배포 응답도 이 환경에서 확인하지 못했습니다. 브리지 페이지가 열려도 브라우저 사용자 활성화는 교차 출처 팝업으로 자동 이전되지 않으므로 페이지 내부의 추가 사용자 동작이 요구될 수 있습니다. 이 환경의 UX 제거는 미완료입니다.
 - Android WebView: 공식 런처가 제공하는 네이티브 Google Identity 브리지를 우선 사용합니다. Android에서는 웹 GIS 경로를 자동 fallback으로 사용하지 않습니다.
