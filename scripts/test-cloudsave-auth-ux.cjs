@@ -75,7 +75,6 @@ async function testModernAndroidPolicy() {
     startGoogleDriveAuthWithPolicy(value, force) {
       selected = { nonce: value, force };
     },
-    cancelGoogleDriveAuth() {},
     takePendingStateForNonce(value) {
       return JSON.stringify({
         type: 'wayward-cloud-auth-success', nonce: value,
