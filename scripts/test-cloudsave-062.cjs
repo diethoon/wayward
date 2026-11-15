@@ -125,7 +125,10 @@ function requireText(value, label) {
 assert.ok(fileMatchesRegex(modPath, /version: '0\.6\.2'/), 'CloudSave version must be 0.6.2');
 requireText("https://jeiky224.github.io/cloud/auth-061.html", 'isolated 0.6.1 auth endpoint');
 requireText('startGoogleDriveAuthWithPolicy(nonce, !!forceSelectAccount)', 'Android native policy bridge');
-requireText("const AUTH_ADAPTER = hasNativeAuthSurface ? 'android-native'", 'immutable environment adapter selection');
+requireText("const AUTH_ADAPTER = nativeLauncherContext ? 'android-native'", 'immutable environment adapter selection');
+requireText('const nativeLauncherContext = !!nativeAuthHost', 'native launcher marker fails closed without auth API');
+requireText('if (forceSelectAccount && !hasPolicyStart)', 'forced native account selection never degrades to legacy silent login');
+requireText('return explicitLogout || !hadPreviousAuth;', 'first connection and explicit logout account selection');
 requireText('function requestBrowserGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart)', 'direct GIS browser adapter');
 requireText('function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart)', 'isolated file-origin adapter');
 requireText("client.requestAccessToken({ prompt: forceSelectAccount ? 'select_account' : '', state: nonce });", 'GIS popup directly from game click');
