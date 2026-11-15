@@ -104,3 +104,14 @@ Still required:
 - test real Google account authorization, save/list/load/delete, account switch and old-save compatibility.
 
 Do not report implementation, package, deployment, physical-device, Google-account, or old-save compatibility as complete until the corresponding evidence exists.
+
+## 2026-11-15 implementation continuation
+
+- Independent branch: `feat/cloudsave-mobile-prep-preview-20261115`.
+- Implementation code commit: `b1deeee1097b5f1a058f735851720bc75dd48c19`.
+- Added encrypted preview Sidecar code using the existing `encryptSnapshotEmbedded/decryptSnapshotEmbedded` API. Primary file appProperties contain only `wmlPreviewId` and `wmlPreviewGeneration`.
+- Added visible-row lazy fetching/backfill; old passphrase saves are not silently decrypted.
+- Connected memo chips to the popup, including Escape, outside click, and Android back priority.
+- Updated native auth compatibility so 0.6.1 nonce-scoped launchers without the cancellation API retain their native flow; browser fallback is reserved for missing native start/result APIs or unsupported forced account selection.
+- Core `buildSnapshot`, `applySnapshot`, `writeSlotEnvelope`, `deleteSlot`, and `crypto.js` are intended to remain byte-compatible; automated comparison is pending.
+- Tests, Actions, and real Drive/browser/device verification are pending. This note does not authorize mobile launcher integration, APK creation, merge, or deployment.
