@@ -531,7 +531,7 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   assert.match(authPageScriptSource, /state: oauthState/);
   assert.match(authPageScriptSource, /navigator\.userActivation/,
     'the Google token flow must preserve the browser gesture requirement');
-  assert.match(authPageScriptSource, /port\.postMessage/);
+  assert.match(authPageScriptSource, /\.postMessage\(/, 'auth results and bridge state use transferred MessagePorts');
   assert.match(authPageScriptSource, /wayward-cloud-auth-ack-received/);
   assert.match(authPageScriptSource, /wayward-cloud-auth-activate/);
   assert.match(authPageScriptSource, /wayward-cloud-auth-active/);
