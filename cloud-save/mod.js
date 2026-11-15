@@ -462,6 +462,10 @@ WML.define({
         let sessionId = '';
         let settled = false;
         let resultAccepted = false;
+        let acceptedSessionGeneration = null;
+        const isBridgeSessionCurrent = () => attempt === authAttemptSerial &&
+          (sessionAtStart === sessionGeneration ||
+            (resultAccepted && acceptedSessionGeneration !== null && acceptedSessionGeneration === sessionGeneration));
 
         const clearTimer = timer => {
           if (timer !== null) clearTimeout(timer);
@@ -514,7 +518,7 @@ WML.define({
         activeAuthCancel = cancel;
 
         const onPortMessage = event => {
-          if (settled || !isCurrentAuthAttempt(attempt, sessionAtStart)) {
+          if (settled || !isBridgeSessionCurrent()) {
             if (!settled) finish(new Error('이전 PC file 인증 응답을 무시했습니다.'));
             return;
           }
@@ -562,6 +566,9 @@ WML.define({
               accessToken: data.accessToken,
               expiresIn: data.expiresIn
             }, nonce);
+            // acceptAccessToken invalidates the previous Drive session; retain
+            // only the new generation for the final relay acknowledgement.
+            acceptedSessionGeneration = sessionGeneration;
           } catch (error) {
             try {
               sendToBridge('wayward-cloud-auth-ack', {
@@ -640,7 +647,7 @@ WML.define({
           if (settled) return;
           if (!popup || popup.closed) {
             finish(new Error('CloudSave 인증 창이 비정상적으로 종료되었습니다.'));
-          } else if (!isCurrentAuthAttempt(attempt, sessionAtStart)) {
+          } else if (!isBridgeSessionCurrent()) {
             finish(new Error('게임 인증 세션이 변경되어 이전 요청을 취소했습니다.'));
           }
         }, 400);
