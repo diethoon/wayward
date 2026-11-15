@@ -29,7 +29,7 @@ The file origin is opaque and shared by unrelated local files. Neither Origin: n
 
 ## Security constraints
 
-- No Vercel/Render/Cloudflare Worker/backend/local listener/PC Launcher/Remote Host dependency.
+- No external auth relay, backend, Worker, local listener, PC Launcher, or Remote Host dependency.
 - No token or nonce in the page URL, query, fragment, localStorage, sessionStorage, or logs.
 - No postMessage('*'); the game sends the transferred port only to the exact Pages HTTPS origin.
 - The file page never sends tokens through window.opener.postMessage; it uses the transferred port only.
