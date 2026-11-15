@@ -190,10 +190,9 @@ WML.define({
     function markExplicitLogout(revoked) {
       explicitLogout = true;
       permissionRevoked = revoked === true;
-      if (permissionRevoked) {
-        hadPreviousAuth = false;
-        writeStorage(HAD_AUTH_KEY, null);
-      }
+      // A user logout must disable restore independently of the logout marker.
+      hadPreviousAuth = false;
+      writeStorage(HAD_AUTH_KEY, null);
       saveAuthPreferences();
       authStatus = permissionRevoked ? 'permission-revoked' : 'explicit-logout';
     }
