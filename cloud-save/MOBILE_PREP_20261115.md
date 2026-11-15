@@ -115,3 +115,23 @@ Do not report implementation, package, deployment, physical-device, Google-accou
 - Updated native auth compatibility so 0.6.1 nonce-scoped launchers without the cancellation API retain their native flow; browser fallback is reserved for missing native start/result APIs or unsupported forced account selection.
 - Core `buildSnapshot`, `applySnapshot`, `writeSlotEnvelope`, `deleteSlot`, and `crypto.js` are intended to remain byte-compatible; automated comparison is pending.
 - Tests, Actions, and real Drive/browser/device verification are pending. This note does not authorize mobile launcher integration, APK creation, merge, or deployment.
+
+## 2026-11-15 final implementation and verification state
+
+- Final pre-documentation implementation HEAD: `db6972752f91f1e12e14f464a8ebef3b389d70b6`; preparation branch remains separate and unmerged.
+- Implemented memo chip and modal popup wiring, exact snapshot preview extraction, encrypted Drive appDataFolder sidecars, opaque primary appProperties pointer/generation, visible-row lazy lookup/backfill, best-effort orphan cleanup, and 0.6.1 nonce-based native auth compatibility.
+- Automated verification passed at that implementation HEAD in GitHub Actions run [43678582536](https://github.com/diethoon/wayward/actions/runs/43678582536): syntax checks, pinned 0.6.1 protected-function byte comparisons, pinned crypto.js blob SHA, snapshot field fixture and unknown-archetype omission, crypto round-trip/plaintext concealment, memo fake-DOM tests, mocked Sidecar multipart upload/pointer swap/read/decrypt/delete, generation mismatch and stale-session rejection, synthetic metadata-only slot counts (0/20/100/500), package structure and artifact upload.
+- The Actions artifact archive SHA-256 was verified against the artifact API digest. The nested release ZIP checksum manifest also verified against the package bytes. Packaged `crypto.js` Git blob SHA remained `7a321b24588d892a02ad9dec7335cf17ce99c8c5`.
+- The package is a CI artifact only; it has not been deployed, installed into any launcher, or merged into PR #58.
+
+### Verification not performed in this environment
+
+- No actual Google account OAuth run from a local `file://` game window; no real popup-blocker, cancel, timeout, account-picker or return-to-game test. The source and nonce/message contracts are automated-test-covered. The flow uses a click-synchronously opened, opener-bound GIS bridge popup as the secure browser-compatible alternative, not an embedded same-window GIS form.
+- No live Google Drive upload/list/download/delete using a real account; sidecar lifecycle was exercised against a mocked Drive transport with the real crypto module.
+- No live HTTPS GIS browser session regression test.
+- No Android 0.6.1 device/emulator test or actual in-game 0.6.1 snapshot capture. The 0.6.1 save/restore core and crypto source contracts are compared byte-for-byte. If an old native bridge lacks `cancelGoogleDriveAuth`, CloudSave can stop local polling and reject stale nonce responses but cannot cancel the native account-picker activity itself.
+- No PC launcher/native launcher source changes, APK build, mobile integration, PR merge, or deployment were performed.
+
+### Integration gate
+
+- Do not integrate CloudSave into the PC-linked new mobile launcher or modify its repository/branch until that launcher work has a declared new baseline (branch and HEAD SHA) and the owner explicitly approves final integration. Existing PRs #17, #18, #19 and #58 remain untouched/unmerged.
