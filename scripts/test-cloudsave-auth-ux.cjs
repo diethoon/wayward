@@ -325,6 +325,29 @@ function testFirstConnectionAndExplicitLogoutRequirePicker() {
   assert.equal(shouldForce(false, true), false, 'normal remembered-session auth keeps normal prompt');
 }
 
+function testExplicitLogoutClearsPreviousAuthRestoreMarker() {
+  const logoutSource = section(
+    '    function markExplicitLogout(revoked) {',
+    '    function markPermissionRevoked() {'
+  );
+  const writes = [];
+  const context = {
+    explicitLogout: false,
+    permissionRevoked: false,
+    hadPreviousAuth: true,
+    HAD_AUTH_KEY: 'wml-google-drive-had-auth-v1',
+    writeStorage(key, value) { writes.push([key, value]); return false; },
+    saveAuthPreferences() {}
+  };
+  vm.runInNewContext(logoutSource + '\n;markExplicitLogout', context)(false);
+  assert.equal(context.explicitLogout, true);
+  assert.equal(context.permissionRevoked, false);
+  assert.equal(context.hadPreviousAuth, false,
+    'explicit logout must disable native restore even if persistent marker storage fails');
+  assert.ok(writes.some(([key, value]) =>
+    key === 'wml-google-drive-had-auth-v1' && value === null));
+}
+
 function testExplicitLogoutSuppressesStartupRestoreAndSlotRefresh() {
   const restoreSource = section(
     '    function attemptNativeSessionRestore() {',
@@ -417,7 +440,7 @@ async function main() {
   testAuthFunctionDeclarationsAreUnique();
   testNativeLauncherMarkerKeepsNativeAdapterEvenWithoutAuthMethods();
   testFirstConnectionAndExplicitLogoutRequirePicker();
-  testExplicitLogoutSuppressesStartupRestoreAndSlotRefresh();
+  testExplicitLogoutClearsPreviousAuthRestoreMarker();\n  testExplicitLogoutSuppressesStartupRestoreAndSlotRefresh();
   await testLegacyAndroidReauthAndForcedPickerFailsClosed();
   await testAndroid061PolicyWithoutNativeCancel();
   await testAndroidStaleResponseRejected();
