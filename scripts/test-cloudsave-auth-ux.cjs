@@ -518,9 +518,9 @@ async function testFileOriginUsesOneTimeMessageChannel() {
     'the relay accepts only its actual opener WindowProxy');
   assert.match(authPageScriptSource, /incoming\.length !== 1/,
     'the relay requires exactly one transferred MessagePort');
-  assert.match(authPageScriptSource, /event\.origin !== 'null'/,
-    'opaque file Origin is classified as a context only and is never accepted as identity');
-  assert.match(authPageScriptSource, /It is not trusted as an identity claim|not trusted as an identity claim|never an identity claim/i);
+  assert.match(authPageScriptSource, /Do not inspect or trust an opaque file Origin/,
+    'the Pages page binds the exact opener but never inspects opaque Origin as identity');
+  assert.doesNotMatch(authPageScriptSource, /event\.origin/);
   assert.match(authPageScriptSource, /data\.appId !== APP_ID/);
   assert.match(authPageScriptSource, /validId\(data\.nonce\)/);
   assert.match(authPageScriptSource, /validId\(data\.requestId\)/);
@@ -531,6 +531,9 @@ async function testFileOriginUsesOneTimeMessageChannel() {
     'the Google token flow must preserve the browser gesture requirement');
   assert.match(authPageScriptSource, /port\.postMessage/);
   assert.match(authPageScriptSource, /wayward-cloud-auth-ack-received/);
+  assert.match(authPageScriptSource, /wayward-cloud-auth-activate/);
+  assert.match(authPageScriptSource, /wayward-cloud-auth-active/);
+  assert.match(authPageScriptSource, /if \(initialized && \(data\.nonce !== nonce/);
   assert.match(authPageScriptSource, /typeof data\.forceSelectAccount !== 'boolean'/);
   assert.match(authPageScriptSource, /data\.type !== 'wayward-cloud-auth-init'/);
   assert.doesNotMatch(authPageScriptSource, /window\.opener\.postMessage|postMessage\([^,]+,\s*['"]\*['"]/);
@@ -565,6 +568,14 @@ async function testFileOriginUsesOneTimeMessageChannel() {
       pagePort.onmessage = event => {
         const message = event.data;
         sent.push(message);
+        if (message.type === 'wayward-cloud-auth-activate') {
+          pagePort.postMessage({
+            type: 'wayward-cloud-auth-active',
+            version: message.version, nonce: message.nonce,
+            requestId: message.requestId, attemptId: message.attemptId,
+            sessionId: message.sessionId
+          });
+        }
         if (message.type === 'wayward-cloud-auth-ack' && message.accepted === true) {
           pagePort.postMessage({
             type: 'wayward-cloud-auth-ack-received',
@@ -610,7 +621,7 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   }
   const context = {
     AUTH_ADAPTER: 'file-bridge',
-    FILE_AUTH_BRIDGE_VERSION: 2,
+    FILE_AUTH_BRIDGE_VERSION: 3,
     FILE_AUTH_BRIDGE_URL: 'https://jeiky224.github.io/cloud/file-auth.html',
     FILE_AUTH_BRIDGE_ORIGIN: 'https://jeiky224.github.io',
     activeAuthCancel: null,
