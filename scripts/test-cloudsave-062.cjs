@@ -313,7 +313,7 @@ const fileBridgeAuth = readSectionFromFile(
   '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
   '    function requestGoogleToken(forceSelectAccount, attempt) {'
 );
-assert.ok(fileBridgeAuth.includes("protocol !== 'file:' && origin !== 'null'"));
+assert.ok(fileBridgeAuth.includes("protocol !== 'file:' && rawOrigin !== 'null'"));
 assert.ok(fileBridgeAuth.includes('window.open(bridgeUrl.toString('));
 assert.ok(fileBridgeAuth.includes('event.source !== bridge'));
 assert.ok(fileBridgeAuth.includes('payload.nonce !== nonce'));
