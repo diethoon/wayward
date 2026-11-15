@@ -824,7 +824,8 @@ WML.define({
           '--' + boundary + '\r\n' +
           'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
           body + '\r\n' +
-          '--' + boundary + '--';        await driveFetch('/upload/drive/v3/files?uploadType=multipart', {
+          '--' + boundary + '--';
+        await driveFetch('/upload/drive/v3/files?uploadType=multipart', {
           method: 'POST',
           headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
           body: multipart
