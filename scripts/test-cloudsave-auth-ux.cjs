@@ -42,7 +42,7 @@ function makeNativeHarness(host, options = {}) {
   return { context, accepted, requestNativeGoogleToken };
 }
 
-async function testLegacyAndroidRelogin() {
+async function testLegacyAndroidReauthAndForcedPickerFailsClosed() {
   const nonce = 'a'.repeat(48);
   const calls = [];
   const host = {
@@ -58,14 +58,22 @@ async function testLegacyAndroidRelogin() {
     }
   };
   const harness = makeNativeHarness(host);
-  const pending = harness.requestNativeGoogleToken(nonce, true, 7, 11);
+  await harness.requestNativeGoogleToken(nonce, false, 7, 11);
   assert.equal(calls[0][0], 'legacy-start',
-    'forceSelectAccount must not route a 0.6.1 native bridge to browser GIS');
+    'legacy native API remains available for non-picker session restoration');
   assert.equal(calls[0][1], nonce);
-  await pending;
   assert.equal(harness.accepted.length, 1);
   assert.equal(harness.accepted[0].nonce, nonce);
   assert.equal(calls.some(call => call[0] === 'take'), true);
+
+  const beforeForcedAttempt = calls.filter(call => call[0] === 'legacy-start').length;
+  const forced = makeNativeHarness(host);
+  await assert.rejects(
+    forced.requestNativeGoogleToken('a'.repeat(48).replace(/a/g, 'f'), true, 7, 11),
+    /계정 선택 정책 API/
+  );
+  assert.equal(calls.filter(call => call[0] === 'legacy-start').length, beforeForcedAttempt,
+    'legacy bridge must not silently ignore a required account-picker policy');
 }
 
 async function testAndroid061PolicyWithoutNativeCancel() {
@@ -275,6 +283,82 @@ async function testDirectGISPopupFailureAndStaleState() {
   assert.equal(stale.accepted.length, 0);
 }
 
+function testAuthFunctionDeclarationsAreUnique() {
+  const counts = new Map();
+  for (const match of source.matchAll(/^\\s*function\\s+([A-Za-z_$][\\w$]*)\\s*\\(/gm)) {
+    counts.set(match[1], (counts.get(match[1]) || 0) + 1);
+  }
+  for (const name of ['validateDirectGISOrigin', 'requestBrowserGoogleToken', 'requestFileBridgeGoogleToken']) {
+    assert.equal(counts.get(name), 1, name + ' must have exactly one runtime declaration');
+  }
+}
+
+function testNativeLauncherMarkerKeepsNativeAdapterEvenWithoutAuthMethods() {
+  const adapterSource = section(
+    '    const nativeAuthHost = window.WMLHost || null;',
+    '    let browserGISLoadPromise = null;'
+  );
+  function select(host, protocol = 'https:', origin = 'https://wayward-six.vercel.app') {
+    return vm.runInNewContext(adapterSource + '\\n;({ AUTH_ADAPTER, nativeLauncherContext })', {
+      window: { WMLHost: host, location: { protocol, origin } }
+    });
+  }
+  assert.equal(select({}).AUTH_ADAPTER, 'android-native',
+    'an embedded launcher with a missing auth surface must not become browser GIS');
+  assert.equal(select({ startGoogleDriveAuth() {} }).AUTH_ADAPTER, 'android-native');
+  assert.equal(select(undefined).AUTH_ADAPTER, 'browser-gis');
+  assert.equal(select(undefined, 'file:', 'null').AUTH_ADAPTER, 'file-token-bridge');
+}
+
+function testFirstConnectionAndExplicitLogoutRequirePicker() {
+  const helper = section(
+    '    function shouldForceSelectAccount() {',
+    '    function connectFromClick() {'
+  );
+  function shouldForce(explicitLogout, hadPreviousAuth) {
+    return vm.runInNewContext(helper + '\\n;shouldForceSelectAccount()', {
+      explicitLogout, hadPreviousAuth
+    });
+  }
+  assert.equal(shouldForce(false, false), true, 'first connection must request account selection');
+  assert.equal(shouldForce(true, true), true, 'explicit logout must request account selection');
+  assert.equal(shouldForce(false, true), false, 'normal remembered-session auth keeps normal prompt');
+}
+
+function testExplicitLogoutSuppressesStartupRestoreAndSlotRefresh() {
+  const restoreSource = section(
+    '    function attemptNativeSessionRestore() {',
+    '    async function ensureAccessToken() {'
+  );
+  const openSource = section(
+    '    function open() {',
+    '    function addText(root, text, cls) {'
+  );
+  let opened = 0;
+  let refreshed = 0;
+  const context = {
+    startupRestoreAttempted: false,
+    explicitLogout: true,
+    hadPreviousAuth: true,
+    hasToken: () => false,
+    AUTH_ADAPTER: 'android-native',
+    nativeAuthHost: {},
+    view: { page: 'home' },
+    message: '',
+    isConnected: () => false,
+    openWindow: () => { opened += 1; },
+    hasLogin: () => false,
+    slotsStatus: 'not-loaded',
+    runAction: () => { refreshed += 1; },
+    refreshSlots: () => Promise.resolve([]),
+    render: () => {},
+    Date, Promise, Error, String
+  };
+  vm.runInNewContext(restoreSource + '\\n' + openSource + '\\n;open()', context);
+  assert.equal(opened, 1);
+  assert.equal(refreshed, 0, 'explicit logout must not auto-fetch the Drive slot list');
+}
+
 function testDirectGISOriginRules() {
   const https = createBrowserHarness();
   assert.equal(https.api.validateDirectGISOrigin(), 'https://wayward-six.vercel.app');
@@ -330,7 +414,11 @@ function testFileBridgeIsIsolatedAndOriginChecked() {
 }
 
 async function main() {
-  await testLegacyAndroidRelogin();
+  testAuthFunctionDeclarationsAreUnique();
+  testNativeLauncherMarkerKeepsNativeAdapterEvenWithoutAuthMethods();
+  testFirstConnectionAndExplicitLogoutRequirePicker();
+  testExplicitLogoutSuppressesStartupRestoreAndSlotRefresh();
+  await testLegacyAndroidReauthAndForcedPickerFailsClosed();
   await testAndroid061PolicyWithoutNativeCancel();
   await testAndroidStaleResponseRejected();
   await testAndroidCancelIsNonceScoped();
