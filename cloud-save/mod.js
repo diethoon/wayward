@@ -86,7 +86,7 @@ WML.define({
       (fileOrigin ? 'file-bridge' : (opaqueOrigin ? 'opaque-origin-unsupported' : 'browser-gis'));
     const FILE_AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/file-auth.html';
     const FILE_AUTH_BRIDGE_ORIGIN = 'https://jeiky224.github.io';
-    const FILE_AUTH_BRIDGE_VERSION = 3;
+    const FILE_AUTH_BRIDGE_VERSION = 4;
     let browserGISLoadPromise = null;
     let browserGISLoadError = '';
     const FILE_PREFIX = 'wayward-cloud-slot-';
@@ -456,6 +456,7 @@ WML.define({
       return new Promise((resolve, reject) => {
         let popup = null;
         let port = null;
+        let pendingPorts = [];
         let retryTimer = null;
         let handshakeTimer = null;
         let requestTimer = null;
@@ -481,6 +482,7 @@ WML.define({
             port.postMessage(Object.assign({
               type,
               version: FILE_AUTH_BRIDGE_VERSION,
+              appId: 'wayward-cloudsave',
               nonce,
               requestId,
               attemptId,
@@ -500,10 +502,11 @@ WML.define({
           bridgeActive = false;
           if (popupWatchTimer !== null) clearInterval(popupWatchTimer);
           popupWatchTimer = null;
-          if (port) {
-            try { port.close(); } catch (_) {}
-            port = null;
-          }
+          const closingPorts = pendingPorts.slice();
+          if (port && !closingPorts.includes(port)) closingPorts.push(port);
+          for (const candidate of closingPorts) { try { candidate.close(); } catch (_) {} }
+          pendingPorts = [];
+          port = null;
           if (activeAuthCancel === cancel) activeAuthCancel = null;
         };
         const finish = error => {
@@ -523,7 +526,7 @@ WML.define({
         const cancel = () => finish(new Error('Google 인증 요청을 취소했습니다.'));
         activeAuthCancel = cancel;
 
-        const onPortMessage = event => {
+        const onPortMessage = (event, sourcePort) => {
           if (settled || !isBridgeSessionCurrent()) {
             if (!settled) finish(new Error('이전 PC file 인증 응답을 무시했습니다.'));
             return;
@@ -531,13 +534,17 @@ WML.define({
           const data = event && event.data;
           if (!data || typeof data !== 'object' ||
               data.version !== FILE_AUTH_BRIDGE_VERSION ||
+              data.appId !== 'wayward-cloudsave' ||
               data.nonce !== nonce || data.requestId !== requestId ||
               data.attemptId !== attemptId) return;
-
           if (data.type === 'wayward-cloud-auth-ready') {
-            if (sessionId || typeof data.sessionId !== 'string' ||
-                !/^[a-f0-9]{48}$/.test(data.sessionId)) return;
+            if (sessionId || !pendingPorts.includes(sourcePort) ||
+                typeof data.sessionId !== 'string' || !/^[a-f0-9]{48}$/.test(data.sessionId)) return;
             sessionId = data.sessionId;
+            port = sourcePort;
+            const unusedPorts = pendingPorts.filter(candidate => candidate !== port);
+            pendingPorts = [port];
+            for (const candidate of unusedPorts) { try { candidate.close(); } catch (_) {} }
             retryTimer = clearTimer(retryTimer);
             handshakeTimer = clearTimer(handshakeTimer);
             if (!sendToBridge('wayward-cloud-auth-activate')) {
@@ -550,22 +557,18 @@ WML.define({
             }, 15000);
             return;
           }
-          if (!sessionId || data.sessionId !== sessionId) return;
-
+          if (!sessionId || sourcePort !== port || data.sessionId !== sessionId) return;
           if (data.type === 'wayward-cloud-auth-active') {
             if (bridgeActive) return;
             bridgeActive = true;
             activationTimer = clearTimer(activationTimer);
             return;
           }
-
           if (data.type === 'wayward-cloud-auth-ack-received' && resultAccepted && bridgeActive) {
             if (data.accepted !== true) {
               clearToken();
               finish(new Error('인증 중계 창에서 게임 세션의 수신 확인을 받지 못했습니다.'));
-            } else {
-              finish(null);
-            }
+            } else finish(null);
             return;
           }
           if (data.type === 'wayward-cloud-auth-error') {
@@ -575,28 +578,20 @@ WML.define({
             return;
           }
           if (data.type !== 'wayward-cloud-auth-success' || resultAccepted || !bridgeActive) return;
-
           resultAccepted = true;
           try {
-            if (!isBridgeSessionCurrent()) {
-              throw new Error('이전 PC file 인증 응답을 무시했습니다.');
-            }
+            if (!isBridgeSessionCurrent()) throw new Error('이전 PC file 인증 응답을 무시했습니다.');
             acceptAccessToken({
               type: 'wayward-cloud-auth-success',
               nonce,
               accessToken: data.accessToken,
               expiresIn: data.expiresIn
             }, nonce);
-            // acceptAccessToken invalidates the previous Drive session; retain
-            // only the new generation for the final relay acknowledgement.
             acceptedSessionGeneration = sessionGeneration;
           } catch (error) {
-            try {
-              sendToBridge('wayward-cloud-auth-ack', {
-                accepted: false,
-                message: String(error && error.message || error)
-              });
-            } catch (_) {}
+            try { sendToBridge('wayward-cloud-auth-ack', {
+              accepted: false, message: String(error && error.message || error)
+            }); } catch (_) {}
             finish(error);
             return;
           }
@@ -618,15 +613,22 @@ WML.define({
             finish(new Error('Google 인증 중계 창이 닫혔습니다. 게임에서 다시 연결하세요.'));
             return;
           }
+          if (pendingPorts.length >= 96) {
+            finish(new Error('CloudSave 인증 채널 재전송 횟수가 한도를 초과했습니다. 다시 시도하세요.'));
+            return;
+          }
+          let candidatePort = null;
           try {
-            if (port) { try { port.close(); } catch (_) {} port = null; }
             const channel = new MessageChannel();
-            port = channel.port1;
-            port.onmessage = onPortMessage;
-            port.onmessageerror = () => finish(new Error('PC file 인증 메시지 채널이 손상되었습니다.'));
-            if (typeof port.start === 'function') port.start();
-            // The recipient origin is fixed; the opaque file Origin is never
-            // placed in a targetOrigin field or used as an authentication claim.
+            candidatePort = channel.port1;
+            pendingPorts.push(candidatePort);
+            candidatePort.onmessage = event => onPortMessage(event, candidatePort);
+            candidatePort.onmessageerror = () => {
+              pendingPorts = pendingPorts.filter(item => item !== candidatePort);
+              try { candidatePort.close(); } catch (_) {}
+              if (port === candidatePort) finish(new Error('PC file 인증 메시지 채널이 손상되었습니다.'));
+            };
+            if (typeof candidatePort.start === 'function') candidatePort.start();
             popup.postMessage({
               type: 'wayward-cloud-auth-init',
               version: FILE_AUTH_BRIDGE_VERSION,
@@ -637,8 +639,11 @@ WML.define({
               attemptId,
               forceSelectAccount: forceSelectAccount === true
             }, FILE_AUTH_BRIDGE_ORIGIN, [channel.port2]);
-          } catch (error) {
-            if (port) { try { port.close(); } catch (_) {} port = null; }
+          } catch (_) {
+            if (candidatePort) {
+              pendingPorts = pendingPorts.filter(item => item !== candidatePort);
+              try { candidatePort.close(); } catch (_) {}
+            }
           }
           retryTimer = setTimeout(transmitInit, 300);
         };
