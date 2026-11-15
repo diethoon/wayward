@@ -186,7 +186,7 @@ const accountCacheSource = readSectionFromFile(
   '    async function resolveDriveAccountCache() {',
   '    function readAccountSlotCache(cacheKey) {'
 );
-assert.ok((accountCacheSource.match(/assertDriveSession\\(generation\\)/g) || []).length >= 4,
+assert.ok((accountCacheSource.match(/assertDriveSession\(generation\)/g) || []).length >= 4,
   'account identity must not be cached after the Drive session changes');
 
 const loadSlotSource = readSectionFromFile(
