@@ -35,7 +35,7 @@ Wayward Google Drive CloudSave — WML v0.6.2
 지원 환경
 - HTTPS 브라우저: 게임 Origin에서 direct GIS
 - HTTP: localhost, 127.0.0.1, [::1] loopback에서만 direct GIS 허용. LAN IP/원격 HTTP는 거부
-- file://: 현재 일반 브라우저만으로는 서버 없는 공식 인증 경로 없음. CloudSave는 외부 relay나 로컬 서버로 fallback하지 않고 인증을 거부
+- file://: GitHub Pages 정적 인증페이지 `https://jeiky224.github.io/cloud/file-auth.html`와 일회성 MessageChannel을 사용합니다. 실 배포 및 실제 Google 계정/Drive 브라우저 검증 전까지는 검증 완료가 아닙니다.
 - Android: window.WMLHost 런처 식별자가 있으면 native only; 인증 API가 없거나 불완전해도 web fallback 금지. 식별자 자체가 없는 WebView는 런처 측 식별자 제공 여부를 확인해야 합니다.
 
 세이브 호환성
