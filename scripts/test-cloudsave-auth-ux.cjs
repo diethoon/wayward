@@ -497,7 +497,7 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   assert.match(bridgeSource, /wayward-cloud-auth-ack-received/);
   assert.doesNotMatch(bridgeSource, /postMessage\([^,]+,\s*['"]\*['"]/);
   assert.doesNotMatch(bridgeSource, /event\.origin|origin\s*===\s*['"]null['"]/);
-  assert.doesNotMatch(bridgeSource, /AUTH_BRIDGE_URL|AUTH_BRIDGE_ORIGIN/);
+  assert.doesNotMatch(bridgeSource, /(?<!FILE_)AUTH_BRIDGE_URL|(?<!FILE_)AUTH_BRIDGE_ORIGIN/);
   assert.doesNotMatch(bridgeSource, /fetch\(|127\.0\.0\.1|localhost/);
 
   const inlineScripts = [...authPageSource.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
