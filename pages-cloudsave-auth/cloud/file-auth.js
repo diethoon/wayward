@@ -327,6 +327,21 @@
   window.addEventListener('message', onWindowMessage);
   window.addEventListener('pagehide', () => {
     clearTimers();
+    if (!completed && !resultSent && !errorSent && port) {
+      errorSent = true;
+      try {
+        port.postMessage({
+          type: 'wayward-cloud-auth-error',
+          version: VERSION,
+          nonce,
+          requestId,
+          attemptId,
+          sessionId,
+          code: 'auth-page-unloaded',
+          message: '인증 페이지가 새로고침되거나 닫혀 요청을 종료했습니다. 게임에서 다시 연결하세요.'
+        });
+      } catch (_) {}
+    }
     try { if (port) port.close(); } catch (_) {}
     port = null;
   });
