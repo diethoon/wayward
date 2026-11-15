@@ -502,7 +502,6 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   assert.match(bridgeSource, /data\.sessionId !== sessionId/);
   assert.match(bridgeSource, /wayward-cloud-auth-ack-received/);
   assert.doesNotMatch(bridgeSource, /postMessage\([^,]+,\s*['"]\*['"]/);
-  assert.doesNotMatch(bridgeSource, /event\.origin|origin\s*===\s*['"]null['"]/);
   assert.doesNotMatch(bridgeSource, /(?<!FILE_)AUTH_BRIDGE_URL|(?<!FILE_)AUTH_BRIDGE_ORIGIN/);
   assert.doesNotMatch(bridgeSource, /fetch\(|127\.0\.0\.1|localhost/);
 
@@ -516,11 +515,14 @@ async function testFileOriginUsesOneTimeMessageChannel() {
 
   assert.match(authPageScriptSource, /event\.source !== window\.opener/,
     'the relay accepts only its actual opener WindowProxy');
+  assert.match(authPageScriptSource, /event\.origin !== 'null'/,
+    'the relay rejects non-opaque Origins before GIS');
+  assert.match(authPageScriptSource, /opaque Origin "null"/,
+    'the page documents null as an opaque-origin classification, not identity proof');
   assert.match(authPageScriptSource, /incoming\.length !== 1/,
     'the relay requires exactly one transferred MessagePort');
-  assert.match(authPageScriptSource, /Do not inspect or trust an opaque file Origin/,
-    'the Pages page binds the exact opener but never inspects opaque Origin as identity');
-  assert.doesNotMatch(authPageScriptSource, /event\.origin/);
+  assert.match(authPageScriptSource, /attachPendingPort\(candidatePort\)/,
+    'retransmitted candidate ports remain alive until activation selects one');
   assert.match(authPageScriptSource, /data\.appId !== APP_ID/);
   assert.match(authPageScriptSource, /validId\(data\.nonce\)/);
   assert.match(authPageScriptSource, /validId\(data\.requestId\)/);
@@ -534,10 +536,10 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   assert.match(authPageScriptSource, /wayward-cloud-auth-activate/);
   assert.match(authPageScriptSource, /wayward-cloud-auth-active/);
   assert.match(authPageScriptSource, /if \(initialized\) \{/);
-  assert.match(authPageScriptSource, /try \{ candidatePort\.close\(\); \} catch \(_\) \{\}/,
-    'duplicate init ports are closed instead of replacing the accepted channel');
-  assert.match(authPageSource, /file-auth\.js\?v=20261116-3/);
-  assert.match(authPageSource, /file-auth\.css\?v=20261116-3/);
+  assert.match(authPageScriptSource, /sourcePort !== port/,
+    'post-activation control messages are accepted only on the selected port');
+  assert.match(authPageSource, /file-auth\.js\?v=20261116-5/);
+  assert.match(authPageSource, /file-auth\.css\?v=20261116-5/);
   assert.match(authPageScriptSource, /typeof data\.forceSelectAccount !== 'boolean'/);
   assert.match(authPageScriptSource, /data\.type !== 'wayward-cloud-auth-init'/);
   assert.doesNotMatch(authPageScriptSource, /window\.opener\.postMessage|postMessage\([^,]+,\s*['"]\*['"]/);
@@ -575,7 +577,7 @@ async function testFileOriginUsesOneTimeMessageChannel() {
         if (message.type === 'wayward-cloud-auth-activate') {
           pagePort.postMessage({
             type: 'wayward-cloud-auth-active',
-            version: message.version, nonce: message.nonce,
+            version: message.version, appId: message.appId, nonce: message.nonce,
             requestId: message.requestId, attemptId: message.attemptId,
             sessionId: message.sessionId
           });
@@ -590,7 +592,7 @@ async function testFileOriginUsesOneTimeMessageChannel() {
         }
       };
       const base = {
-        version: data.version, nonce: data.nonce,
+        version: data.version, appId: data.appId, nonce: data.nonce,
         requestId: data.requestId, attemptId: data.attemptId,
         sessionId: 'd'.repeat(48)
       };
@@ -625,7 +627,7 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   }
   const context = {
     AUTH_ADAPTER: 'file-bridge',
-    FILE_AUTH_BRIDGE_VERSION: 3,
+    FILE_AUTH_BRIDGE_VERSION: 4,
     FILE_AUTH_BRIDGE_URL: 'https://jeiky224.github.io/cloud/file-auth.html',
     FILE_AUTH_BRIDGE_ORIGIN: 'https://jeiky224.github.io',
     activeAuthCancel: null,
