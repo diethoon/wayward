@@ -181,7 +181,7 @@ function createBrowserHarness(options = {}) {
     window: {
       location: {
         protocol: options.protocol || 'https:',
-        origin: options.origin || 'https://wayward-six.vercel.app'
+        origin: options.origin || 'https://game.example.invalid'
       },
       google: { accounts: { oauth2: oauth } }
     },
@@ -361,7 +361,7 @@ function testNativeLauncherMarkerKeepsNativeAdapterEvenWithoutAuthMethods() {
     '    const nativeAuthHost = window.WMLHost || null;',
     '    let browserGISLoadPromise = null;'
   );
-  function select(host, protocol = 'https:', origin = 'https://wayward-six.vercel.app') {
+  function select(host, protocol = 'https:', origin = 'https://game.example.invalid') {
     return vm.runInNewContext(adapterSource + '\n;({ AUTH_ADAPTER, nativeLauncherContext })', {
       window: { WMLHost: host, location: { protocol, origin } }
     });
@@ -449,7 +449,7 @@ function testExplicitLogoutSuppressesStartupRestoreAndSlotRefresh() {
 
 function testDirectGISOriginRules() {
   const https = createBrowserHarness();
-  assert.equal(https.api.validateDirectGISOrigin(), 'https://wayward-six.vercel.app');
+  assert.equal(https.api.validateDirectGISOrigin(), 'https://game.example.invalid');
   const localhost = createBrowserHarness({ protocol: 'http:', origin: 'http://127.0.0.1:8765' });
   assert.equal(localhost.api.validateDirectGISOrigin(), 'http://127.0.0.1:8765');
   const remoteHttp = createBrowserHarness({ protocol: 'http:', origin: 'http://192.168.0.20:8000' });
