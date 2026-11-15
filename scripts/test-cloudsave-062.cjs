@@ -181,6 +181,14 @@ assert.match(driveFetchSource, /new AbortController\(\)/);
 assert.match(driveFetchSource, /driveRequestControllers\.add\(requestController\)/);
 assert.match(driveFetchSource, /assertDriveSession\(generation\)/);
 
+const accountCacheSource = readSectionFromFile(
+  modPath,
+  '    async function resolveDriveAccountCache() {',
+  '    function readAccountSlotCache(cacheKey) {'
+);
+assert.ok((accountCacheSource.match(/assertDriveSession\\(generation\\)/g) || []).length >= 4,
+  'account identity must not be cached after the Drive session changes');
+
 const loadSlotSource = readSectionFromFile(
   modPath,
   '    async function loadSlot(slot) {',
