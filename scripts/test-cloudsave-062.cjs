@@ -132,6 +132,13 @@ requireText('if (forceSelectAccount && !hasPolicyStart)', 'forced native account
 requireText('return explicitLogout || !hadPreviousAuth;', 'first connection and explicit logout account selection');
 requireText('function requestBrowserGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart)', 'direct GIS browser adapter');
 requireText('function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart)', 'PC file-origin MessageChannel auth adapter');
+requireText("const fileOrigin = initialProtocol === 'file:'", 'only actual file:// documents use the static bridge');
+requireText("const opaqueOrigin = initialOrigin === 'null'", 'non-file opaque origins remain blocked');
+requireText("const FILE_AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/file-auth.html'", 'GitHub Pages static authentication URL');
+requireText("const FILE_AUTH_BRIDGE_ORIGIN = 'https://jeiky224.github.io'", 'exact GitHub Pages target origin');
+requireText("opaque-origin-unsupported", 'unrecognized opaque origins fail closed');
+assert.equal(fileContainsText(modPath, 'wayward-six.vercel.app'), false,
+  'PC file auth must not depend on Vercel');
 requireText("client.requestAccessToken({ prompt: forceSelectAccount ? 'select_account' : '', state: nonce });", 'GIS popup directly from game click');
 requireText("const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';", 'least-privilege Drive scope');
 requireText("const GOOGLE_OAUTH_CLIENT_ID =", 'public GIS OAuth client identifier');
@@ -200,7 +207,7 @@ const fileAuth = readSectionFromFile(
 assert.match(fileAuth, /window\.open\(/);
 assert.match(fileAuth, /new MessageChannel\(\)/);
 assert.match(fileAuth, /popup\.postMessage\([\s\S]*FILE_AUTH_BRIDGE_ORIGIN[\s\S]*channel\.port2/);
-assert.match(fileAuth, /isCurrentAuthAttempt\(attempt, sessionAtStart\)/);
+assert.match(fileAuth, /isBridgeSessionCurrent\(\)/);
 assert.match(fileAuth, /wayward-cloud-auth-ack-received/);
 assert.doesNotMatch(fileAuth, /event\.origin|origin\s*===\s*['"]null['"]|postMessage\([^,]+,\s*['"]\*['"]/);
 assert.doesNotMatch(fileAuth, /fetch\(|127\.0\.0\.1|localhost/);
