@@ -68,9 +68,26 @@ WML.define({
     const SLOT_CACHE_KEY_PREFIX = 'wml-google-drive-slot-metadata-v1:';
     const slotMetadataMemoryCache = new Map();
 
-    // Dedicated static GIS endpoint preserves the 0.6.1 one-time-token handoff.
+    const GOOGLE_OAUTH_CLIENT_ID = '35944231952-p82giir62o28bo001j9uvmqo3kgp9c99.apps.googleusercontent.com';
+    const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+    // Only the opaque file:// browser adapter uses this HTTPS bridge.
     const AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/auth-061.html';
     const AUTH_BRIDGE_ORIGIN = 'https://jeiky224.github.io';
+    const nativeAuthHost = window.WMLHost || null;
+    const hasNativeAuthSurface = !!(nativeAuthHost && (
+      typeof nativeAuthHost.startGoogleDriveAuthWithPolicy === 'function' ||
+      typeof nativeAuthHost.startGoogleDriveAuth === 'function' ||
+      typeof nativeAuthHost.takePendingStateForNonce === 'function' ||
+      typeof nativeAuthHost.cancelGoogleDriveAuth === 'function'
+    ));
+    const initialProtocol = String(window.location && window.location.protocol || '');
+    const initialOrigin = String(window.location && window.location.origin || '');
+    const fileOrigin = initialProtocol === 'file:' || initialOrigin === 'null';
+    // Freeze the adapter once; select_account changes policy, not transport.
+    const AUTH_ADAPTER = hasNativeAuthSurface ? 'android-native' :
+      (fileOrigin ? 'file-token-bridge' : 'browser-gis');
+    let browserGISLoadPromise = null;
+    let browserGISLoadError = '';
     const FILE_PREFIX = 'wayward-cloud-slot-';
     const STYLE_ID = 'wml-google-drive-save-style';
 
@@ -99,6 +116,37 @@ WML.define({
 
     function hasToken() {
       return !!accessToken && Date.now() < tokenExpiresAt - 30000;
+    }
+
+    function isGoogleIdentityReady() {
+      return !!(window.google && window.google.accounts && window.google.accounts.oauth2 &&
+        typeof window.google.accounts.oauth2.initTokenClient === 'function');
+    }
+
+    function loadGoogleIdentity() {
+      if (isGoogleIdentityReady()) return Promise.resolve();
+      if (browserGISLoadPromise) return browserGISLoadPromise;
+      browserGISLoadPromise = new Promise((resolve, reject) => {
+        let settled = false, timer = null;
+        const finish = error => { if (settled) return; settled = true; if (timer !== null) clearTimeout(timer); error ? reject(error) : resolve(); };
+        let script = document.querySelector('script[data-wml-cloudsave-gis="true"]');
+        if (!script) {
+          script = document.createElement('script');
+          script.src = 'https://accounts.google.com/gsi/client';
+          script.async = true; script.defer = true;
+          script.setAttribute('data-wml-cloudsave-gis', 'true');
+        }
+        script.addEventListener('load', () => finish(isGoogleIdentityReady() ? null : new Error('Google Identity 라이브러리를 초기화하지 못했습니다.')), { once: true });
+        script.addEventListener('error', () => finish(new Error('Google Identity 라이브러리를 불러오지 못했습니다.')), { once: true });
+        timer = setTimeout(() => finish(new Error('Google Identity 라이브러리 로딩 시간이 초과되었습니다.')), 10000);
+        if (!script.isConnected) document.head.appendChild(script);
+        if (isGoogleIdentityReady()) finish();
+      }).catch(error => { browserGISLoadPromise = null; browserGISLoadError = String(error && error.message || error); throw error; });
+      return browserGISLoadPromise;
+    }
+
+    function isCurrentAuthAttempt(attempt, sessionAtStart) {
+      return attempt === authAttemptSerial && sessionAtStart === sessionGeneration;
     }
 
     function readStorage(key) {
@@ -256,76 +304,55 @@ WML.define({
       authStatus = 'connected';
     }
 
-    function requestNativeGoogleToken(nonce, forceSelectAccount) {
-      const host = window.WMLHost;
-      const hasNativeStart = host && (
-        typeof host.startGoogleDriveAuthWithPolicy === 'function' ||
-        typeof host.startGoogleDriveAuth === 'function'
-      );
-      if (!hasNativeStart || typeof host.takePendingStateForNonce !== 'function') return null;
+    function requestNativeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {
+      if (AUTH_ADAPTER !== 'android-native') return null;
+      const host = nativeAuthHost;
+      if (!host || typeof host.takePendingStateForNonce !== 'function')
+        return Promise.reject(new Error('Android 네이티브 Google 결과 조회 API를 사용할 수 없습니다. 웹 인증으로 전환하지 않았습니다.'));
+      const hasPolicyStart = typeof host.startGoogleDriveAuthWithPolicy === 'function';
+      const hasLegacyStart = typeof host.startGoogleDriveAuth === 'function';
+      if (!hasPolicyStart && !hasLegacyStart)
+        return Promise.reject(new Error('Android 네이티브 Google 인증 시작 API를 사용할 수 없습니다. 웹 인증으로 전환하지 않았습니다.'));
       const canCancel = typeof host.cancelGoogleDriveAuth === 'function';
-      // 0.6.1 launchers expose nonce-scoped result retrieval but may not expose
-      // native cancellation. Keep their native auth UX; local cancellation and
-      // per-attempt nonce isolation still reject late results safely.
-      if (forceSelectAccount && typeof host.startGoogleDriveAuthWithPolicy !== 'function') return null;
-
       return new Promise((resolve, reject) => {
-        let settled = false;
-        let pollTimer = null;
+        let settled = false, pollTimer = null;
         const deadline = Date.now() + (canCancel ? 90000 : 180000);
         const finish = (error, payload) => {
-          if (settled) return;
-          settled = true;
+          if (settled) return; settled = true;
           if (pollTimer !== null) clearTimeout(pollTimer);
           if (activeAuthCancel === cancel) activeAuthCancel = null;
-          if (error) {
+          if (error) { if (canCancel) { try { host.cancelGoogleDriveAuth(nonce); } catch (_) {} } reject(error); return; }
+          if (!isCurrentAuthAttempt(attempt, sessionAtStart)) {
             if (canCancel) { try { host.cancelGoogleDriveAuth(nonce); } catch (_) {} }
-            reject(error);
-          } else {
-            try { acceptAccessToken(payload, nonce); resolve(); }
-            catch (failure) {
-              if (canCancel) { try { host.cancelGoogleDriveAuth(nonce); } catch (_) {} }
-              reject(failure);
-            }
+            reject(new Error('이전 Android 인증 응답을 무시했습니다.')); return;
           }
+          try { acceptAccessToken(payload, nonce); resolve(); }
+          catch (failure) { if (canCancel) { try { host.cancelGoogleDriveAuth(nonce); } catch (_) {} } reject(failure); }
         };
         const cancel = () => finish(new Error('Google 인증 요청을 취소했습니다.'));
         activeAuthCancel = cancel;
         try {
-          if (typeof host.startGoogleDriveAuthWithPolicy === 'function') {
-            host.startGoogleDriveAuthWithPolicy(nonce, !!forceSelectAccount);
-          } else host.startGoogleDriveAuth(nonce);
-        } catch (error) {
-          finish(new Error('Android Google 권한 요청을 시작하지 못했습니다: ' +
-            String(error && error.message || error)));
-          return;
-        }
+          if (hasPolicyStart) host.startGoogleDriveAuthWithPolicy(nonce, !!forceSelectAccount);
+          else host.startGoogleDriveAuth(nonce);
+          // Legacy 0.6.1 has no policy overload: keep native auth, without a forced picker hint.
+        } catch (error) { finish(new Error('Android Google 권한 요청을 시작하지 못했습니다: ' + String(error && error.message || error))); return; }
         const poll = () => {
           if (settled) return;
+          if (!isCurrentAuthAttempt(attempt, sessionAtStart)) { finish(new Error('Android 인증 세션이 변경되어 이전 요청을 취소했습니다.')); return; }
           let raw = '';
           try { raw = host.takePendingStateForNonce(nonce) || ''; }
-          catch (error) {
-            finish(new Error('Android Google 인증 결과를 읽지 못했습니다: ' +
-              String(error && error.message || error)));
-            return;
-          }
+          catch (error) { finish(new Error('Android Google 인증 결과를 읽지 못했습니다: ' + String(error && error.message || error))); return; }
           if (raw) {
             let payload;
-            try { payload = JSON.parse(raw); }
-            catch (_) { finish(new Error('Android Google 인증 결과 형식이 올바르지 않습니다.')); return; }
-            finish(null, payload);
-            return;
+            try { payload = JSON.parse(raw); } catch (_) { finish(new Error('Android Google 인증 결과 형식이 올바르지 않습니다.')); return; }
+            finish(null, payload); return;
           }
-          if (Date.now() >= deadline) {
-            finish(new Error('Android Google 권한 요청 시간이 초과되었습니다. 다시 연결을 누르세요.'));
-            return;
-          }
+          if (Date.now() >= deadline) { finish(new Error('Android Google 권한 요청 시간이 초과되었습니다. 다시 연결을 누르세요.')); return; }
           pollTimer = setTimeout(poll, 250);
         };
         poll();
       });
     }
-
     function requestGoogleToken(forceSelectAccount) {
       const nonce = createAuthNonce();
       const nativeTask = requestNativeGoogleToken(nonce, !!forceSelectAccount);
@@ -429,9 +456,9 @@ WML.define({
 
     function attemptNativeSessionRestore() {
       if (startupRestoreAttempted || explicitLogout || !hadPreviousAuth || hasToken()) return;
-      const host = window.WMLHost;
-      if (!host || typeof host.startGoogleDriveAuthWithPolicy !== 'function' ||
-          typeof host.takePendingStateForNonce !== 'function') return;
+      if (AUTH_ADAPTER !== 'android-native' || !nativeAuthHost ||
+          (typeof nativeAuthHost.startGoogleDriveAuthWithPolicy !== 'function' && typeof nativeAuthHost.startGoogleDriveAuth !== 'function') ||
+          typeof nativeAuthHost.takePendingStateForNonce !== 'function') return;
       startupRestoreAttempted = true;
       const attempt = ++authAttemptSerial;
       authStartedAt = Date.now();
@@ -447,7 +474,7 @@ WML.define({
       authStatus = 'restoring';
       message = 'Android에 저장된 Google 승인 상태를 확인하고 있습니다.';
       render();
-      const task = requestNativeGoogleToken(nonce, false);
+      const task = requestNativeGoogleToken(nonce, false, attempt, sessionGeneration);
       if (!task) { authStatus = 'reauth-required'; return; }
       task.then(() => refreshSlots())
         .then(() => {
@@ -1233,7 +1260,7 @@ WML.define({
       authCompletedAt = 0;
       const forceSelectAccount = explicitLogout;
       let task;
-      try { task = requestGoogleToken(forceSelectAccount); }
+      try { task = requestGoogleToken(forceSelectAccount, attempt); }
       catch (error) { task = Promise.reject(error); }
       authStatus = 'authenticating';
       busy = true;
