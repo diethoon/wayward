@@ -329,6 +329,16 @@ function pass(name, fn) {
     pair.game.postMessage({ type: 'wayward-cloud-auth-activate', ...envelope(ready.sessionId) }); await game.waitFor(x => x.type === 'wayward-cloud-auth-active'); await delay(20); page.clickConnect();
     page.fireLongTimer(120000); const error = await game.waitFor(x => x.type === 'wayward-cloud-auth-error'); assert.equal(error.code, 'auth-timeout'); pair.game.close();
   }));
+  tasks.push(pass('pagehide before activate notifies pending candidate ports', async () => {
+    const page = createPage(); const pair = channel(); const game = listen(pair.game);
+    page.initEvent({ data: initData(), port: pair.page });
+    await game.waitFor(x => x.type === 'wayward-cloud-auth-ready');
+    page.pagehide();
+    const error = await game.waitFor(x => x.type === 'wayward-cloud-auth-error');
+    assert.equal(error.code, 'auth-page-unloaded');
+    assert.equal(error.appId, APP_ID);
+    pair.game.close();
+  }));
   tasks.push(pass('pagehide/reload notifies original game via MessagePort', async () => {
     const page = createPage(); const pair = channel(); const game = listen(pair.game);
     page.initEvent({ data: initData(), port: pair.page }); const ready = await game.waitFor(x => x.type === 'wayward-cloud-auth-ready');
