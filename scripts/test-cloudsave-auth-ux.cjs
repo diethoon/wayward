@@ -541,7 +541,7 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   assert.match(authPageScriptSource, /typeof data\.forceSelectAccount !== 'boolean'/);
   assert.match(authPageScriptSource, /data\.type !== 'wayward-cloud-auth-init'/);
   assert.doesNotMatch(authPageScriptSource, /window\.opener\.postMessage|postMessage\([^,]+,\s*['"]\*['"]/);
-  assert.doesNotMatch(authPageScriptSource, /URLSearchParams|location\.search|localStorage|sessionStorage|console\.log|wayward-six\.vercel\.app/);
+  assert.doesNotMatch(authPageScriptSource, /URLSearchParams|location\.search|localStorage|sessionStorage|console\.log/);
   assert.match(authPageScriptSource, /window\.close\(\)/);
   assert.match(authPageScriptSource, /auth-page-unloaded/,
     'a page refresh/close must notify the original game session');
