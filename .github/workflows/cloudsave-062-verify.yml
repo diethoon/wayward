@@ -46,6 +46,7 @@ jobs:
           node --check cloud-save/crypto.js
           node --check scripts/test-cloudsave-062.cjs
           node --check scripts/test-cloudsave-auth-ux.cjs
+          node --check pages-cloudsave-auth/cloud/file-auth.js
       - name: Verify 0.6.1 compatibility, auth contracts and synthetic list sizes
         run: node scripts/test-cloudsave-062.cjs
       - name: Verify environment-specific auth UX and relogin routing
@@ -62,10 +63,21 @@ jobs:
           zip -X -j .build/Wayward_Google_Drive_CloudSave_v0.6.2.zip \
             cloud-save/mod.js cloud-save/crypto.js cloud-save/README.md cloud-save/INSTALL.txt
           sha256sum .build/Wayward_Google_Drive_CloudSave_v0.6.2.zip > .build/SHA256SUMS.txt
+          test -s pages-cloudsave-auth/cloud/file-auth.html
+          test -s pages-cloudsave-auth/cloud/file-auth.js
+          test -s pages-cloudsave-auth/cloud/file-auth.css
+          test -s pages-cloudsave-auth/README.md
+          zip -X -j .build/Wayward_CloudSave_GitHub_Pages_File_Auth_Source.zip \\
+            pages-cloudsave-auth/cloud/file-auth.html \\
+            pages-cloudsave-auth/cloud/file-auth.js \\
+            pages-cloudsave-auth/cloud/file-auth.css \\
+            pages-cloudsave-auth/README.md
+          sha256sum .build/Wayward_CloudSave_GitHub_Pages_File_Auth_Source.zip >> .build/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: Wayward-Google-Drive-CloudSave-v0.6.2
           path: |
             .build/Wayward_Google_Drive_CloudSave_v0.6.2.zip
+            .build/Wayward_CloudSave_GitHub_Pages_File_Auth_Source.zip
             .build/SHA256SUMS.txt
             .build/cloudsave-mod-chunks-4096.json
