@@ -301,7 +301,7 @@ const previewFixture = {
 const extractedPreview = JSON.parse(JSON.stringify(previewHelpers.extractSnapshotPreview(previewFixture)));
 assert.deepEqual(extractedPreview, {
   characterName: '테스트 캐릭터', day: 42, gold: 987654,
-  origin: '엘레나', savedAt: 1794700000123, memo: '한글 메모 첫 줄\\n둘째 줄과 긴 내용'
+  origin: '엘레나', savedAt: 1794700000123, memo: '한글 메모 첫 줄\n둘째 줄과 긴 내용'
 });
 const unknownOrigin = JSON.parse(JSON.stringify(previewHelpers.extractSnapshotPreview({
   ...previewFixture, state: { ...previewFixture.state, characters: { 'player-a': { name: 'Unknown', archetypeId: 'future_unknown_id' } } }
