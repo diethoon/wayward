@@ -585,7 +585,7 @@ async function testFileOriginUsesOneTimeMessageChannel() {
         if (message.type === 'wayward-cloud-auth-ack' && message.accepted === true) {
           pagePort.postMessage({
             type: 'wayward-cloud-auth-ack-received',
-            version: message.version, nonce: message.nonce,
+            version: message.version, appId: message.appId, nonce: message.nonce,
             requestId: message.requestId, attemptId: message.attemptId,
             sessionId: message.sessionId, accepted: true
           });
