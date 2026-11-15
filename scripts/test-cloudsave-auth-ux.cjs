@@ -299,7 +299,7 @@ function testNativeLauncherMarkerKeepsNativeAdapterEvenWithoutAuthMethods() {
     '    let browserGISLoadPromise = null;'
   );
   function select(host, protocol = 'https:', origin = 'https://wayward-six.vercel.app') {
-    return vm.runInNewContext(adapterSource + '\\n;({ AUTH_ADAPTER, nativeLauncherContext })', {
+    return vm.runInNewContext(adapterSource + '\n;({ AUTH_ADAPTER, nativeLauncherContext })', {
       window: { WMLHost: host, location: { protocol, origin } }
     });
   }
@@ -316,7 +316,7 @@ function testFirstConnectionAndExplicitLogoutRequirePicker() {
     '    function connectFromClick() {'
   );
   function shouldForce(explicitLogout, hadPreviousAuth) {
-    return vm.runInNewContext(helper + '\\n;shouldForceSelectAccount()', {
+    return vm.runInNewContext(helper + '\n;shouldForceSelectAccount()', {
       explicitLogout, hadPreviousAuth
     });
   }
@@ -354,7 +354,7 @@ function testExplicitLogoutSuppressesStartupRestoreAndSlotRefresh() {
     render: () => {},
     Date, Promise, Error, String
   };
-  vm.runInNewContext(restoreSource + '\n' + openSource + '\\n;open()', context);
+  vm.runInNewContext(restoreSource + '\n' + openSource + '\n;open()', context);
   assert.equal(opened, 1);
   assert.equal(refreshed, 0, 'explicit logout must not auto-fetch the Drive slot list');
 }
