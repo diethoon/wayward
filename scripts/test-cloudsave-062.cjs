@@ -386,9 +386,9 @@ const cryptoRoundTrip = JSON.parse(execFileSync(process.execPath, ['-e', cryptoR
 assert.deepEqual(cryptoRoundTrip, { encrypted: true, decrypted: true, plaintextHidden: true });
 
 (async () => {
-globalThis.crypto = crypto.webcrypto;
-globalThis.btoa = value => Buffer.from(value, 'binary').toString('base64');
-globalThis.atob = value => Buffer.from(value, 'base64').toString('binary');
+assert.ok(globalThis.crypto && globalThis.crypto.subtle, 'Node WebCrypto is available for sidecar mock');
+if (typeof globalThis.btoa !== 'function') globalThis.btoa = value => Buffer.from(value, 'binary').toString('base64');
+if (typeof globalThis.atob !== 'function') globalThis.atob = value => Buffer.from(value, 'base64').toString('binary');
 require(cryptoPath);
 const currentModSource = fs.readFileSync(modPath, 'utf8');
 const helperStart = currentModSource.indexOf('    function extractSnapshotPreview(snapshot) {');
