@@ -131,7 +131,7 @@ requireText('const nativeLauncherContext = !!nativeAuthHost', 'native launcher m
 requireText('if (forceSelectAccount && !hasPolicyStart)', 'forced native account selection never degrades to legacy silent login');
 requireText('return explicitLogout || !hadPreviousAuth;', 'first connection and explicit logout account selection');
 requireText('function requestBrowserGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart)', 'direct GIS browser adapter');
-requireText('function requestUnsupportedFileGoogleToken()', 'standalone file-origin fail-closed adapter');
+requireText('function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart)', 'standalone file-origin fail-closed adapter');
 requireText("client.requestAccessToken({ prompt: forceSelectAccount ? 'select_account' : '', state: nonce });", 'GIS popup directly from game click');
 requireText("const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';", 'least-privilege Drive scope');
 requireText("const GOOGLE_OAUTH_CLIENT_ID =", 'public GIS OAuth client identifier');
@@ -184,7 +184,7 @@ assert.doesNotMatch(nativeAuth, /forceSelectAccount\s*&&.*return null/);
 const directBrowserAuth = readSectionFromFile(
   modPath,
   '    function requestBrowserGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
-  '    function requestUnsupportedFileGoogleToken() {'
+  '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {'
 );
 assert.match(directBrowserAuth, /google\.accounts\.oauth2\.initTokenClient/);
 assert.match(directBrowserAuth, /client\.requestAccessToken\(\{ prompt: forceSelectAccount \? 'select_account' : '', state: nonce \}\)/);
@@ -194,15 +194,16 @@ assert.doesNotMatch(directBrowserAuth, /window\.open|AUTH_BRIDGE_URL|postMessage
 
 const fileAuth = readSectionFromFile(
   modPath,
-  '    function requestUnsupportedFileGoogleToken() {',
+  '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
   '    function requestGoogleToken(forceSelectAccount, attempt) {'
 );
-assert.match(fileAuth, /Promise\.reject/);
-assert.match(fileAuth, /PC file:/);
-assert.match(fileAuth, /외부 인증 페이지에 의존하지 않으므로/);
-assert.doesNotMatch(fileAuth, /window\.open|fetch\(|postMessage|AUTH_BRIDGE|127\.0\.0\.1/);
-assert.equal(fileContainsText(modPath, 'AUTH_BRIDGE_URL'), false);
-assert.equal(fileContainsText(modPath, 'AUTH_BRIDGE_ORIGIN'), false);
+assert.match(fileAuth, /window\.open\(/);
+assert.match(fileAuth, /new MessageChannel\(\)/);
+assert.match(fileAuth, /popup\.postMessage\([\s\S]*FILE_AUTH_BRIDGE_ORIGIN[\s\S]*channel\.port2/);
+assert.match(fileAuth, /isCurrentAuthAttempt\(attempt, sessionAtStart\)/);
+assert.match(fileAuth, /wayward-cloud-auth-ack-received/);
+assert.doesNotMatch(fileAuth, /event\.origin|origin\s*===\s*['"]null['"]|postMessage\([^,]+,\s*['"]\*['"]/);
+assert.doesNotMatch(fileAuth, /fetch\(|127\.0\.0\.1|localhost/);
 assert.equal(fileContainsText(modPath, 'auth-061.html'), false);
 
 const authDispatch = readSectionFromFile(
@@ -212,7 +213,7 @@ const authDispatch = readSectionFromFile(
 );
 assert.match(authDispatch, /AUTH_ADAPTER === 'android-native'.*requestNativeGoogleToken/);
 assert.match(authDispatch, /AUTH_ADAPTER === 'browser-gis'.*requestBrowserGoogleToken/);
-assert.match(authDispatch, /requestUnsupportedFileGoogleToken/);
+assert.match(authDispatch, /requestFileBridgeGoogleToken/);
 assert.doesNotMatch(authDispatch, /window\.open|fallback/);
 
 const driveFetchSource = readSectionFromFile(
@@ -304,13 +305,13 @@ requireText('if (activeMemoDialog) { closeMemoPopup(); return true; }', 'Android
 requireText('item.memoButton.hidden = !hasMemo', 'memo button hidden for empty memo');
 const standaloneFileAuth = readSectionFromFile(
   modPath,
-  '    function requestUnsupportedFileGoogleToken() {',
+  '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
   '    function requestGoogleToken(forceSelectAccount, attempt) {'
 );
-assert.ok(standaloneFileAuth.includes('Promise.reject'));
-assert.ok(standaloneFileAuth.includes('PC file://'));
-assert.ok(!standaloneFileAuth.includes('window.open'));
-assert.ok(!standaloneFileAuth.includes('postMessage'));
+assert.ok(standaloneFileAuth.includes('window.open'));
+assert.ok(standaloneFileAuth.includes('new MessageChannel()'));
+assert.ok(standaloneFileAuth.includes('FILE_AUTH_BRIDGE_ORIGIN'));
+assert.ok(standaloneFileAuth.includes('wayward-cloud-auth-ack-received'));
 
 const extractBody = readSectionFromFile(
   modPath,
