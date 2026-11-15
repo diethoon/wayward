@@ -7,7 +7,7 @@ Google Drive `appDataFolder`에 기존 CloudSave 형식으로 세이브를 저�
 
 ## 인증 구성
 
-- **Android 공식 런처:** `WMLHost.startGoogleDriveAuthWithPolicy(nonce, forceSelectAccount)`와 `WMLHost.takePendingStateForNonce(nonce)`를 우선 사용합니다. 48자리 16진수 nonce가 요청과 응답에서 일치해야 연결됩니다.
+- **Android 공식 런처:** `WMLHost.startGoogleDriveAuthWithPolicy(nonce, forceSelectAccount)`, `WMLHost.takePendingStateForNonce(nonce)`, `WMLHost.cancelGoogleDriveAuth(nonce)`를 지원하는 경우 네이티브 인증을 사용합니다. 시간 초과·로그아웃·취소 때 nonce별 요청을 무효화합니다. 취소 API가 없는 구형 런처는 정적 GIS 브라우저 인증으로 전환합니다. 48자리 16진수 nonce가 요청과 응답에서 일치해야 연결됩니다.
 - **일반 브라우저:** `https://jeiky224.github.io/cloud/auth-061.html` 전용 정적 페이지에서 Google Identity Services Token Model을 실행합니다. 0.7.x 페이지 소유 세션 브리지와 별개인 0.6.1 일회성 `accessToken` 반환 프로토콜입니다.
 - **Drive API:** 게임 페이지가 Google Drive API를 직접 호출합니다. 별도 백엔드, Worker, OAuth Client Secret, Refresh Token 중계는 추가하지 않습니다.
 - **토큰:** access token은 현재 페이지 메모리에만 둡니다. URL, localStorage, sessionStorage, 게임 세이브 및 로그에 저장하지 않습니다.
