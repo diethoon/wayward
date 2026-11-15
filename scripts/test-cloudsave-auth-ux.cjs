@@ -68,7 +68,7 @@ async function testLegacyAndroidRelogin() {
   assert.equal(calls.some(call => call[0] === 'take'), true);
 }
 
-async function testModernAndroidPolicy() {
+async function testAndroid061PolicyWithoutNativeCancel() {
   const nonce = 'b'.repeat(48);
   let selected = null;
   const host = {
@@ -331,7 +331,7 @@ function testFileBridgeIsIsolatedAndOriginChecked() {
 
 async function main() {
   await testLegacyAndroidRelogin();
-  await testModernAndroidPolicy();
+  await testAndroid061PolicyWithoutNativeCancel();
   await testAndroidStaleResponseRejected();
   await testAndroidCancelIsNonceScoped();
   await testBrokenNativeBridgeDoesNotFallback();
