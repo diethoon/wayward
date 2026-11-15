@@ -167,11 +167,12 @@ assert.match(refresh, /files\(id,name,mimeType,modifiedTime,size\)/);
 assert.match(refresh, /pageSize: '1000'/);
 assert.match(refresh, /name contains/);
 
-const normalizerSource = readSectionFromFile(
+const normalizerDeclaration = '    function normalizeDriveSlotFiles(files) {';
+const normalizerSource = normalizerDeclaration + readSectionFromFile(
   modPath,
-  '    function normalizeDriveSlotFiles(files) {',
+  normalizerDeclaration,
   '    function validateMetadataCache(value) {'
-).trim();
+);
 const normalizeDriveSlotFiles = vm.runInNewContext('(' + normalizerSource + ')', {
   FILE_PREFIX: 'wayward-cloud-slot-'
 });
