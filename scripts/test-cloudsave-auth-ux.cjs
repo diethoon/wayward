@@ -37,7 +37,7 @@ function makeNativeHarness(host, options = {}) {
     '    function validateDirectGISOrigin() {'
   );
   const requestNativeGoogleToken = vm.runInNewContext(
-    code + '\\n;requestNativeGoogleToken', context
+    code + '\n;requestNativeGoogleToken', context
   );
   return { context, accepted, requestNativeGoogleToken };
 }
@@ -194,7 +194,7 @@ function createBrowserHarness(options = {}) {
     '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {'
   );
   const api = vm.runInNewContext(
-    code + '\\n;({ validateDirectGISOrigin, requestBrowserGoogleToken })',
+    code + '\n;({ validateDirectGISOrigin, requestBrowserGoogleToken })',
     context
   );
   return { api, context, calls, accepted, getTokenCallback: () => tokenCallback, getErrorCallback: () => errorCallback };
@@ -288,7 +288,7 @@ function testAdapterDispatchDoesNotCrossFallback() {
     requestBrowserGoogleToken: (...args) => { calls.push(['browser', ...args]); return 'browser-task'; },
     requestFileBridgeGoogleToken: (...args) => { calls.push(['file', ...args]); return 'file-task'; }
   };
-  const route = vm.runInNewContext(dispatch + '\\n;requestGoogleToken', context);
+  const route = vm.runInNewContext(dispatch + '\n;requestGoogleToken', context);
   assert.equal(route(true, 23), 'native-task');
   assert.equal(calls.length, 1);
   assert.equal(calls[0][0], 'native');
