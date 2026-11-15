@@ -8,7 +8,8 @@ Wayward Google Drive CloudSave — WML v0.6.2
 
 인증
 - 브라우저 정적 인증 페이지: https://jeiky224.github.io/cloud/auth-061.html
-- Android 공식 런처: WMLHost.startGoogleDriveAuthWithPolicy(nonce, forceSelectAccount), takePendingStateForNonce(nonce)
+- Android 공식 런처: WMLHost.startGoogleDriveAuthWithPolicy(nonce, forceSelectAccount), takePendingStateForNonce(nonce), cancelGoogleDriveAuth(nonce)
+- 취소 API가 없는 구형 런처는 네이티브 요청을 시작하지 않고 정적 GIS 브라우저 인증으로 전환합니다.
 - 0.6.1 일회성 accessToken 응답 구조를 유지합니다. 0.7.x 페이지 소유 세션 브리지와 혼합하지 않습니다.
 - 인증 nonce는 24바이트 난수의 48자리 16진수입니다.
 - Access Token과 Refresh Token은 localStorage, sessionStorage, URL, 게임 세이브에 저장하지 않습니다.
