@@ -135,7 +135,7 @@ requireText("bridgeUrl.searchParams.set('login', forceSelectAccount ? 'select_ac
 requireText('forceSelectAccount', 'native account selection policy');
 requireText('closeWatch = setInterval', 'closed auth popup cleanup');
 requireText('activeAuthCancel', 'cancellable pending authentication');
-requireText("typeof host.cancelGoogleDriveAuth !== 'function'", 'native cancellation capability gate');
+requireText("const canCancel = typeof host.cancelGoogleDriveAuth === 'function';", 'optional native cancellation and 0.6.1 compatibility');
 requireText('host.cancelGoogleDriveAuth(nonce)', 'native request cancellation on timeout or abort');
 requireText('function invalidateDriveSession()', 'session generation invalidation');
 requireText('driveRequestControllers', 'in-flight Drive request tracking');
@@ -170,7 +170,8 @@ const nativeAuth = readSectionFromFile(
   '    function requestGoogleToken(forceSelectAccount) {'
 );
 assert.match(nativeAuth, /host\.cancelGoogleDriveAuth\(nonce\)/);
-assert.match(nativeAuth, /typeof host\.cancelGoogleDriveAuth !== 'function'/);
+assert.match(nativeAuth, /const canCancel = typeof host\.cancelGoogleDriveAuth === 'function'/);
+assert.match(nativeAuth, /canCancel \? 90000 : 180000/);
 
 const driveFetchSource = readSectionFromFile(
   modPath,
@@ -211,7 +212,7 @@ const refresh = readSectionFromFile(modPath, '    function refreshSlots() {', ' 
 assert.match(refresh, /files\.list|drive\/v3\/files/);
 assert.doesNotMatch(refresh, /readSlotEnvelope|decryptSnapshot|alt=media/,
   'the list must not download or decrypt save bodies');
-assert.match(refresh, /files\(id,name,mimeType,modifiedTime,size\)/);
+assert.match(refresh, /files\(id,name,mimeType,modifiedTime,size,appProperties\)/);
 assert.match(refresh, /pageSize: '1000'/);
 assert.match(refresh, /name contains/);
 
@@ -245,6 +246,90 @@ for (const count of [0, 20, 100, 500]) {
   }));
 }
 
+
+requireText('files(id,name,mimeType,modifiedTime,size,appProperties)', 'Drive appProperties sidecar pointer listing');
+requireText("parents: ['appDataFolder']", 'encrypted preview sidecar stays in appDataFolder');
+requireText('wmlPreviewId: previewId, wmlPreviewGeneration: generation', 'opaque sidecar ID and generation only');
+requireText('function uploadPreviewSidecar(file, snapshot)', 'encrypted preview sidecar writer');
+requireText('function readSlotPreviewSidecar(file, session)', 'encrypted preview sidecar reader');
+requireText('function clearSlotPreview(file)', 'old sidecar pointer cleanup');
+requireText('IntersectionObserver', 'visible-row lazy preview fetch');
+requireText('previewLoadPromises', 'duplicate preview request coalescing');
+requireText("overlay.addEventListener('cancel'", 'memo dialog native cancel handling');
+requireText('event.target === overlay', 'memo popup outside click handling');
+requireText('function closeMemoPopup()', 'memo popup idempotent close');
+requireText('if (activeMemoDialog) { closeMemoPopup(); return true; }', 'Android back closes memo before CloudSave window');
+requireText('item.memoButton.hidden = !hasMemo', 'memo button hidden for empty memo');
+requireText("protocol === 'file:' || rawOrigin === 'null'", 'file origin one-click GIS handoff');
+requireText('window.open(bridgeUrl.toString()', 'file-origin GIS popup remains user-gesture synchronous');
+
+const browserAuth = readSectionFromFile(
+  modPath,
+  '    function requestGoogleToken(forceSelectAccount) {',
+  '    function attemptNativeSessionRestore() {'
+);
+assert.match(browserAuth, /protocol === 'file:' \|\| rawOrigin === 'null'/);
+assert.match(browserAuth, /window\.open\(bridgeUrl\.toString\(/);
+assert.match(browserAuth, /event\.source !== bridge/);
+assert.match(browserAuth, /payload\.nonce !== nonce/);
+
+const extractBody = readSectionFromFile(
+  modPath,
+  '    function extractSnapshotPreview(snapshot) {',
+  '    function buildPreviewSnapshot(snapshot, generation) {'
+);
+const buildBody = readSectionFromFile(
+  modPath,
+  '    function buildPreviewSnapshot(snapshot, generation) {',
+  '    function formatPreviewSummary(preview) {'
+);
+const previewHelpers = vm.runInNewContext(
+  '(function(){ function extractSnapshotPreview(snapshot) {' + extractBody +
+  ' function buildPreviewSnapshot(snapshot, generation) {' + buildBody +
+  ' return { extractSnapshotPreview, buildPreviewSnapshot }; })()'
+);
+const previewFixture = {
+  schema: 'wayward-cloud-save', version: 1, nativeFormat: 1, savedAt: 1794700000123,
+  memo: '한글 메모 첫 줄\\n둘째 줄과 긴 내용',
+  state: {
+    primaryCharacterId: 'player-a',
+    characters: { 'player-a': { name: '테스트 캐릭터', archetypeId: 'elena_farmgirl' } },
+    day: 42,
+    economy: { gold: 987654 }
+  }
+};
+const extractedPreview = JSON.parse(JSON.stringify(previewHelpers.extractSnapshotPreview(previewFixture)));
+assert.deepEqual(extractedPreview, {
+  characterName: '테스트 캐릭터', day: 42, gold: 987654,
+  origin: '엘레나', savedAt: 1794700000123, memo: '한글 메모 첫 줄\\n둘째 줄과 긴 내용'
+});
+const unknownOrigin = JSON.parse(JSON.stringify(previewHelpers.extractSnapshotPreview({
+  ...previewFixture, state: { ...previewFixture.state, characters: { 'player-a': { name: 'Unknown', archetypeId: 'future_unknown_id' } } }
+})));
+assert.equal(unknownOrigin.origin, '', 'unknown archetypes must not be guessed or translated');
+const previewSnapshot = JSON.parse(JSON.stringify(previewHelpers.buildPreviewSnapshot(previewFixture, 'generation-123')));
+assert.equal(previewSnapshot.previewGeneration, 'generation-123');
+assert.deepEqual(Object.keys(previewSnapshot.state).sort(), ['characters','day','economy','primaryCharacterId']);
+
+const cryptoRoundTripScript = [
+  "const nodeCrypto = require('node:crypto');",
+  "globalThis.crypto = nodeCrypto.webcrypto;",
+  "globalThis.btoa = value => Buffer.from(value, 'binary').toString('base64');",
+  "globalThis.atob = value => Buffer.from(value, 'base64').toString('binary');",
+  "require(" + JSON.stringify(cryptoPath) + ");",
+  "(async () => {",
+  "  const input = " + JSON.stringify(previewSnapshot) + ";",
+  "  const encrypted = await globalThis.WMLGoogleDriveCrypto.encryptSnapshotEmbedded(input);",
+  "  const decrypted = await globalThis.WMLGoogleDriveCrypto.decryptSnapshotEmbedded(encrypted);",
+  "  if (JSON.stringify(decrypted) !== JSON.stringify(input)) throw new Error('preview encrypt/decrypt mismatch');",
+  "  const visible = JSON.stringify(encrypted);",
+  "  if (visible.includes('테스트 캐릭터') || visible.includes('한글 메모')) throw new Error('preview plaintext leaked');",
+  "  process.stdout.write(JSON.stringify({ encrypted: true, decrypted: true, plaintextHidden: true }));",
+  "})().catch(error => { console.error(error); process.exit(1); });"
+].join('\\n');
+const cryptoRoundTrip = JSON.parse(execFileSync(process.execPath, ['-e', cryptoRoundTripScript], { encoding: 'utf8', timeout: 20000 }));
+assert.deepEqual(cryptoRoundTrip, { encrypted: true, decrypted: true, plaintextHidden: true });
+
 const duplicateResult = normalizeDriveSlotFiles([
   { id: 'old', name: 'wayward-cloud-slot-7.json', modifiedTime: '2026-01-01T00:00:00Z', size: 1 },
   { id: 'new', name: 'wayward-cloud-slot-7.json', modifiedTime: '2026-02-01T00:00:00Z', size: 2 },
@@ -262,7 +347,7 @@ for (const [start, end] of [
   ['    function buildSnapshot()', '    function firstValue(root'],
   ['    function applySnapshot(snapshot)', '    function isConnected()'],
   ['    async function writeSlotEnvelope(slot, envelope)', '    async function deleteSlot(slot)'],
-  ['    async function deleteSlot(slot)', '    function buildSnapshot()']
+  ['    async function deleteSlot(slot)', '    function extractSnapshotPreview(snapshot)']
 ]) {
   assert.equal(readSectionFromFile(modPath, start, end), readSectionFromFile(baselinePath, start, end),
     'protected 0.6.1 data/game logic changed: ' + start);
