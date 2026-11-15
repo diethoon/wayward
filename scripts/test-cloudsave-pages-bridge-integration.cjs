@@ -296,6 +296,23 @@ function pass(name, fn) {
     const ack = await game.waitFor(x => x.type === 'wayward-cloud-auth-ack-received'); assert.equal(ack.accepted, true);
     pair.game.close();
   }));
+  tasks.push(pass('lost ACK fails closed without repeating the token', async () => {
+    const page = createPage(); const pair = channel(); const game = listen(pair.game);
+    page.initEvent({ data: initData(), port: pair.page });
+    const ready = await game.waitFor(x => x.type === 'wayward-cloud-auth-ready');
+    pair.game.postMessage({ type: 'wayward-cloud-auth-activate', ...envelope(ready.sessionId) });
+    await game.waitFor(x => x.type === 'wayward-cloud-auth-active');
+    await delay(20); page.clickConnect();
+    page.tokenResponse({ access_token: 'mock-token-not-real', expires_in: 3600, scope: SCOPE, state: page.getRequestOverride().state });
+    await game.waitFor(x => x.type === 'wayward-cloud-auth-success');
+    page.fireLongTimer(15000);
+    await delay(30);
+    assert.equal(game.messages.filter(x => x.type === 'wayward-cloud-auth-success').length, 1);
+    assert.equal(game.messages.some(x => x.type === 'wayward-cloud-auth-ack-received'), false,
+      'missing ACK must not manufacture ack-received');
+    assert.equal(page.closeWindow(), false, 'finishPage reports through the page state and deferred close');
+    pair.game.close();
+  }));
   tasks.push(pass('ACK can be delayed without duplicate success', async () => {
     const page = createPage(); const pair = channel(); const game = listen(pair.game);
     page.initEvent({ data: initData(), port: pair.page }); const ready = await game.waitFor(x => x.type === 'wayward-cloud-auth-ready');
