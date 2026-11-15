@@ -610,7 +610,6 @@ async function testFileOriginUsesOneTimeMessageChannel() {
       let n = 0;
       return () => (++n).toString(16).padStart(48, '0');
     })(),
-    isCurrentAuthAttempt(attempt, session) { return attempt === authAttemptSerial && session === sessionGeneration; },
     acceptAccessToken(payload, nonce) {
       assert.equal(payload.nonce, nonce);
       accepted.push(payload);
