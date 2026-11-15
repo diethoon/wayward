@@ -131,7 +131,7 @@ requireText('const nativeLauncherContext = !!nativeAuthHost', 'native launcher m
 requireText('if (forceSelectAccount && !hasPolicyStart)', 'forced native account selection never degrades to legacy silent login');
 requireText('return explicitLogout || !hadPreviousAuth;', 'first connection and explicit logout account selection');
 requireText('function requestBrowserGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart)', 'direct GIS browser adapter');
-requireText('function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart)', 'standalone file-origin fail-closed adapter');
+requireText('function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart)', 'PC file-origin MessageChannel auth adapter');
 requireText("client.requestAccessToken({ prompt: forceSelectAccount ? 'select_account' : '', state: nonce });", 'GIS popup directly from game click');
 requireText("const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';", 'least-privilege Drive scope');
 requireText("const GOOGLE_OAUTH_CLIENT_ID =", 'public GIS OAuth client identifier');
