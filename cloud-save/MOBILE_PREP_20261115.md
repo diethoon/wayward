@@ -53,7 +53,7 @@ For the preview implementation, the intended exact lookup is:
 The pinned game source's archetype registry confirms these IDs and labels:
 - elena_farmgirl -> registry name "엘레나"; tagline "농가 출신 여성. 19세. 결혼한 지 3주 됨."
 - mara_citygirl -> registry name "마라"; tagline "상인의 딸. 23세. 지금껏 관계를 맺어 본 남자는 한 명뿐."
-- pippa_waif -> registry name "피파"; tagline describes a woman raised above a locksmith shop; do not infer a different occupation label.
+- pippa_waif -> registry name "피파"; tagline is "작고 가녀리며 묘하게 사랑스러운 여인. 21세."; the locksmith-shop upbringing appears in the separate backstory field, not the tagline.
 
 The registry evidence is in analysis_parts/Wayward_MOD_v2.107.part039.txt at the pinned source commit. Do not infer labels for unrecognized archetype IDs. Omit missing values. Do not use Drive modifiedTime as the game's save timestamp.
 
