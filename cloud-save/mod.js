@@ -81,7 +81,10 @@ WML.define({
     const fileOrigin = initialProtocol === 'file:' || initialOrigin === 'null';
     // Freeze the adapter once; account-selection policy never changes transport.
     const AUTH_ADAPTER = nativeLauncherContext ? 'android-native' :
-      (fileOrigin ? 'file-unsupported' : 'browser-gis');
+      (fileOrigin ? 'file-bridge' : 'browser-gis');
+    const FILE_AUTH_BRIDGE_URL = 'https://wayward-six.vercel.app/auth-page/index.html';
+    const FILE_AUTH_BRIDGE_ORIGIN = 'https://wayward-six.vercel.app';
+    const FILE_AUTH_BRIDGE_VERSION = 2;
     let browserGISLoadPromise = null;
     let browserGISLoadError = '';
     const FILE_PREFIX = 'wayward-cloud-slot-';
@@ -434,19 +437,206 @@ WML.define({
       });
     }
 
-    function requestUnsupportedFileGoogleToken() {
-      return Promise.reject(new Error(
-        'PC file:// 환경은 Google 브라우저 OAuth의 허용된 JavaScript Origin이 아닙니다. ' +
-        'CloudSave는 PC 런처, Remote Host, 로컬 서버 또는 외부 인증 페이지에 의존하지 않으므로 ' +
-        '이 환경에서는 인증을 시작하지 않습니다. HTTPS 웹 Origin에서 실행하거나 공식 네이티브 앱 인증 경로를 사용하세요.'
-      ));
+    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {
+      if (AUTH_ADAPTER !== 'file-bridge') {
+        return Promise.reject(new Error('PC file 인증 어댑터가 아닙니다.'));
+      }
+      if (typeof window.open !== 'function' || typeof MessageChannel !== 'function') {
+        return Promise.reject(new Error('이 브라우저는 보안 인증 팝업 또는 MessageChannel을 지원하지 않습니다.'));
+      }
+      let requestId, attemptId;
+      try {
+        requestId = createAuthNonce();
+        attemptId = createAuthNonce();
+      } catch (error) {
+        return Promise.reject(error);
+      }
+      return new Promise((resolve, reject) => {
+        let popup = null;
+        let port = null;
+        let retryTimer = null;
+        let handshakeTimer = null;
+        let requestTimer = null;
+        let popupWatchTimer = null;
+        let sessionId = '';
+        let settled = false;
+        let resultAccepted = false;
+
+        const clearTimer = timer => {
+          if (timer !== null) clearTimeout(timer);
+          return null;
+        };
+        const sendToBridge = (type, extra) => {
+          if (!port || !sessionId) return false;
+          try {
+            port.postMessage(Object.assign({
+              type,
+              version: FILE_AUTH_BRIDGE_VERSION,
+              nonce,
+              requestId,
+              attemptId,
+              sessionId
+            }, extra || {}));
+            return true;
+          } catch (_) {
+            return false;
+          }
+        };
+        const cleanup = () => {
+          retryTimer = clearTimer(retryTimer);
+          handshakeTimer = clearTimer(handshakeTimer);
+          requestTimer = clearTimer(requestTimer);
+          if (popupWatchTimer !== null) clearInterval(popupWatchTimer);
+          popupWatchTimer = null;
+          if (port) {
+            try { port.close(); } catch (_) {}
+            port = null;
+          }
+          if (activeAuthCancel === cancel) activeAuthCancel = null;
+        };
+        const finish = error => {
+          if (settled) return;
+          settled = true;
+          if (error && sessionId) {
+            try { sendToBridge('wayward-cloud-auth-cancel'); } catch (_) {}
+          }
+          cleanup();
+          if (error) {
+            try { if (popup && !popup.closed) popup.close(); } catch (_) {}
+            reject(error instanceof Error ? error : new Error(String(error || 'Google 인증에 실패했습니다.')));
+          } else {
+            resolve();
+          }
+        };
+        const cancel = () => finish(new Error('Google 인증 요청을 취소했습니다.'));
+        activeAuthCancel = cancel;
+
+        const onPortMessage = event => {
+          if (settled || !isCurrentAuthAttempt(attempt, sessionAtStart)) {
+            if (!settled) finish(new Error('이전 PC file 인증 응답을 무시했습니다.'));
+            return;
+          }
+          const data = event && event.data;
+          if (!data || typeof data !== 'object' ||
+              data.version !== FILE_AUTH_BRIDGE_VERSION ||
+              data.nonce !== nonce || data.requestId !== requestId ||
+              data.attemptId !== attemptId) return;
+
+          if (data.type === 'wayward-cloud-auth-ready') {
+            if (sessionId || typeof data.sessionId !== 'string' ||
+                !/^[a-f0-9]{48}$/.test(data.sessionId)) return;
+            sessionId = data.sessionId;
+            retryTimer = clearTimer(retryTimer);
+            handshakeTimer = clearTimer(handshakeTimer);
+            return;
+          }
+          if (!sessionId || data.sessionId !== sessionId) return;
+
+          if (data.type === 'wayward-cloud-auth-error') {
+            const message = String(data.message || 'Google 인증이 취소되었거나 실패했습니다.');
+            try { sendToBridge('wayward-cloud-auth-ack', { accepted: false, message }); } catch (_) {}
+            finish(new Error(message));
+            return;
+          }
+          if (data.type !== 'wayward-cloud-auth-success' || resultAccepted) return;
+
+          resultAccepted = true;
+          try {
+            if (!isCurrentAuthAttempt(attempt, sessionAtStart)) {
+              throw new Error('이전 PC file 인증 응답을 무시했습니다.');
+            }
+            acceptAccessToken({
+              type: 'wayward-cloud-auth-success',
+              nonce,
+              accessToken: data.accessToken,
+              expiresIn: data.expiresIn
+            }, nonce);
+          } catch (error) {
+            try {
+              sendToBridge('wayward-cloud-auth-ack', {
+                accepted: false,
+                message: String(error && error.message || error)
+              });
+            } catch (_) {}
+            finish(error);
+            return;
+          }
+          if (!sendToBridge('wayward-cloud-auth-ack', { accepted: true })) {
+            finish(new Error('Google 인증 결과 확인 응답을 중계 창에 전달하지 못했습니다.'));
+            return;
+          }
+          finish(null);
+        };
+
+        const transmitInit = () => {
+          if (settled || sessionId) return;
+          if (!popup || popup.closed) {
+            finish(new Error('Google 인증 중계 창이 닫혔습니다. 게임에서 다시 연결하세요.'));
+            return;
+          }
+          try {
+            if (port) { try { port.close(); } catch (_) {} port = null; }
+            const channel = new MessageChannel();
+            port = channel.port1;
+            port.onmessage = onPortMessage;
+            port.onmessageerror = () => finish(new Error('PC file 인증 메시지 채널이 손상되었습니다.'));
+            if (typeof port.start === 'function') port.start();
+            // The recipient origin is fixed; the opaque file Origin is never
+            // placed in a targetOrigin field or used as an authentication claim.
+            popup.postMessage({
+              type: 'wayward-cloud-auth-init',
+              version: FILE_AUTH_BRIDGE_VERSION,
+              appId: 'wayward-cloudsave',
+              action: 'login',
+              nonce,
+              requestId,
+              attemptId,
+              forceSelectAccount: forceSelectAccount === true
+            }, FILE_AUTH_BRIDGE_ORIGIN, [channel.port2]);
+          } catch (error) {
+            if (port) { try { port.close(); } catch (_) {} port = null; }
+          }
+          retryTimer = setTimeout(transmitInit, 300);
+        };
+
+        try {
+          // This must run synchronously within the original game login click.
+          popup = window.open(
+            FILE_AUTH_BRIDGE_URL,
+            'waywardCloudSaveAuth_' + requestId,
+            'popup=yes,width=540,height=760,resizable=yes,scrollbars=yes'
+          );
+        } catch (_) {
+          popup = null;
+        }
+        if (!popup) {
+          finish(new Error('브라우저가 CloudSave 인증 팝업을 차단했습니다. 이 게임의 팝업을 허용한 뒤 다시 시도하세요.'));
+          return;
+        }
+
+        handshakeTimer = setTimeout(() => {
+          if (!sessionId) finish(new Error('CloudSave 인증 페이지와 게임 세션 연결 시간이 초과되었습니다. 다시 시도하세요.'));
+        }, 20000);
+        requestTimer = setTimeout(() => {
+          finish(new Error('PC file Google 인증 응답 시간이 초과되었습니다. 게임에서 다시 연결하세요.'));
+        }, 180000);
+        popupWatchTimer = setInterval(() => {
+          if (settled) return;
+          if (!popup || popup.closed) {
+            finish(new Error('CloudSave 인증 창이 비정상적으로 종료되었습니다.'));
+          } else if (!isCurrentAuthAttempt(attempt, sessionAtStart)) {
+            finish(new Error('게임 인증 세션이 변경되어 이전 요청을 취소했습니다.'));
+          }
+        }, 400);
+        transmitInit();
+      });
     }
 
     function requestGoogleToken(forceSelectAccount, attempt) {
       const nonce = createAuthNonce(), sessionAtStart = sessionGeneration;
       if (AUTH_ADAPTER === 'android-native') return requestNativeGoogleToken(nonce, !!forceSelectAccount, attempt, sessionAtStart);
       if (AUTH_ADAPTER === 'browser-gis') return requestBrowserGoogleToken(nonce, !!forceSelectAccount, attempt, sessionAtStart);
-      return requestUnsupportedFileGoogleToken();
+      return requestFileBridgeGoogleToken(nonce, !!forceSelectAccount, attempt, sessionAtStart);
     }
     function attemptNativeSessionRestore() {
       if (startupRestoreAttempted || explicitLogout || !hadPreviousAuth || hasToken()) return;
