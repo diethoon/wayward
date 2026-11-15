@@ -305,7 +305,7 @@ requireText('event.target === overlay', 'memo popup outside click handling');
 requireText('function closeMemoPopup()', 'memo popup idempotent close');
 requireText('if (activeMemoDialog) { closeMemoPopup(); return true; }', 'Android back closes memo before CloudSave window');
 requireText('item.memoButton.hidden = !hasMemo', 'memo button hidden for empty memo');
-requireText("protocol !== 'file:' && origin !== 'null'", 'file adapter rejects non-file origins');
+requireText("protocol !== 'file:' && rawOrigin !== 'null'", 'file adapter rejects non-file origins');
 requireText('window.open(bridgeUrl.toString()', 'file-origin GIS popup remains user-gesture synchronous');
 
 const fileBridgeAuth = readSectionFromFile(
