@@ -7,9 +7,10 @@ Wayward Google Drive CloudSave — WML v0.6.2
 4. 게임을 다시 열고 클라우드세이브 (Google Drive)를 엽니다.
 
 인증
-- 브라우저 정적 인증 페이지: https://jeiky224.github.io/cloud/auth-061.html
-- Android 공식 런처: WMLHost.startGoogleDriveAuthWithPolicy(nonce, forceSelectAccount), takePendingStateForNonce(nonce), cancelGoogleDriveAuth(nonce)
-- 0.6.1처럼 cancelGoogleDriveAuth가 없는 경우에는 페이지 측 요청을 nonce별로 중단하고 180초 이내 응답을 기다립니다. 실제 네이티브 작업 취소는 해당 API가 제공되지 않으면 보장할 수 없습니다. 취소 API가 있는 런처는 요청별 취소와 90초 제한을 사용합니다.
+- Android 공식 런처: WMLHost.startGoogleDriveAuthWithPolicy 또는 구형 startGoogleDriveAuth, takePendingStateForNonce. 네이티브 API가 확인되면 최초 로그인과 로그아웃 후 재로그인 모두 같은 네이티브 경로를 사용합니다.
+- 0.6.1처럼 cancelGoogleDriveAuth가 없는 경우 페이지 측 대기만 nonce별로 중단하며, 실제 네이티브 계정 선택 UI는 취소할 수 없습니다. 최대 180초 대기합니다. 취소 API가 있는 브리지는 요청별 취소와 90초 제한을 사용합니다.
+- HTTP/HTTPS: Google Identity Services Token Model을 게임 화면의 연결 버튼 클릭에서 직접 실행합니다. `auth-061.html` 브리지는 사용하지 않습니다. HTTPS의 실제 게임 Origin은 Google OAuth Web Client의 Authorized JavaScript origins에 등록되어야 합니다.
+- file://: opaque Origin 제한으로 게임 내 직접 GIS를 사용할 수 없어 별도 HTTPS 파일 브리지가 필요합니다. 현재 호출 URL `https://jeiky224.github.io/cloud/auth-061.html`은 GitHub Pages main 소스에서 확인되지 않았고 실배포 응답도 검증되지 않았습니다. file:// 로그인 완료 또는 중간 화면 제거를 보장하지 않습니다.
 - 0.6.1 일회성 accessToken 응답 구조를 유지합니다. 0.7.x 페이지 소유 세션 브리지와 혼합하지 않습니다.
 - 인증 nonce는 24바이트 난수의 48자리 16진수입니다.
 - Access Token과 Refresh Token은 localStorage, sessionStorage, URL, 게임 세이브에 저장하지 않습니다.
@@ -19,7 +20,7 @@ Wayward Google Drive CloudSave — WML v0.6.2
 로그아웃
 - 현재 메모리 access token과 Android 런처가 가진 해당 access-token 캐시를 삭제합니다.
 - 명시적 로그아웃 표식을 남겨 다음 연결에 계정 선택을 요청합니다.
-- 웹은 prompt: 'select_account', Android는 forceSelectAccount=true를 사용합니다.
+- 브라우저 GIS는 prompt: 'select_account', Android는 forceSelectAccount=true를 요청합니다. 계정 선택 정책은 인증 어댑터 선택을 변경하지 않습니다.
 - 일반 로그아웃은 Google 앱 권한 철회가 아닙니다. 권한 철회는 별도 버튼으로 수행합니다.
 - 로그아웃 표식 저장은 localStorage를 우선하고 실패하면 sessionStorage를 시도합니다. 둘 다 차단되면 페이지 메모리에서만 보존됩니다.
 
@@ -32,9 +33,10 @@ Wayward Google Drive CloudSave — WML v0.6.2
 - 최신 동기화 측정은 브라우저 개발자 콘솔의 [Wayward CloudSave] metadata list metrics에서 확인합니다.
 
 지원 환경
-- localhost, 127.0.0.1, 0.0.0.0, LAN HTTP, HTTPS
-- file://는 연결 버튼 한 번으로 opener를 유지하는 GIS 인증 팝업을 동기적으로 엽니다. 기존 게임 창 안에서 GIS를 렌더링하지는 않습니다. 브라우저 팝업/opener 제한으로 막히면 팝업 허용 후 재시도해야 하며, 실환경 검증 결과를 확인해야 합니다.
-- Android 런처는 네이티브 인증 API가 있으면 우선 사용하고, API가 없으면 웹 GIS 경로로 전환합니다.
+- HTTPS 브라우저: 게임 Origin에서 direct GIS
+- HTTP: localhost, 127.0.0.1, [::1] loopback에서만 direct GIS 허용. LAN IP/원격 HTTP는 거부
+- file://: 별도 static bridge 필요. 호출된 auth-061 file is not in current Pages main tree; 실환경 경로 및 단계 수 미검증
+- Android: native bridge가 있으면 native only; no web fallback if incomplete
 
 세이브 호환성
 - 기존 Drive appDataFolder, primary 슬롯 ID·파일명·JSON envelope 및 AES-256-GCM 형식을 유지합니다.
