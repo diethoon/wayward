@@ -305,15 +305,15 @@ requireText('item.memoButton.hidden = !hasMemo', 'memo button hidden for empty m
 requireText("protocol !== 'file:' && origin !== 'null'", 'file adapter rejects non-file origins');
 requireText('window.open(bridgeUrl.toString()', 'file-origin GIS popup remains user-gesture synchronous');
 
-const browserAuth = readSectionFromFile(
+const fileBridgeAuth = readSectionFromFile(
   modPath,
-  '    function requestGoogleToken(forceSelectAccount, attempt) {',
-  '    function attemptNativeSessionRestore() {'
+  '    function requestFileBridgeGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
+  '    function requestGoogleToken(forceSelectAccount, attempt) {'
 );
-assert.match(browserAuth, /protocol === 'file:' \|\| rawOrigin === 'null'/);
-assert.match(browserAuth, /window\.open\(bridgeUrl\.toString\(/);
-assert.match(browserAuth, /event\.source !== bridge/);
-assert.match(browserAuth, /payload\.nonce !== nonce/);
+assert.match(fileBridgeAuth, /protocol !== 'file:' && origin !== 'null'/);
+assert.match(fileBridgeAuth, /window\\.open\\(bridgeUrl\\.toString\\(/);
+assert.match(fileBridgeAuth, /event\\.source !== bridge/);
+assert.match(fileBridgeAuth, /payload\\.nonce !== nonce/);
 
 const extractBody = readSectionFromFile(
   modPath,
