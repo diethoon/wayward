@@ -481,23 +481,23 @@ async function testFileOriginFailsClosedWithoutExternalAuthDependency() {
     '    function requestUnsupportedFileGoogleToken() {',
     '    function requestGoogleToken(forceSelectAccount, attempt) {'
   );
-  assert.match(fileSource, /file:\\/\\//);
+  assert.match(fileSource, /file:\/\//);
   assert.match(fileSource, /PC 런처/);
   assert.match(fileSource, /외부 인증 페이지에 의존하지 않으므로/);
-  assert.doesNotMatch(fileSource, /window\\.open|postMessage|fetch\\(|AUTH_BRIDGE_URL|127\\.0\\.0\\.1/);
+  assert.doesNotMatch(fileSource, /window\.open|postMessage|fetch\(|AUTH_BRIDGE_URL|127\.0\.0\.1/);
 
   const unsupported = vm.runInNewContext(
-    fileSource + '\\n;requestUnsupportedFileGoogleToken',
+    fileSource + '\n;requestUnsupportedFileGoogleToken',
     { Promise, Error }
   );
-  await assert.rejects(unsupported(), /PC file:\\/\\/ 환경은 Google 브라우저 OAuth/);
+  await assert.rejects(unsupported(), /PC file:\/\//);
 
-  assert.doesNotMatch(source, /AUTH_BRIDGE_URL|AUTH_BRIDGE_ORIGIN|auth-061\\.html/);
+  assert.doesNotMatch(source, /AUTH_BRIDGE_URL|AUTH_BRIDGE_ORIGIN|auth-061\.html/);
   const browserSource = section(
     '    function requestBrowserGoogleToken(nonce, forceSelectAccount, attempt, sessionAtStart) {',
     '    function requestUnsupportedFileGoogleToken() {'
   );
-  assert.doesNotMatch(browserSource, /window\\.open|AUTH_BRIDGE|postMessage/);
+  assert.doesNotMatch(browserSource, /window\.open|AUTH_BRIDGE|postMessage/);
 }
 async function main() {
   testConnectFromClickDispatchesAuthSynchronouslyAndHonorsPickerPolicy();
