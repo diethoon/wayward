@@ -594,6 +594,8 @@ async function testFileOriginUsesOneTimeMessageChannel() {
     FILE_AUTH_BRIDGE_URL: 'https://wayward-six.vercel.app/auth-page/index.html',
     FILE_AUTH_BRIDGE_ORIGIN: 'https://wayward-six.vercel.app',
     activeAuthCancel: null,
+    authAttemptSerial: 27,
+    sessionGeneration: 31,
     MessageChannel: MockMessageChannel,
     window: {
       open(url, name, features) {
@@ -608,10 +610,11 @@ async function testFileOriginUsesOneTimeMessageChannel() {
       let n = 0;
       return () => (++n).toString(16).padStart(48, '0');
     })(),
-    isCurrentAuthAttempt(attempt, session) { return attempt === 27 && session === 31; },
+    isCurrentAuthAttempt(attempt, session) { return attempt === authAttemptSerial && session === sessionGeneration; },
     acceptAccessToken(payload, nonce) {
       assert.equal(payload.nonce, nonce);
       accepted.push(payload);
+      sessionGeneration += 1;
     },
     Promise, Error, String, Date, setTimeout, clearTimeout, setInterval, clearInterval
   };
@@ -631,7 +634,8 @@ async function testFileOriginUsesOneTimeMessageChannel() {
   const staleAccepted = [];
   const staleContext = Object.assign({}, context, {
     activeAuthCancel: null,
-    isCurrentAuthAttempt() { return false; },
+    authAttemptSerial: 27,
+    sessionGeneration: 32,
     acceptAccessToken(payload) { staleAccepted.push(payload); }
   });
   const staleApi = vm.runInNewContext(
