@@ -9,7 +9,7 @@ Wayward Google Drive CloudSave — WML v0.6.2
 인증
 - Android 공식 런처: WMLHost.startGoogleDriveAuthWithPolicy 또는 구형 startGoogleDriveAuth, takePendingStateForNonce. 네이티브 API가 확인되면 최초 로그인과 로그아웃 후 재로그인 모두 같은 네이티브 경로를 사용합니다.
 - 0.6.1처럼 cancelGoogleDriveAuth가 없는 경우 페이지 측 대기만 nonce별로 중단하며, 실제 네이티브 계정 선택 UI는 취소할 수 없습니다. 최대 180초 대기합니다. 취소 API가 있는 브리지는 요청별 취소와 90초 제한을 사용합니다.
-- HTTP/HTTPS: Google Identity Services Token Model을 게임 화면의 연결 버튼 클릭에서 직접 실행합니다. `auth-061.html` 브리지는 사용하지 않습니다. HTTPS의 실제 게임 Origin은 Google OAuth Web Client의 Authorized JavaScript origins에 등록되어야 합니다.
+- HTTP/HTTPS: Google Identity Services Token Model을 게임 화면의 연결 버튼 클릭에서 직접 실행합니다. `auth-061.html` 브리지는 사용하지 않습니다. GIS callback이 누락될 때를 대비해 120초 watchdog으로 재시도 가능하게 복구합니다. HTTPS의 실제 게임 Origin은 Google OAuth Web Client의 Authorized JavaScript origins에 등록되어야 합니다. HTTP 직접 인증은 localhost loopback만 허용하며 LAN IP HTTP는 지원하지 않습니다.
 - file://: opaque Origin 제한으로 게임 내 직접 GIS를 사용할 수 없어 별도 HTTPS 파일 브리지가 필요합니다. 현재 호출 URL `https://jeiky224.github.io/cloud/auth-061.html`은 GitHub Pages main 소스에서 확인되지 않았고 실배포 응답도 검증되지 않았습니다. file:// 로그인 완료 또는 중간 화면 제거를 보장하지 않습니다.
 - 0.6.1 일회성 accessToken 응답 구조를 유지합니다. 0.7.x 페이지 소유 세션 브리지와 혼합하지 않습니다.
 - 인증 nonce는 24바이트 난수의 48자리 16진수입니다.
