@@ -46,6 +46,8 @@ WML.define({
     let startupRestoreAttempted = false;
     let authAttemptSerial = 0;
     let activeAuthCancel = null;
+    let sessionGeneration = 0;
+    const driveRequestControllers = new Set();
     let driveListGeneration = 0;
     let driveListPromise = null;
     let driveListAbortController = null;
@@ -169,7 +171,25 @@ WML.define({
       preparedSlotRead = null;
     }
 
+    function invalidateDriveSession() {
+      sessionGeneration += 1;
+      for (const controller of driveRequestControllers) {
+        try { controller.abort(); } catch (_) {}
+      }
+      driveRequestControllers.clear();
+    }
+
+    function assertDriveSession(generation) {
+      if (generation !== sessionGeneration) {
+        throw new Error('Google 계정 세션이 변경되어 진행 중인 작업을 취소했습니다.');
+      }
+      if (!hasToken()) {
+        throw new Error('Google 액세스 토큰이 만료되었습니다. 다시 연결해 주세요.');
+      }
+    }
+
     function clearToken() {
+      invalidateDriveSession();
       accessToken = '';
       tokenExpiresAt = 0;
       resetDriveListState();
@@ -211,6 +231,7 @@ WML.define({
         authStatus = 'reauth-required';
         throw new Error('Google에서 유효한 액세스 토큰 응답을 반환하지 않았습니다.');
       }
+      invalidateDriveSession();
       resetDriveListState();
       accessToken = payload.accessToken;
       authCompletedAt = Date.now();
@@ -229,8 +250,9 @@ WML.define({
         typeof host.startGoogleDriveAuthWithPolicy === 'function' ||
         typeof host.startGoogleDriveAuth === 'function'
       );
-      if (!hasNativeStart || typeof host.takePendingStateForNonce !== 'function') return null;
-      // Legacy launchers cannot force SELECT_ACCOUNT, so use GIS on explicit logout.
+      if (!hasNativeStart || typeof host.takePendingStateForNonce !== 'function' ||
+          typeof host.cancelGoogleDriveAuth !== 'function') return null;
+      // Older launchers without cancellation use the static GIS route instead.
       if (forceSelectAccount && typeof host.startGoogleDriveAuthWithPolicy !== 'function') return null;
 
       return new Promise((resolve, reject) => {
@@ -242,10 +264,15 @@ WML.define({
           settled = true;
           if (pollTimer !== null) clearTimeout(pollTimer);
           if (activeAuthCancel === cancel) activeAuthCancel = null;
-          if (error) reject(error);
-          else {
+          if (error) {
+            try { host.cancelGoogleDriveAuth(nonce); } catch (_) {}
+            reject(error);
+          } else {
             try { acceptAccessToken(payload, nonce); resolve(); }
-            catch (failure) { reject(failure); }
+            catch (failure) {
+              try { host.cancelGoogleDriveAuth(nonce); } catch (_) {}
+              reject(failure);
+            }
           }
         };
         const cancel = () => finish(new Error('Google 인증 요청을 취소했습니다.'));
@@ -433,35 +460,49 @@ WML.define({
     }
 
     async function driveFetch(path, options) {
-      await ensureAccessToken();
+      const generation = sessionGeneration;
+      const token = await ensureAccessToken();
+      assertDriveSession(generation);
       const opts = Object.assign({ method: 'GET', headers: {} }, options || {});
       opts.headers = Object.assign({}, opts.headers || {});
-      opts.headers.Authorization = 'Bearer ' + accessToken;
-      const response = await fetch('https://www.googleapis.com' + path, opts);
-      if (response.status === 401) {
-        clearToken();
-        authStatus = 'reauth-required';
-        throw new Error('Google 액세스 토큰이 만료되었거나 Google 권한이 취소되었습니다. 연결 버튼을 눌러 재인증하세요.');
+      opts.headers.Authorization = 'Bearer ' + token;
+      let requestController = null;
+      if (!opts.signal && typeof AbortController === 'function') {
+        requestController = new AbortController();
+        driveRequestControllers.add(requestController);
+        opts.signal = requestController.signal;
       }
-      if (!response.ok) {
-        let detail = '';
-        let apiError = null;
-        try {
-          const data = await response.clone().json();
-          apiError = data && data.error ? data.error : null;
-          detail = apiError && apiError.message ? apiError.message : '';
-          const reasons = apiError && Array.isArray(apiError.errors)
-            ? apiError.errors.map(item => String(item && item.reason || ''))
-            : [];
-          if (response.status === 403 &&
-              (apiError.status === 'PERMISSION_DENIED' || reasons.includes('insufficientPermissions'))) {
-            markPermissionRevoked();
-          }
-        } catch (_) { /* response body may not be JSON */ }
-        throw new Error('Google Drive 요청 실패 (' + response.status + ')' +
-          (detail ? ': ' + detail : ''));
+      try {
+        const response = await fetch('https://www.googleapis.com' + path, opts);
+        assertDriveSession(generation);
+        if (response.status === 401) {
+          clearToken();
+          authStatus = 'reauth-required';
+          throw new Error('Google 액세스 토큰이 만료되었거나 Google 권한이 취소되었습니다. 연결 버튼을 눌러 재인증하세요.');
+        }
+        if (!response.ok) {
+          let detail = '';
+          let apiError = null;
+          try {
+            const data = await response.clone().json();
+            apiError = data && data.error ? data.error : null;
+            detail = apiError && apiError.message ? apiError.message : '';
+            const reasons = apiError && Array.isArray(apiError.errors)
+              ? apiError.errors.map(item => String(item && item.reason || ''))
+              : [];
+            if (response.status === 403 &&
+                (apiError.status === 'PERMISSION_DENIED' || reasons.includes('insufficientPermissions'))) {
+              markPermissionRevoked();
+            }
+          } catch (_) { /* response body may not be JSON */ }
+          assertDriveSession(generation);
+          throw new Error('Google Drive 요청 실패 (' + response.status + ')' +
+            (detail ? ': ' + detail : ''));
+        }
+        return response;
+      } finally {
+        if (requestController) driveRequestControllers.delete(requestController);
       }
-      return response;
     }
 
     async function accountCacheStorageKey(permissionId) {
@@ -1164,62 +1205,89 @@ WML.define({
     }
 
     async function saveSlot(slot) {
+      const session = sessionGeneration;
+      assertDriveSession(session);
       const snapshot = buildSnapshot();
       snapshot.memo = String(fields.memo && fields.memo.value || '').trim();
       const envelope = await globalThis.WMLGoogleDriveCrypto.encryptSnapshotEmbedded(snapshot);
+      assertDriveSession(session);
       await writeSlotEnvelope(slot, envelope);
+      assertDriveSession(session);
       preparedSlotRead = null;
       show({ page: 'home' }, '저장 슬롯 ' + slot + '에 자동 암호화하여 저장했습니다.');
     }
 
     async function prepareSaveSlot(slot) {
+      const session = sessionGeneration;
+      assertDriveSession(session);
       const file = currentFile(slot);
       let memo = '';
       if (file) {
         // Memo is inside the encrypted snapshot. Download only the slot the user
         // explicitly selected for overwrite; never fetch slot bodies for the list.
         const envelope = await readSlotEnvelope(file);
+        assertDriveSession(session);
         if (envelope && envelope.keyMode === 'embedded-addon-v2') {
           const snapshot = await globalThis.WMLGoogleDriveCrypto.decryptSnapshotEmbedded(envelope);
+          assertDriveSession(session);
           memo = String(snapshot.memo || '');
         }
       }
+      assertDriveSession(session);
       show({ page: 'save', slot, memo });
     }
 
     async function prepareLoadSlot(slot) {
+      const session = sessionGeneration;
+      assertDriveSession(session);
       const file = currentFile(slot); if (!file) throw new Error('저장 슬롯이 비어 있습니다.');
       const envelope = await readSlotEnvelope(file);
+      assertDriveSession(session);
       preparedSlotRead = {
-        slot, fileId: file.id, modifiedTime: file.modifiedTime, envelope
+        slot, fileId: file.id, modifiedTime: file.modifiedTime, envelope,
+        sessionGeneration: session
       };
       show({ page: envelope && envelope.keyMode === 'embedded-addon-v2' ? 'load' : 'legacy-load', slot },
         envelope && envelope.keyMode === 'embedded-addon-v2' ? '' : '이전 암호화 세이브입니다. 저장 당시 암호를 입력하면 자동 암호화 형식으로 변환됩니다.');
     }
     async function loadSlot(slot) {
+      const session = sessionGeneration;
+      assertDriveSession(session);
       const file = currentFile(slot); if (!file) throw new Error('저장 슬롯이 비어 있습니다.');
       let envelope;
-      if (preparedSlotRead && preparedSlotRead.slot === slot &&
-          preparedSlotRead.fileId === file.id &&
+      if (preparedSlotRead && preparedSlotRead.sessionGeneration === session &&
+          preparedSlotRead.slot === slot && preparedSlotRead.fileId === file.id &&
           preparedSlotRead.modifiedTime === file.modifiedTime && preparedSlotRead.envelope) {
         envelope = preparedSlotRead.envelope;
       } else {
         envelope = await readSlotEnvelope(file);
       }
+      assertDriveSession(session);
       preparedSlotRead = null;
       let snapshot;
-      if (envelope && envelope.keyMode === 'embedded-addon-v2') snapshot = await globalThis.WMLGoogleDriveCrypto.decryptSnapshotEmbedded(envelope);
-      else {
+      if (envelope && envelope.keyMode === 'embedded-addon-v2') {
+        snapshot = await globalThis.WMLGoogleDriveCrypto.decryptSnapshotEmbedded(envelope);
+        assertDriveSession(session);
+      } else {
         const passphrase = String(fields.passphrase && fields.passphrase.value || '');
         if (!passphrase) throw new Error('이전 세이브의 암호화 비밀번호를 입력해 주세요.');
         snapshot = await globalThis.WMLGoogleDriveCrypto.decryptSnapshot(envelope, passphrase);
-        await writeSlotEnvelope(slot, await globalThis.WMLGoogleDriveCrypto.encryptSnapshotEmbedded(snapshot));
+        assertDriveSession(session);
+        const migratedEnvelope = await globalThis.WMLGoogleDriveCrypto.encryptSnapshotEmbedded(snapshot);
+        assertDriveSession(session);
+        await writeSlotEnvelope(slot, migratedEnvelope);
+        assertDriveSession(session);
       }
+      // No asynchronous boundary is allowed between this final guard and state application.
+      assertDriveSession(session);
       applySnapshot(snapshot); if (win) win.close(); message = '';
     }
 
     async function removeSlot(slot) {
+      const session = sessionGeneration;
+      assertDriveSession(session);
       await deleteSlot(slot);
+      assertDriveSession(session);
       preparedSlotRead = null;
       show({ page: 'home' }, '저장 슬롯 ' + slot + '을 삭제했습니다.');
     }
