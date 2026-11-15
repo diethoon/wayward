@@ -1431,11 +1431,8 @@ WML.define({
       const envelope = await globalThis.WMLGoogleDriveCrypto.encryptSnapshotEmbedded(snapshot);
       assertDriveSession(session);
       let previewWarning = '';
-      const previousFile = currentFile(slot);
-      if (previousFile && previousFile.previewId) {
-        try { await clearSlotPreview(previousFile); assertDriveSession(session); }
-        catch (error) { previewWarning = '미리보기 기존 포인터 정리는 실패했습니다.'; }
-      }
+      // Keep the old sidecar pointer until the primary save write succeeds.
+      // uploadPreviewSidecar atomically replaces the pointer, then cleans the old sidecar.
       await writeSlotEnvelope(slot, envelope);
       assertDriveSession(session);
       const savedFile = currentFile(slot);
@@ -1524,19 +1521,31 @@ WML.define({
       const session = sessionGeneration;
       assertDriveSession(session);
       const file = currentFile(slot);
-      const previewId = file && file.previewId || '';
-      await deleteSlot(slot);
+      if (!file) throw new Error('삭제할 저장 파일을 찾지 못했습니다.');
+      const previewId = file.previewId || '';
+      await driveFetch('/drive/v3/files/' + encodeURIComponent(file.id), { method: 'DELETE' });
       assertDriveSession(session);
+      driveSlots = driveSlots.filter(item => item.id !== file.id);
+      if (driveAccountCacheIdentity) writeAccountSlotCache(driveAccountCacheIdentity, driveSlots);
       let cleanupWarning = '';
       if (previewId) {
-        try { await driveFetch('/drive/v3/files/' + encodeURIComponent(previewId), { method: 'DELETE' }); assertDriveSession(session); }
-        catch (error) {
+        try {
+          await driveFetch('/drive/v3/files/' + encodeURIComponent(previewId), { method: 'DELETE' });
+          assertDriveSession(session);
+        } catch (error) {
           cleanupWarning = '연결된 암호화 미리보기 파일 정리는 실패했지만 기본 저장 파일은 삭제했습니다.';
           try { if (console && console.warn) console.warn('[Wayward CloudSave] deleted-slot sidecar cleanup failed', error); } catch (_) {}
         }
       }
       preparedSlotRead = null;
-      show({ page: 'home' }, cleanupWarning || ('저장 슬롯 ' + slot + '을 삭제했습니다.'));
+      let refreshWarning = '';
+      try { await refreshSlots(); assertDriveSession(session); }
+      catch (error) {
+        assertDriveSession(session);
+        refreshWarning = '저장은 삭제했지만 목록 새로고침은 실패했습니다.';
+      }
+      const notice = [cleanupWarning, refreshWarning].filter(Boolean).join(' ');
+      show({ page: 'home' }, notice || ('저장 슬롯 ' + slot + '을 삭제했습니다.'));
     }
 
     function formatSlotMetadata(file) {
