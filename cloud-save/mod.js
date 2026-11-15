@@ -458,6 +458,7 @@ WML.define({
         let handshakeTimer = null;
         let requestTimer = null;
         let popupWatchTimer = null;
+        let ackTimer = null;
         let sessionId = '';
         let settled = false;
         let resultAccepted = false;
@@ -486,6 +487,7 @@ WML.define({
           retryTimer = clearTimer(retryTimer);
           handshakeTimer = clearTimer(handshakeTimer);
           requestTimer = clearTimer(requestTimer);
+          ackTimer = clearTimer(ackTimer);
           if (popupWatchTimer !== null) clearInterval(popupWatchTimer);
           popupWatchTimer = null;
           if (port) {
@@ -532,6 +534,15 @@ WML.define({
           }
           if (!sessionId || data.sessionId !== sessionId) return;
 
+          if (data.type === 'wayward-cloud-auth-ack-received' && resultAccepted) {
+            if (data.accepted !== true) {
+              clearToken();
+              finish(new Error('인증 중계 창에서 게임 세션의 수신 확인을 받지 못했습니다.'));
+            } else {
+              finish(null);
+            }
+            return;
+          }
           if (data.type === 'wayward-cloud-auth-error') {
             const message = String(data.message || 'Google 인증이 취소되었거나 실패했습니다.');
             try { sendToBridge('wayward-cloud-auth-ack', { accepted: false, message }); } catch (_) {}
@@ -562,10 +573,15 @@ WML.define({
             return;
           }
           if (!sendToBridge('wayward-cloud-auth-ack', { accepted: true })) {
+            clearToken();
             finish(new Error('Google 인증 결과 확인 응답을 중계 창에 전달하지 못했습니다.'));
             return;
           }
-          finish(null);
+          ackTimer = setTimeout(() => {
+            if (settled) return;
+            clearToken();
+            finish(new Error('인증 중계 창의 결과 수신 확인이 시간 초과되었습니다.'));
+          }, 15000);
         };
 
         const transmitInit = () => {
