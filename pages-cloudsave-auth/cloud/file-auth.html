@@ -8,10 +8,10 @@
   <meta name="color-scheme" content="dark light">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://accounts.google.com/gsi/client; connect-src 'self' https://accounts.google.com/gsi/ https://oauth2.googleapis.com https://www.googleapis.com; frame-src https://accounts.google.com/gsi/ https://accounts.google.com; style-src 'self' https://accounts.google.com/gsi/style; img-src 'self' data:; base-uri 'none'; object-src 'none'; form-action 'none'">
   <title>Wayward CloudSave | PC file 인증</title>
-  <link rel="stylesheet" href="./file-auth.css?v=20261116-3">
+  <link rel="stylesheet" href="./file-auth.css?v=20261116-5">
   <script src="./config.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="./file-auth.js?v=20261116-3" defer></script>
+  <script src="./file-auth.js?v=20261116-5" defer></script>
 </head>
 <body>
   <main>
@@ -35,7 +35,7 @@
         <button id="cancel" type="button" class="secondary">취소</button>
       </div>
     </section>
-    <p class="notice">이 페이지는 GitHub Pages의 정적 파일로 동작합니다. 액세스 토큰을 URL이나 브라우저 저장소에 기록하지 않으며, 인증 결과는 이 창을 연 게임 창과 일회성 메시지 포트로만 전달합니다.</p>
+    <p class="notice">이 페이지는 GitHub Pages의 정적 파일로 동작합니다. file:// 발신 Origin은 브라우저에서 null로 표시되지만, 이는 임의의 로컬 파일에도 해당하므로 Wayward 정품이나 발신 파일의 신뢰성을 증명하지 않습니다. 액세스 토큰은 URL·브라우저 저장소·일반 window 메시지에 기록하지 않으며, 인증 결과는 확인된 opener와 일회성 MessagePort로만 전달합니다.</p>
   </main>
 </body>
 </html>
