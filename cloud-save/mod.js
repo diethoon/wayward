@@ -78,12 +78,14 @@ WML.define({
     const nativeLauncherContext = !!nativeAuthHost;
     const initialProtocol = String(window.location && window.location.protocol || '');
     const initialOrigin = String(window.location && window.location.origin || '');
-    const fileOrigin = initialProtocol === 'file:' || initialOrigin === 'null';
-    // Freeze the adapter once; account-selection policy never changes transport.
+    const fileOrigin = initialProtocol === 'file:';
+    const opaqueOrigin = initialOrigin === 'null';
+    // Only actual file:// documents use the static Pages bridge. Other opaque
+    // origins remain unsupported instead of being mistaken for local game files.
     const AUTH_ADAPTER = nativeLauncherContext ? 'android-native' :
-      (fileOrigin ? 'file-bridge' : 'browser-gis');
-    const FILE_AUTH_BRIDGE_URL = 'https://wayward-six.vercel.app/auth-page/index.html';
-    const FILE_AUTH_BRIDGE_ORIGIN = 'https://wayward-six.vercel.app';
+      (fileOrigin ? 'file-bridge' : (opaqueOrigin ? 'opaque-origin-unsupported' : 'browser-gis'));
+    const FILE_AUTH_BRIDGE_URL = 'https://jeiky224.github.io/cloud/file-auth.html';
+    const FILE_AUTH_BRIDGE_ORIGIN = 'https://jeiky224.github.io';
     const FILE_AUTH_BRIDGE_VERSION = 2;
     let browserGISLoadPromise = null;
     let browserGISLoadError = '';
@@ -659,7 +661,8 @@ WML.define({
       const nonce = createAuthNonce(), sessionAtStart = sessionGeneration;
       if (AUTH_ADAPTER === 'android-native') return requestNativeGoogleToken(nonce, !!forceSelectAccount, attempt, sessionAtStart);
       if (AUTH_ADAPTER === 'browser-gis') return requestBrowserGoogleToken(nonce, !!forceSelectAccount, attempt, sessionAtStart);
-      return requestFileBridgeGoogleToken(nonce, !!forceSelectAccount, attempt, sessionAtStart);
+      if (AUTH_ADAPTER === 'file-bridge') return requestFileBridgeGoogleToken(nonce, !!forceSelectAccount, attempt, sessionAtStart);
+      return Promise.reject(new Error('이 브라우저의 opaque Origin은 PC file:// 게임이 아니므로 CloudSave 인증을 시작하지 않습니다.'));
     }
     function attemptNativeSessionRestore() {
       if (startupRestoreAttempted || explicitLogout || !hadPreviousAuth || hasToken()) return;
