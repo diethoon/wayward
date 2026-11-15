@@ -209,6 +209,57 @@ function createBrowserHarness(options = {}) {
   return { api, context, calls, accepted, getTokenCallback: () => tokenCallback, getErrorCallback: () => errorCallback };
 }
 
+
+function testConnectFromClickDispatchesAuthSynchronouslyAndHonorsPickerPolicy() {
+  const code = section(
+    '    function shouldForceSelectAccount() {',
+    '    function requestBrowserTokenRevocation(token) {'
+  );
+  const scenarios = [
+    { name: 'first connection', explicitLogout: false, hadPreviousAuth: false, expectedPicker: true },
+    { name: 'remembered account', explicitLogout: false, hadPreviousAuth: true, expectedPicker: false },
+    { name: 'after explicit logout', explicitLogout: true, hadPreviousAuth: false, expectedPicker: true }
+  ];
+
+  for (const scenario of scenarios) {
+    const calls = [];
+    const context = {
+      explicitLogout: scenario.explicitLogout,
+      hadPreviousAuth: scenario.hadPreviousAuth,
+      busy: false,
+      activeAuthCancel: null,
+      authAttemptSerial: 40,
+      authStartedAt: 0,
+      authCompletedAt: 0,
+      authStatus: 'reauth-required',
+      message: '',
+      requestGoogleToken(forceSelectAccount, attempt) {
+        calls.push({ kind: 'auth-start', forceSelectAccount, attempt });
+        // Keep the request pending so only synchronous click-handler work is observed.
+        return new Promise(() => {});
+      },
+      render() { calls.push({ kind: 'render' }); }
+    };
+    const api = vm.runInNewContext(
+      code + '\\n;({ connectFromClick })',
+      context
+    );
+
+    api.connectFromClick();
+
+    assert.equal(calls[0] && calls[0].kind, 'auth-start',
+      scenario.name + ': auth dispatch must be the first synchronous click-handler action');
+    assert.equal(calls[0].forceSelectAccount, scenario.expectedPicker,
+      scenario.name + ': account selection policy');
+    assert.equal(calls[0].attempt, 41,
+      scenario.name + ': a fresh attempt ID is used');
+    assert.equal(calls[1] && calls[1].kind, 'render',
+      scenario.name + ': UI rendering follows auth dispatch');
+    assert.equal(context.busy, true,
+      scenario.name + ': duplicate clicks are blocked while auth is pending');
+  }
+}
+
 async function testDirectGISPromptAndClickCall() {
   const nonce = 'f'.repeat(48);
   const harness = createBrowserHarness();
@@ -437,6 +488,7 @@ function testFileBridgeIsIsolatedAndOriginChecked() {
 }
 
 async function main() {
+  testConnectFromClickDispatchesAuthSynchronouslyAndHonorsPickerPolicy();
   testAuthFunctionDeclarationsAreUnique();
   testNativeLauncherMarkerKeepsNativeAdapterEvenWithoutAuthMethods();
   testFirstConnectionAndExplicitLogoutRequirePicker();
