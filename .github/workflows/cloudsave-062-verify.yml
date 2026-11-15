@@ -56,4 +56,3 @@ jobs:
             .build/Wayward_Google_Drive_CloudSave_v0.6.2.zip
             .build/SHA256SUMS.txt
             .build/cloudsave-mod-chunks-4096.json
-
