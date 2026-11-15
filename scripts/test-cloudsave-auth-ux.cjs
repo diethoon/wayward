@@ -184,6 +184,8 @@ function createBrowserHarness(options = {}) {
       return attempt === context.authAttemptSerial && session === context.sessionGeneration;
     },
     isGoogleIdentityReady() { return true; },
+    setTimeout(callback, delay) { context.timeoutCallback = callback; context.timeoutDelay = delay; return 41; },
+    clearTimeout(id) { context.clearedTimer = id; },
     acceptAccessToken(payload, nonce) {
       if (!payload || payload.nonce !== nonce) throw new Error('nonce mismatch');
       accepted.push(payload);
@@ -228,6 +230,17 @@ async function testDirectGISNormalPrompt() {
   });
   await pending;
   assert.equal(harness.accepted.length, 1);
+}
+
+async function testDirectGISNoCallbackTimesOut() {
+  const harness = createBrowserHarness({ autoResponse: false });
+  const pending = harness.api.requestBrowserGoogleToken('7'.repeat(48), false, 9, 13);
+  assert.equal(harness.context.timeoutDelay, 120000);
+  assert.equal(typeof harness.context.timeoutCallback, 'function');
+  harness.context.timeoutCallback();
+  await assert.rejects(pending, /Google 인증 응답이 도착하지 않았습니다/);
+  assert.equal(harness.context.clearedTimer, 41);
+  assert.equal(harness.accepted.length, 0);
 }
 
 async function testDirectGISRejectsMissingState() {
@@ -325,6 +338,7 @@ async function main() {
   await testBrokenNativeBridgeDoesNotFallback();
   await testDirectGISPromptAndClickCall();
   await testDirectGISNormalPrompt();
+  await testDirectGISNoCallbackTimesOut();
   await testDirectGISRejectsMissingState();
   await testDirectGISPopupFailureAndStaleState();
   testDirectGISOriginRules();
