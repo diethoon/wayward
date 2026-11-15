@@ -388,21 +388,24 @@
   window.addEventListener('message', onWindowMessage);
   window.addEventListener('pagehide', () => {
     clearTimers();
-    if (!completed && !resultSent && !errorSent && port) {
+    if (!completed && !resultSent && !errorSent) {
       errorSent = true;
-      try {
-        port.postMessage({
-          type: 'wayward-cloud-auth-error',
-          version: VERSION,
-          appId: APP_ID,
-          nonce,
-          requestId,
-          attemptId,
-          sessionId,
-          code: 'auth-page-unloaded',
-          message: '인증 페이지가 새로고침되거나 닫혀 요청을 종료했습니다. 게임에서 다시 연결하세요.'
-        });
-      } catch (_) {}
+      const notifyPorts = port ? [port] : pendingPorts.slice();
+      for (const candidate of notifyPorts) {
+        try {
+          candidate.postMessage({
+            type: 'wayward-cloud-auth-error',
+            version: VERSION,
+            appId: APP_ID,
+            nonce,
+            requestId,
+            attemptId,
+            sessionId,
+            code: 'auth-page-unloaded',
+            message: '인증 페이지가 새로고침되거나 닫혀 요청을 종료했습니다. 게임에서 다시 연결하세요.'
+          });
+        } catch (_) {}
+      }
     }
     for (const candidate of pendingPorts) { try { candidate.close(); } catch (_) {} }
     pendingPorts = [];
