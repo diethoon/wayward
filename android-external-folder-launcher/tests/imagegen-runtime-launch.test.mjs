@@ -11,6 +11,7 @@ const providerUi = read("../app/src/main/java/com/wayward/launcher/ImageProvider
 const providerClient = read("../app/src/main/java/com/wayward/launcher/ImageProviderClient.java");
 const manifest = read("../app/src/main/AndroidManifest.xml");
 const endpoint = read("../app/src/main/java/com/wayward/launcher/ComfyEndpoint.java");
+const instrumentation = read("../app/src/androidTest/java/com/wayward/launcher/ImageGenServiceRuntimeTest.java");
 const embed = read("../scripts/embed_imagegen_backend.py");
 
 assert.match(main, /NovelAI · 런처 내장 서버 실행/);
@@ -57,8 +58,20 @@ assert.match(providerUi, /암호화 저장/);
 assert.match(providerUi, /NovelAI 토큰 삭제/);
 
 assert.match(service, /EXTRA_LAUNCH_MODE/);
+assert.match(service, /\.addAction\(android\.R\.drawable\.ic_media_pause, "중지", pendingStop\)/,
+  "the foreground service must retain its explicit Stop action");
 assert.match(service, /ANDROID_LINKER_64 = "\/system\/bin\/linker64"/,
   "app-private Bun must be started through Android's system linker");
+assert.ok(service.includes('ANDROID_BRIDGE_ARM64_LINKER_64 = "/system/bin/arm64/linker64"'),
+  "x86_64 Google API emulators must select the ARM64 native-bridge linker");
+assert.match(service, /private File resolveAndroidArm64Linker\(\)/,
+  "select the system linker for the device ABI before launching Bun");
+assert.match(service, /"arm64-v8a"\.equals\(abis\[0\]\)/,
+  "native ARM64 devices must use the regular system linker");
+assert.match(service, /synchronized \(processLock\)/,
+  "Stop must be serialized with child-process publication");
+assert.match(service, /if \(stopping\) \{/,
+  "a late Bun launch must be killed when Stop was requested during startup");
 assert.match(service, /private ProcessBuilder bunProcess\(File executable, String\.\.\. arguments\)/,
   "all Bun invocations must share the linker-backed command builder");
 assert.match(service, /prepareBunExecutable\(binary\)/,
@@ -114,4 +127,21 @@ assert.match(endpoint, /100 && ip\[1\] >= 64 && ip\[1\] <= 127/,
   "Tailscale IPv4 address range is allowed");
 assert.match(endpoint, /endsWith\("\.ts\.net"\)/);
 assert.match(endpoint, /normalizeOptional/);
+
+assert.ok(instrumentation.includes('MainActivity.class.getDeclaredMethod("startNovelAiServer")'),
+  "instrumentation must invoke the same launcher action used by the NovelAI server Start button");
+assert.ok(instrumentation.includes("import android.service.notification.StatusBarNotification;"),
+  "notification inventory must use the Android framework StatusBarNotification class");
+assert.ok(instrumentation.includes("imagegen/bun-version.log"),
+  "instrumentation must verify the downloaded Android Bun version");
+assert.ok(instrumentation.includes('bunVersion.contains("1.4.4")'),
+  "instrumentation must run Bun 1.4.4 on Android, not host Bun");
+assert.ok(instrumentation.includes('serverLog.contains("wayward-imagegen 0.8.4")'),
+  "instrumentation must verify that the embedded server actually booted");
+assert.ok(instrumentation.includes("activityToFinish::finish"),
+  "instrumentation must close the launcher Activity while leaving service alive");
+assert.ok(instrumentation.includes("stopIntent.send()"),
+  "instrumentation must invoke the notification Stop action");
+assert.ok(instrumentation.includes("awaitServerDown(45_000L)"),
+  "instrumentation must verify the server endpoint actually shuts down");
 console.log("Embedded ImageGen runtime launch contract tests passed.");
