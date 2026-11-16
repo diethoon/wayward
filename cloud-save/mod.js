@@ -610,7 +610,7 @@ WML.define({
         const transmitInit = () => {
           if (settled || sessionId) return;
           if (!popup || popup.closed) {
-            finish(new Error('Google 인증 중계 창이 닫혔습니다. 게임에서 다시 연결하세요.'));
+            finish(new Error('CloudSave 인증 창이 비정상적으로 종료되었습니다.'));
             return;
           }
           if (pendingPorts.length >= 96) {
