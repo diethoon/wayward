@@ -7,8 +7,10 @@ const service = read("../app/src/main/java/com/wayward/launcher/ImageGenService.
 const manifest = read("../app/src/main/AndroidManifest.xml");
 const proxy = read("../app/src/main/java/com/wayward/launcher/ImageGenProxy.java");
 
-assert.match(main, /ensureImageGenServer\(tree,/,
-  "session startup must inspect the currently selected SafTree");
+assert.match(main, /ensureImageGenServer\(sessionTree,/,
+  "session startup must inspect the SafTree captured for the active launch");
+assert.match(main, /web\.loadUrl\(gameUrl\);[\s\S]*?ensureImageGenServer\(sessionTree,/,
+  "game navigation must start before optional ImageGen preparation");
 assert.match(main, /String imageStudioBackendVersion\(\)/,
   "Image Studio ID and backend entrypoints must be detected in that session");
 assert.match(main, /wml\/mods\/imagestudio\/backend\/wayward-imagegen\/package\.json/,

@@ -25,6 +25,25 @@ assert.equal(parsed.events[0].details.includes("should-not-leak"), false);
 assert.throws(() => parseBody({ body: { events: [{ id: "bad", deviceId: device }] } }));
 assert.throws(() => parseBody({ body: { events: [{ id: uuid, deviceId: device }, { id: uuid, deviceId: uuid }] } }));
 assert.throws(() => parseBody({ body: { events: Array.from({ length: 9 }, () => ({ id: uuid, deviceId: device })) } }));
+
+// Anonymous ingest is still bounded by a per-network in-memory rate limit.
+for (let i = 1; i <= 90; i++) {
+  const suffix = i.toString(16).padStart(12, "0");
+  parseBody({
+    headers: { "x-forwarded-for": "198.51.100.77" },
+    body: { events: [{
+      id: "10000000-0000-4000-8000-" + suffix,
+      deviceId: "20000000-0000-4000-8000-" + suffix
+    }] }
+  });
+}
+assert.throws(() => parseBody({
+  headers: { "x-forwarded-for": "198.51.100.77" },
+  body: { events: [{
+    id: "10000000-0000-4000-8000-000000000091",
+    deviceId: "20000000-0000-4000-8000-000000000091"
+  }] }
+}), error => error.statusCode === 429);
 const deleted = [];
 let pageIndex = 0;
 const cleanup = await cleanupExpiredWith({
