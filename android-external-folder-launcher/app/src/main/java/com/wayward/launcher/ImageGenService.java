@@ -35,6 +35,7 @@ import java.util.zip.ZipInputStream;
  */
 public final class ImageGenService extends Service {
     public static final String ACTION_START = "com.wayward.launcher.imagegen.START";
+    public static final String ACTION_RESTART = "com.wayward.launcher.imagegen.RESTART";
     public static final String ACTION_STOP = "com.wayward.launcher.imagegen.STOP";
     public static final String EXTRA_BACKEND_ROOT = "backendRoot";
     public static final String EXTRA_BACKEND_VERSION = "backendVersion";
@@ -82,6 +83,7 @@ public final class ImageGenService extends Service {
             return START_NOT_STICKY;
         }
 
+        boolean restart = ACTION_RESTART.equals(action);
         String backendPath = intent == null ? null : intent.getStringExtra(EXTRA_BACKEND_ROOT);
         if (backendPath == null || backendPath.isEmpty()) {
             statusMessage = "ImageGen 백엔드 경로가 전달되지 않았습니다.";
@@ -92,23 +94,44 @@ public final class ImageGenService extends Service {
             return START_NOT_STICKY;
         }
 
-        if (serverReady || starting) return START_STICKY;
-        DiagnosticsLogger.event(this,"INFO","imagegen_service","start_command_received",null);
-        stopping = false;
-        starting = true;
-        serverReady = false;
+        if (!restart && (serverReady || starting || (serverProcess != null && serverProcess.isAlive()))) {
+            return START_STICKY;
+        }
+        DiagnosticsLogger.event(this,"INFO","imagegen_service",restart?"restart_command_received":"start_command_received",null);
         backendVersion = intent.getStringExtra(EXTRA_BACKEND_VERSION);
         if (backendVersion == null) backendVersion = "";
         try {
-            updateNotification("이미지 생성 서버 준비 중");
-            startAsForeground("이미지 생성 서버 준비 중");
-            worker.execute(() -> {
-                try {
-                    startRuntime(new File(backendPath));
-                } catch (Throwable error) {
-                    recordFailure(error);
-                }
-            });
+            if (restart) {
+                stopping = true;
+                stopRuntime();
+                updateNotification("이미지 생성 서버 재시작 대기");
+                startAsForeground("이미지 생성 서버 재시작 중");
+                worker.execute(() -> {
+                    stopping = false;
+                    starting = true;
+                    serverReady = false;
+                    statusMessage = "이미지 생성 서버 재시작 중";
+                    updateNotification(statusMessage);
+                    try {
+                        startRuntime(new File(backendPath));
+                    } catch (Throwable error) {
+                        recordFailure(error);
+                    }
+                });
+            } else {
+                stopping = false;
+                starting = true;
+                serverReady = false;
+                updateNotification("이미지 생성 서버 준비 중");
+                startAsForeground("이미지 생성 서버 준비 중");
+                worker.execute(() -> {
+                    try {
+                        startRuntime(new File(backendPath));
+                    } catch (Throwable error) {
+                        recordFailure(error);
+                    }
+                });
+            }
         } catch (Throwable error) {
             recordFailure(error);
             stopSelf(startId);

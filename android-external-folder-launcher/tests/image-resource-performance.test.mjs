@@ -56,6 +56,7 @@ contains("serveImageRequest(folderHandler,path,imageDiagnostics)");
 contains("image_resource_slow_or_failed");
 contains("image_http_error");
 contains("isImageResourcePath(failedPath)");
-contains("zipMods.close()");
+assert.equal(source.includes("zipMods.close()"), false,
+  "the removed app-private ZIP overlay must not be retained by the launcher");
 
 console.log("Image resource cache, strict local-only generated characters, other-image CDN fallback and preconnect tests passed.");
