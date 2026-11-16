@@ -7,6 +7,39 @@
   const nativeFetch = window.fetch.bind(window);
   const pending = new Map();
 
+  function report(event, details) {
+    try {
+      if (typeof window.WMLHost.logImageProviderDiagnostic === "function") {
+        window.WMLHost.logImageProviderDiagnostic(event, JSON.stringify(details || {}));
+      }
+    } catch (_) {}
+  }
+
+  function activeEngine() {
+    const runtime = window.__WAYWARD_LAUNCHER_IMAGE_RUNTIME__;
+    return runtime && typeof runtime.engine === "string" ? runtime.engine : "unknown";
+  }
+
+  function runtimeStatus() {
+    try {
+      const raw = window.WMLHost.imageGenRuntimeStatus();
+      const status = typeof raw === "string" ? JSON.parse(raw) : raw;
+      return {
+        available: status && status.available === true,
+        starting: status && status.starting === true,
+        ready: status && status.ready === true
+      };
+    } catch (_) {
+      return { available: false, starting: false, ready: false };
+    }
+  }
+
+  function isGenerationEndpoint(pathname) {
+    return /^\/api\/batch\/enqueue(?:\/|$)/.test(pathname) ||
+      /^\/api\/(?:image|images)\/generate(?:\/|$)/.test(pathname) ||
+      /^\/api\/generation\/(?:generate|enqueue)(?:\/|$)/.test(pathname);
+  }
+
   function bytesToBase64(buffer) {
     const bytes = new Uint8Array(buffer);
     let binary = "";
@@ -56,6 +89,28 @@
     try { url = new URL(request.url, window.location.href); }
     catch (_) { return nativeFetch(input, init); }
 
+    if (isGenerationEndpoint(url.pathname)) {
+      const state = runtimeStatus();
+      if (!state.available && !state.starting || !state.ready) {
+        report("launcher_imagegen_request_blocked", {
+          method: request.method.toUpperCase(),
+          path: url.pathname,
+          engine: activeEngine(),
+          reason: "launcher_engine_not_ready"
+        });
+        return Promise.reject(new TypeError("Launcher image engine is not ready."));
+      }
+      if (url.origin !== "http://127.0.0.1:8189" && url.origin !== "http://localhost:8189") {
+        request = new Request("http://127.0.0.1:8189" + url.pathname + url.search, request);
+        url = new URL(request.url);
+        report("launcher_imagegen_request_forced_to_launcher", {
+          method: request.method.toUpperCase(),
+          path: url.pathname,
+          engine: activeEngine()
+        });
+      }
+    }
+
     const localImageGen =
       url.protocol === "http:" &&
       (url.hostname === "127.0.0.1" || url.hostname === "localhost") &&
@@ -68,6 +123,13 @@
       const id = (window.crypto && typeof window.crypto.randomUUID === "function")
         ? window.crypto.randomUUID()
         : "wimg-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+      const diagnostic = {
+        requestId: id,
+        method: request.method.toUpperCase(),
+        path: url.pathname,
+        engine: activeEngine()
+      };
+      report("launcher_imagegen_request_intercepted", diagnostic);
       const headers = {};
       request.headers.forEach((value, key) => { headers[key] = value; });
       const timer = setTimeout(() => {
@@ -83,9 +145,17 @@
           JSON.stringify(headers),
           bytesToBase64(bodyBuffer)
         );
+        report("launcher_imagegen_request_dispatched", diagnostic);
       } catch (error) {
         clearTimeout(timer);
         pending.delete(id);
+        report("launcher_imagegen_request_dispatch_failed", {
+          requestId: id,
+          method: request.method.toUpperCase(),
+          path: url.pathname,
+          engine: activeEngine(),
+          errorType: error && error.name ? String(error.name) : "Error"
+        });
         reject(error);
       }
     }));

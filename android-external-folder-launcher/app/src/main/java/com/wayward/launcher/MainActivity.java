@@ -1,7 +1,6 @@
 package com.wayward.launcher;
 
 import android.app.Activity;
-import android.content.ClipData;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.database.Cursor;
@@ -13,7 +12,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
-import android.provider.OpenableColumns;
 import android.text.InputType;
 import android.view.View;
 import android.webkit.JavascriptInterface;
@@ -57,7 +55,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class MainActivity extends Activity {
-    private static final int PICK_TREE=4101, PICK_MOD_ZIP=4102;
+    private static final int PICK_TREE=4101;
     private static final String PREFS="wayward_launcher";
     private static final String KEY_TREE="game_tree_uri", KEY_PROFILES="game_profiles", KEY_ZIP_REV="zip_mod_revision", KEY_COMFY_URL="comfy_server_url";
     private static final String KO="Wayward_WML_ko.html", EN="Wayward_WML.html";
@@ -79,8 +77,8 @@ public final class MainActivity extends Activity {
     private String activeProfileId="";
     private long loadedZipRevision=-1;
     private FrameLayout root;
-    private LinearLayout home, profileList, zipModList;
-    private TextView status, folderText, profileSummary, zipSummary, imageGenStatus;
+    private LinearLayout home, profileList;
+    private TextView status, folderText, profileSummary, imageGenStatus;
     private EditText comfyUrlInput;
     private String imageGenSessionMessage = "";
     private boolean imageStudioSessionDetected = false;
@@ -112,7 +110,7 @@ public final class MainActivity extends Activity {
         long revision=getSharedPreferences(PREFS,MODE_PRIVATE).getLong(KEY_ZIP_REV,0);
         if(web!=null&&revision!=loadedZipRevision){loadedZipRevision=revision;web.reload();}
         if(web!=null&&tree!=null)registerSessionActivity();
-        if(home!=null&&home.getVisibility()==View.VISIBLE){renderProfiles();renderZipMods();refreshStatus();refreshImageGenStatus();}
+        if(home!=null&&home.getVisibility()==View.VISIBLE){renderProfiles();refreshStatus();refreshImageGenStatus();}
     }
     @Override protected void onNewIntent(Intent intent){
         super.onNewIntent(intent);setIntent(intent);
@@ -189,7 +187,7 @@ public final class MainActivity extends Activity {
         infoParams.leftMargin=dp(5);top.addView(info,infoParams);
         LinearLayout.LayoutParams topParams=new LinearLayout.LayoutParams(-1,-2);topParams.bottomMargin=dp(3);
         page.addView(top,topParams);
-        TextView subtitle=uiText("GAME LAUNCHER  ·  게임과 모드를 한곳에서",11,Color.rgb(111,118,125),false);
+        TextView subtitle=uiText("GAME LAUNCHER  ·  게임과 이미지 서비스를 한곳에서",11,Color.rgb(111,118,125),false);
         subtitle.setLetterSpacing(0.025f);page.addView(subtitle);
 
         LinearLayout statusCard=uiCard();
@@ -209,26 +207,10 @@ public final class MainActivity extends Activity {
         gameHeaderParams.bottomMargin=dp(8);page.addView(gameHeader,gameHeaderParams);
         profileList=new LinearLayout(this);profileList.setOrientation(LinearLayout.VERTICAL);page.addView(profileList);
 
-        LinearLayout tiles=new LinearLayout(this);tiles.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams tilesParams=new LinearLayout.LayoutParams(-1,-2);
-        tilesParams.topMargin=dp(14);tilesParams.bottomMargin=dp(14);page.addView(tiles,tilesParams);
-
-        LinearLayout modsCard=uiCard();
-        LinearLayout.LayoutParams tileLeft=new LinearLayout.LayoutParams(0,-2,1f);tileLeft.rightMargin=dp(6);
-        tiles.addView(modsCard,tileLeft);
-        modsCard.addView(uiText("MODS",9,Color.rgb(128,135,142),true));
-        gap(modsCard,5);modsCard.addView(uiText("ZIP 모드",15,Color.rgb(27,30,34),true));
-        zipSummary=uiText("0개 설치됨",11,Color.rgb(109,117,125),false);
-        LinearLayout.LayoutParams zipSummaryParams=new LinearLayout.LayoutParams(-1,-2);zipSummaryParams.topMargin=dp(5);
-        modsCard.addView(zipSummary,zipSummaryParams);
-        LinearLayout.LayoutParams zipInstallParams=new LinearLayout.LayoutParams(-1,dp(38));zipInstallParams.topMargin=dp(10);
-        modsCard.addView(compactButton("ZIP 설치",true,this::chooseModZip),zipInstallParams);
-        LinearLayout.LayoutParams zipManageParams=new LinearLayout.LayoutParams(-1,dp(36));zipManageParams.topMargin=dp(5);
-        modsCard.addView(compactButton("목록 관리",false,this::showZipManager),zipManageParams);
-
         LinearLayout imageCard=uiCard();
-        LinearLayout.LayoutParams tileRight=new LinearLayout.LayoutParams(0,-2,1f);tileRight.leftMargin=dp(6);
-        tiles.addView(imageCard,tileRight);
+        LinearLayout.LayoutParams imageCardParams=new LinearLayout.LayoutParams(-1,-2);
+        imageCardParams.topMargin=dp(14);imageCardParams.bottomMargin=dp(14);
+        page.addView(imageCard,imageCardParams);
         imageCard.addView(uiText("IMAGE",9,Color.rgb(128,135,142),true));
         gap(imageCard,5);imageCard.addView(uiText("이미지 생성",15,Color.rgb(27,30,34),true));
         imageGenStatus=uiText("서버 상태 확인 중",11,Color.rgb(109,117,125),false);
@@ -283,18 +265,14 @@ public final class MainActivity extends Activity {
         Button stop=compactButton("서버 중지",false,this::stopImageGenServer);
         LinearLayout.LayoutParams stopParams=new LinearLayout.LayoutParams(0,-1,1f);stopParams.leftMargin=dp(6);
         advancedActions.addView(stop,stopParams);
-        TextView storageHint=uiText("게임 폴더는 직접 수정하지 않습니다. ZIP 모드는 앱 내부 저장소에 보관됩니다.",10,Color.rgb(126,133,140),false);
-        LinearLayout.LayoutParams storageHintParams=new LinearLayout.LayoutParams(-1,-2);
-        storageHintParams.topMargin=dp(10);advancedContent.addView(storageHint,storageHintParams);
-
-        home=page;root.addView(scroll,new FrameLayout.LayoutParams(-1,-1));setContentView(root);
-        renderProfiles();renderZipMods();refreshStatus();refreshImageGenStatus();
+        home=page;root.addView(scroll,new FrameLayout.LayoutParams(-1,-1));setContentView(root);LauncherWindowInsets.apply(root);
+        renderProfiles();refreshStatus();refreshImageGenStatus();
     }
 
     private void showLauncherInfoDialog(){
         new android.app.AlertDialog.Builder(this)
                 .setTitle("런처 안내")
-                .setMessage("게임 폴더는 읽기 권한으로 연결해 원본 파일을 직접 수정하지 않습니다. ZIP 모드는 이 앱의 비공개 저장소에 보관하고 게임 세션에서 가상 경로로 제공합니다. 게임별 실행 세션과 브라우저 저장 데이터는 서로 분리됩니다.")
+                .setMessage("게임 폴더는 읽기 권한으로 연결해 원본 파일을 직접 수정하지 않습니다. 등록한 게임은 각각 독립된 실행 세션으로 열립니다.")
                 .setPositiveButton("확인",null).show();
     }
     private void chooseFolder(){
@@ -304,13 +282,6 @@ public final class MainActivity extends Activity {
         else if(!profiles.isEmpty())try{i.putExtra(DocumentsContract.EXTRA_INITIAL_URI,Uri.parse(profiles.get(profiles.size()-1).uri));}catch(Exception ignored){}
         DiagnosticsLogger.event(this,"INFO","launcher","folder_picker_opened",null);
         startActivityForResult(i,PICK_TREE);
-    }
-
-    private void chooseModZip(){
-        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);
-        i.setType("*/*");i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/zip","application/x-zip-compressed","application/octet-stream"});i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
-        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        startActivityForResult(i,PICK_MOD_ZIP);
     }
 
     @Override protected void onActivityResult(int req,int result,Intent data){
@@ -335,73 +306,15 @@ public final class MainActivity extends Activity {
                     profiles.add(profile);
                 }
                 activeProfileId=profile.id;treeUri=picked;tree=new SafTree(picked);saveProfiles();
-                refreshStatus();renderProfiles();renderZipMods();
+                refreshStatus();renderProfiles();
                 DiagnosticsLogger.event(this,"INFO","launcher","game_folder_registered",null);
                 Toast.makeText(this,"게임 폴더를 등록했습니다. 목록에서 실행할 수 있습니다.",Toast.LENGTH_LONG).show();
             }catch(Exception e){DiagnosticsLogger.error(this,"launcher","folder_permission_failed",e);status("폴더 권한 저장 실패: "+msg(e));}
             return;
         }
-        if(req==PICK_MOD_ZIP){
-            if(result!=RESULT_OK||data==null)return;
-            List<Uri> selected=collectSelectedUris(data);
-            if(!selected.isEmpty())installModZips(selected);
-        }
-    }
-
-    private List<Uri> collectSelectedUris(Intent data){
-        List<Uri> selected=new ArrayList<>();
-        ClipData clip=data.getClipData();
-        if(clip!=null)for(int i=0;i<clip.getItemCount();i++){
-            Uri uri=clip.getItemAt(i).getUri();
-            if(uri!=null&&!selected.contains(uri))selected.add(uri);
-        }
-        Uri single=data.getData();
-        if(single!=null&&!selected.contains(single))selected.add(single);
-        return selected;
-    }
-
-    private String displayName(Uri uri){
-        try(Cursor c=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){
-            if(c!=null&&c.moveToFirst())return c.getString(0);
-        }catch(Exception ignored){}
-        return "mod.zip";
-    }
-
-    private String installModZip(Uri uri)throws Exception{
-        File staged=zipMods.temporaryFile(UUID.randomUUID().toString());
-        try{
-            String name=displayName(uri);
-            if(name==null||!name.toLowerCase(Locale.ROOT).endsWith(".zip"))throw new IllegalArgumentException("확장자가 .zip인 모드 파일을 선택해 주세요.");
-            try(InputStream in=getContentResolver().openInputStream(uri);FileOutputStream out=new FileOutputStream(staged)){
-                if(in==null)throw new IllegalStateException("선택한 ZIP 파일을 열 수 없습니다.");
-                byte[] buffer=new byte[32768];long total=0;int n;
-                while((n=in.read(buffer))!=-1){total+=n;if(total>512L*1024L*1024L)throw new IllegalArgumentException("ZIP은 최대 512MB까지만 설치할 수 있습니다.");out.write(buffer,0,n);}
-                out.flush();
-            }
-            ZipModStore.ModInfo info=ZipModStore.inspect(staged);
-            zipMods.install(staged);
-            return info.id;
-        }finally{if(staged.exists())staged.delete();}
-    }
-
-    private void installModZips(List<Uri> sources){
-        status("ZIP 모드를 앱 내부 저장소에 설치하고 있습니다...");
-        new Thread(()->{
-            List<String> installed=new ArrayList<>(),failed=new ArrayList<>();
-            for(Uri uri:sources)try{installed.add(installModZip(uri));}catch(Exception e){failed.add(displayName(uri)+": "+msg(e));}
-            runOnUiThread(()->{
-                if(!installed.isEmpty()){
-                    bumpZipRevision();renderZipMods();refreshStatus();
-                    if(web!=null){loadedZipRevision=getZipRevision();web.reload();}
-                }else refreshStatus();
-                String report="ZIP 설치 "+installed.size()+"개 완료"+(failed.isEmpty()?"":" · 실패 "+failed.size()+"개: "+failed.get(0));
-                Toast.makeText(this,report,Toast.LENGTH_LONG).show();
-            });
-        },"wml-zip-installer").start();
     }
 
     private long getZipRevision(){return getSharedPreferences(PREFS,MODE_PRIVATE).getLong(KEY_ZIP_REV,0);}
-    private void bumpZipRevision(){getSharedPreferences(PREFS,MODE_PRIVATE).edit().putLong(KEY_ZIP_REV,getZipRevision()+1).apply();}
 
     private void loadProfiles(){
         profiles.clear();
@@ -530,42 +443,6 @@ public final class MainActivity extends Activity {
                 }).setNegativeButton("닫기",null).show();
     }
 
-    private void renderZipMods(){
-        if(zipMods==null)return;
-        List<String> ids=zipMods.listModIds();
-        if(zipSummary!=null)zipSummary.setText(ids.size()+"개 설치됨");
-        if(zipModList==null)return;
-        zipModList.removeAllViews();
-        for(String id:ids){
-            TextView label=uiText(id,12,Color.rgb(57,62,67),false);
-            zipModList.addView(label,new LinearLayout.LayoutParams(-1,dp(34)));
-        }
-    }
-
-    private void showZipManager(){
-        List<String> ids=zipMods==null?new ArrayList<>():zipMods.listModIds();
-        android.app.AlertDialog.Builder dialog=new android.app.AlertDialog.Builder(this).setTitle("ZIP 모드 관리");
-        if(ids.isEmpty()){
-            dialog.setMessage("설치된 ZIP 모드가 없습니다.");
-        }else{
-            dialog.setItems(ids.toArray(new String[0]),(window,which)->showZipModActions(ids.get(which)));
-        }
-        dialog.setPositiveButton("ZIP 설치",(window,which)->chooseModZip());
-        dialog.setNegativeButton("닫기",null);dialog.show();
-    }
-
-    private void showZipModActions(String id){
-        new android.app.AlertDialog.Builder(this).setTitle(id)
-                .setMessage("이 ZIP 모드를 앱 내부 저장소에서 제거할까요?")
-                .setNegativeButton("취소",null)
-                .setPositiveButton("제거",(dialog,which)->{
-                    if(zipMods!=null&&zipMods.uninstall(id)){
-                        bumpZipRevision();renderZipMods();refreshStatus();
-                        if(web!=null){loadedZipRevision=getZipRevision();web.reload();}
-                    }else Toast.makeText(this,"ZIP 모드를 제거하지 못했습니다.",Toast.LENGTH_SHORT).show();
-                }).show();
-    }
-
     private String gameFile(){
         if(tree==null)return null;
         if(tree.exists(KO))return KO;if(tree.exists(EN))return EN;if(tree.exists("index.html"))return "index.html";
@@ -584,8 +461,7 @@ public final class MainActivity extends Activity {
     }
     private void refreshStatus(){
         if(tree==null){
-            int zipCount=zipMods==null?0:zipMods.listModIds().size();
-            status("준비 완료  ·  게임 "+profiles.size()+"개  ·  ZIP 모드 "+zipCount+"개");
+            status("준비 완료  ·  게임 "+profiles.size()+"개");
             if(folderText!=null)folderText.setText("게임 폴더를 등록하면 여기에서 상태를 확인할 수 있습니다.");
             return;
         }
@@ -597,7 +473,7 @@ public final class MainActivity extends Activity {
             status("폴더를 읽을 수 없습니다. "+msg(e));
         }
     }
-    private void refreshGame(){if(web!=null&&web.getVisibility()==View.VISIBLE){if(tree!=null)tree.invalidateDirectoryIndex();web.clearCache(true);web.reload();Toast.makeText(this,"게임과 앱 전용 ZIP 모드 및 이미지 캐시를 새로 읽습니다.",Toast.LENGTH_SHORT).show();}else refreshStatus();}
+    private void refreshGame(){if(web!=null&&web.getVisibility()==View.VISIBLE){if(tree!=null)tree.invalidateDirectoryIndex();web.clearCache(true);web.reload();Toast.makeText(this,"게임 파일과 이미지 캐시를 새로 읽습니다.",Toast.LENGTH_SHORT).show();}else refreshStatus();}
 
     private void createWeb(){
         String domain=sessionDomain(activeProfileId);

@@ -12,7 +12,8 @@ assert.match(picker, /getData\(\)/, "single-file selections must be read");
 assert.match(picker, /callback\.onReceiveValue\(result\)/, "selected URIs must be returned to WebView");
 assert.match(main, /web\.setWebChromeClient\(webFileChooser\)/, "WebView must use the file chooser client");
 assert.match(main, /req==WebFileChooser\.REQUEST_CODE/, "file chooser activity results must be routed");
-assert.match(main, /collectSelectedUris\(data\)/, "launcher ZIP picker must also accept ClipData-only results");
+assert.doesNotMatch(main, /PICK_MOD_ZIP|chooseModZip|installModZips|showZipManager|showZipModActions/, "duplicate native ZIP management UI must remain removed; WML owns user-facing mod import and management");
+assert.match(main, /LauncherWindowInsets\.apply\(root\)/, "launcher content must apply Android system-bar insets");
 assert.doesNotMatch(main, /setWebChromeClient\(new WebChromeClient\(\)\)/, "empty default WebChromeClient must not remain");
 
 console.log("WebFileChooser contract tests passed.");
