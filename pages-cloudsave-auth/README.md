@@ -2,7 +2,7 @@
 
 This directory contains the static-only PC file:// authentication page source intended for:
 
-- Repository: jeiky224/jeiky224.github.io
+- Repository: jeiky224/cloud
 - Target directory: cloud/
 - Public page: https://jeiky224.github.io/cloud/file-auth.html
 
@@ -38,6 +38,6 @@ The file origin is opaque and shared by unrelated local files. Neither Origin: n
 
 ## Deployment and verification
 
-The Pages deployment workflow in jeiky224/jeiky224.github.io currently deploys the repository root from main. Copy the three files above into its cloud/ directory and let that existing Pages workflow deploy them. Preserve cloud/auth.html, cloud/auth.js, cloud/auth.css, cloud/config.js and cloud/drive.js.
+The Pages deployment workflow in `jeiky224/cloud` deploys the `site/` directory as the project site's root. Copy `file-auth.html`, `file-auth.js`, and `file-auth.css` into `site/`; keep the existing `site/config.js` public OAuth client configuration. The deployed endpoint is `https://jeiky224.github.io/cloud/file-auth.html`. Legacy `auth.html`, `auth-061.html`, and related assets are retained for older clients.
 
 The source branch test suite checks the static protocol contracts and the game's MessageChannel handshake. It does not replace a real-browser run against the deployed Pages URL, a real Google account consent, or a real Drive save/list/load/delete run.
