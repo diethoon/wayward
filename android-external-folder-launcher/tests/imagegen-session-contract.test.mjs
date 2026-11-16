@@ -55,5 +55,15 @@ assert.match(service, /heartbeat\.scheduleAtFixedRate/,
   "service liveness must be published while install/start work is running");
 assert.match(proxy, /127\.0\.0\.1:8189/,
   "all session WebViews must target the one shared loopback server");
+assert.ok(main.includes("SESSION_ACTIVITIES"),
+  "the launcher must retain a weak registry of game-session Activity owners");
+assert.ok(main.includes("findActiveSessionActivity()"),
+  "the home Activity must locate the Activity that owns the active game WebView");
+assert.ok(main.includes("EXTRA_OPEN_IMAGE_STUDIO_SETTINGS"),
+  "the cross-task handoff must carry an explicit Image Studio settings request");
+assert.ok(main.includes("Intent.FLAG_ACTIVITY_NEW_DOCUMENT | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT"),
+  "settings handoff must return to the existing document task instead of creating an unrelated WebView");
+assert.ok(main.includes("if(openSettings){") && main.includes("openImageGenPanel();"),
+  "the active game Activity must open settings after receiving the handoff intent");
 
 console.log("ImageGen session contract tests passed.");

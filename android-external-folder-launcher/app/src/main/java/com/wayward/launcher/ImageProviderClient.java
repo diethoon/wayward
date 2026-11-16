@@ -81,8 +81,10 @@ final class ImageProviderClient {
                 throw new IllegalArgumentException("모델 ID를 입력해 주세요.");
             }
             body.put("model", provider.model.trim());
+            if (negativePrompt != null && !negativePrompt.trim().isEmpty()) {
+                body.put("negative_prompt", negativePrompt.trim());
+            }
             body.put("prompt", prompt);
-            if (negativePrompt != null && !negativePrompt.trim().isEmpty()) body.put("negative_prompt", negativePrompt.trim());
             body.put("n", 1);
             body.put("size", size);
         } else if ("custom-json".equals(provider.type)) {

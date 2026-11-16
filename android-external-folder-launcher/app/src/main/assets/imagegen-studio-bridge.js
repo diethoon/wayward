@@ -57,11 +57,90 @@
 
   function localEndpoint(path) {
     if (!prefersLauncherLocal()) return null;
-    const value = String(path || "");
-    if (!value.startsWith("/api/") || value.indexOf("\\") >= 0) return null;
-    const state = runtimeStatus();
-    if (!state.available && !state.starting) return null;
-    return LOCAL_ORIGIN + value;
+    const value = String(path || "").trim();
+    if (!value || value.indexOf("\\") >= 0 || value.indexOf("\0") >= 0) return null;
+    let url;
+    try { url = new URL(value, LOCAL_ORIGIN + "/"); }
+    catch (_) { return null; }
+    if (url.username || url.password ||
+        (url.origin !== LOCAL_ORIGIN && url.origin !== "http://localhost:8189")) return null;
+
+    if (url.pathname.startsWith("/api/")) {
+      const state = runtimeStatus();
+      if (!state.available && !state.starting) return null;
+      return LOCAL_ORIGIN + url.pathname + url.search;
+    }
+    // Cached image files live in app-private storage and remain readable even
+    // when the generation service is stopped; only API requests need it alive.
+    if (!url.pathname.startsWith("/images/")) return null;
+
+    const encodedSegments = url.pathname.slice("/images/".length).split("/");
+    if (!encodedSegments.length) return null;
+    const segments = [];
+    try {
+      for (const encoded of encodedSegments) {
+        const segment = decodeURIComponent(encoded);
+        if (!segment || segment === "." || segment === ".." ||
+            segment.indexOf("/") >= 0 || segment.indexOf("\\") >= 0 ||
+            segment.indexOf("\0") >= 0) return null;
+        segments.push(encodeURIComponent(segment));
+      }
+    } catch (_) { return null; }
+
+    const gameOrigin = String(window.location && window.location.origin || "");
+    try {
+      const parsedGameOrigin = new URL(gameOrigin);
+      if (parsedGameOrigin.protocol !== "https:" || parsedGameOrigin.origin !== gameOrigin) return null;
+    } catch (_) { return null; }
+    return gameOrigin + "/images/__wayward_generated__/" + segments.join("/") + url.search;
+  }
+
+  function imageElementSource(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return value;
+    let path = "";
+    try { path = new URL(raw, window.location && window.location.href || LOCAL_ORIGIN + "/").pathname; }
+    catch (_) { return value; }
+    if (!path.startsWith("/images/")) return value;
+    const mapped = localEndpoint(raw);
+    if (!mapped || mapped === raw) return value;
+    report("generated_image_url_rewritten", { path: path.slice(0, 200), targetOrigin: window.location.origin });
+    return mapped;
+  }
+
+  function installImageElementUrlRewrite() {
+    const prototype = window.HTMLImageElement && window.HTMLImageElement.prototype;
+    if (!prototype || prototype.__waywardGeneratedImageUrlRewrite) {
+      report("generated_image_dom_rewrite_unavailable", {});
+      return;
+    }
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, "src");
+      if (!descriptor || typeof descriptor.set !== "function" || typeof descriptor.get !== "function") {
+        report("generated_image_src_descriptor_unavailable", {});
+        return;
+      }
+      Object.defineProperty(prototype, "src", {
+        configurable: descriptor.configurable,
+        enumerable: descriptor.enumerable,
+        get() { return descriptor.get.call(this); },
+        set(value) { descriptor.set.call(this, imageElementSource(value)); }
+      });
+      const nativeSetAttribute = prototype.setAttribute || (window.Element && window.Element.prototype.setAttribute);
+      if (typeof nativeSetAttribute === "function") {
+        prototype.setAttribute = function(name, value) {
+          const next = String(name || "").toLowerCase() === "src"
+            ? imageElementSource(value) : value;
+          return nativeSetAttribute.call(this, name, next);
+        };
+      }
+      Object.defineProperty(prototype, "__waywardGeneratedImageUrlRewrite", { value: true });
+      report("generated_image_dom_rewrite_installed", {});
+    } catch (error) {
+      report("generated_image_dom_rewrite_failed", {
+        reason: String(error && (error.message || error)).slice(0, 160)
+      });
+    }
   }
 
   function refreshBackendProbe(reason) {
@@ -402,6 +481,7 @@
     window.setTimeout(check, 500);
   }
 
+  installImageElementUrlRewrite();
   installLegacyApiHook();
   installPauseSettingsFactoryHook();
   installStudioBridgeHook();
