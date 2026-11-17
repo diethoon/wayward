@@ -2,7 +2,7 @@ name: Build Wayward external-folder Android launcher
 
 on:
   push:
-    branches: [feature/android-external-folder-launcher-v1, feature/android-external-folder-launcher-viewport-fit, feature/android-launcher-zip-mods-multi-sessions, feature/android-imagegen-launcher-one-tap, perf/launcher-saf-webview-20261109, fix/mobile-imagegen-server-first, fix/launcher-0312-no-companion-zip-live-server, fix/launcher-0312-android-execve-diagnostics, fix/launcher-0313-safe-server-log-export]
+    branches: [feature/android-external-folder-launcher-v1, feature/android-external-folder-launcher-viewport-fit, feature/android-launcher-zip-mods-multi-sessions, feature/android-imagegen-launcher-one-tap, perf/launcher-saf-webview-20261109, fix/mobile-imagegen-server-first, fix/launcher-0312-no-companion-zip-live-server, fix/launcher-0312-android-execve-diagnostics, fix/launcher-0313-safe-server-log-export, fix/launcher-0315-imagegen-exit-diagnostics]
     paths:
       - "android-external-folder-launcher/**"
       - ".github/workflows/build-android-external-folder-launcher.yml"
@@ -50,7 +50,7 @@ jobs:
         run: bash ./verify.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: WaywardLauncher-safe-log-export-v0.3.14
+          name: WaywardLauncher-exit-diagnostics-v0.3.15
           path: android-external-folder-launcher/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

@@ -50,6 +50,13 @@ assert.match(logger, /data:image/);
 assert.match(logger, /new File\(imageGen, "install\.log"\)/);
 assert.match(service, /new File\(getFilesDir\(\), "imagegen\/install\.log"\)/);
 assert.match(service, /진단 로그 공유에서 설치 로그를 확인하세요/);
+assert.match(service, /bun_server_process_exited_early/);
+assert.match(service, /exitCode/);
+assert.match(service, /serverLogBytes/);
+assert.match(logger, /file bytes=/);
+assert.match(logger, /line\.trim\(\)\.startsWith\("at "\)/,
+  "runtime stack frames must be included in the filtered server log");
+
 assert.doesNotMatch(ingestApi, /authorized\(/);
 assert.match(ingestApi, /parseBody\(req\)/);
 assert.match(common, /MAX_IP_BATCHES_PER_MINUTE/);

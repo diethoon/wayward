@@ -249,7 +249,24 @@ public final class ImageGenService extends Service {
         long deadline = System.currentTimeMillis() + 60000L;
         while (!stopping && System.currentTimeMillis() < deadline) {
             if (serverProcess == null || !serverProcess.isAlive()) {
-                throw new IllegalStateException("ImageGen 프로세스가 시작 직후 종료됐습니다. 포트 충돌 또는 런타임 오류일 수 있습니다. 로그: " + log.getAbsolutePath());
+                int exitCode = -1;
+                try { if (serverProcess != null) exitCode = serverProcess.exitValue(); } catch (Exception ignored) {}
+                long serverLogBytes = log.isFile() ? log.length() : -1L;
+                org.json.JSONObject exitDetails = new org.json.JSONObject();
+                try {
+                    exitDetails.put("exitCode", exitCode);
+                    exitDetails.put("serverLogBytes", serverLogBytes);
+                    exitDetails.put("projectHasNodeModules", nodeModules.isDirectory());
+                    exitDetails.put("sdk", Build.VERSION.SDK_INT);
+                    exitDetails.put("abis", java.util.Arrays.toString(Build.SUPPORTED_ABIS));
+                } catch (Exception ignored) {}
+                DiagnosticsLogger.event(this, "ERROR", "imagegen_service",
+                        "bun_server_process_exited_early", exitDetails);
+                appendDiagnostic("Bun 서버 프로세스 조기 종료: exitCode=" + exitCode
+                        + "; serverLogBytes=" + serverLogBytes
+                        + "; nodeModulesPresent=" + nodeModules.isDirectory());
+                throw new IllegalStateException("ImageGen 프로세스가 시작 직후 종료됐습니다 (exitCode="
+                        + exitCode + ", server.log=" + serverLogBytes + " bytes). 로그: " + log.getAbsolutePath());
             }
             if (probeHealth()) {
                 serverReady = true;

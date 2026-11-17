@@ -154,6 +154,9 @@ final class DiagnosticsLogger {
         try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
             long length = input.length();
             long offset = Math.max(0L, length - maxBytes);
+            report.append("[file bytes=").append(length)
+                    .append(", tail offset=").append(offset).append("]");
+            report.append((char) 10);
             int count = (int) Math.min(length - offset, maxBytes);
             byte[] bytes = new byte[count];
             input.seek(offset);
@@ -170,7 +173,10 @@ final class DiagnosticsLogger {
                 if (lower.matches(".*(prompt|authorization|cookie|request[_ -]?body|response[_ -]?body|data:image|base64|bearer\\s|api[_-]?key|access[_-]?token).*")) {
                     continue;
                 }
-                boolean diagnostic = lower.matches(".*(error|exception|fatal|panic|eaddrinuse|address already in use|cannot find|failed|failure|err_[a-z0-9_]+|warn|stack trace).*");
+                boolean stackFrame = line.trim().startsWith("at ")
+                        || line.trim().matches("[0-9]+[|].*");
+                boolean runtimeDiagnostic = lower.matches(".*(error|exception|fatal|panic|eaddrinuse|address already in use|cannot find|failed|failure|err_[a-z0-9_]+|warn|stack trace|segmentation fault|sig(abrt|segv|bus)|killed|module not found|unsupported|permission denied|bun:).*");
+                boolean diagnostic = stackFrame || runtimeDiagnostic;
                 boolean installProgress = installLog && lower.matches(".*(bun install|resolved [0-9]+|installed [0-9]+|downloaded [0-9]+|saved lockfile|packages? installed|fetching|extracting|cache).*");
                 if (!diagnostic && !installProgress) continue;
                 String safe = redact(line);
