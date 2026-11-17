@@ -265,6 +265,7 @@ public final class ImageGenService extends Service {
                 appendDiagnostic("Bun 서버 프로세스 조기 종료: exitCode=" + exitCode
                         + "; serverLogBytes=" + serverLogBytes
                         + "; nodeModulesPresent=" + nodeModules.isDirectory());
+                runDoctorProbe(bun, project);
                 throw new IllegalStateException("ImageGen 프로세스가 시작 직후 종료됐습니다 (exitCode="
                         + exitCode + ", server.log=" + serverLogBytes + " bytes). 로그: " + log.getAbsolutePath());
             }
@@ -487,6 +488,34 @@ public final class ImageGenService extends Service {
             throw new IllegalStateException("Bun 명령 실행 시간이 초과됐습니다.");
         }
         return process.exitValue();
+    }
+
+    private void runDoctorProbe(File bun, File project) {
+        File doctorLog = new File(getFilesDir(), "imagegen/doctor.log");
+        try {
+            File parent = doctorLog.getParentFile();
+            if (parent != null && !parent.exists()) parent.mkdirs();
+            try (FileOutputStream ignored = new FileOutputStream(doctorLog, false)) {
+                // Start with a fresh log so the diagnostic belongs to this failed launch.
+            }
+            ProcessBuilder doctor = bunProcess(bun, "src/cli.ts", "doctor").directory(project);
+            doctor.environment().put("BUN_INSTALL",
+                    new File(getFilesDir(), "bun-install").getAbsolutePath());
+            int exitCode = runCommand(doctor, doctorLog, 30, TimeUnit.SECONDS);
+            org.json.JSONObject details = new org.json.JSONObject();
+            try {
+                details.put("exitCode", exitCode);
+                details.put("logBytes", doctorLog.isFile() ? doctorLog.length() : -1L);
+                details.put("projectHasNodeModules", new File(project, "node_modules").isDirectory());
+            } catch (Exception ignored) {}
+            DiagnosticsLogger.event(this, "INFO", "imagegen_service",
+                    "bun_server_doctor_completed", details);
+            appendDiagnostic("Bun doctor 완료: exitCode=" + exitCode
+                    + "; doctorLogBytes=" + (doctorLog.isFile() ? doctorLog.length() : -1L));
+        } catch (Throwable error) {
+            appendDiagnostic("Bun doctor 실행 실패: " + shortMessage(error));
+            DiagnosticsLogger.error(this, "imagegen_service", "bun_server_doctor_failed", error);
+        }
     }
 
     private boolean probeHealth() {
