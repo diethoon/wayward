@@ -36,6 +36,8 @@ final class ImageGenProxy {
             deliver(web, requestId, errorResponse(400, "허용되지 않은 ImageGen 요청입니다."));
             return;
         }
+        final android.content.Context appContext=web.getContext().getApplicationContext();
+        final long startedAt=System.currentTimeMillis();
         new Thread(() -> {
             HttpURLConnection connection = null;
             try {
@@ -80,6 +82,9 @@ final class ImageGenProxy {
                 }
 
                 int status = connection.getResponseCode();
+                JSONObject diagnostic=new JSONObject();
+                try{diagnostic.put("method",safeMethod);diagnostic.put("path",Uri.parse(safePath).getPath());diagnostic.put("status",status);diagnostic.put("elapsedMs",System.currentTimeMillis()-startedAt);}catch(Exception ignored){}
+                DiagnosticsLogger.event(appContext,status>=400?"WARN":"INFO","imagegen_proxy","api_response",diagnostic);
                 InputStream responseStream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
                 byte[] responseBody = responseStream == null ? new byte[0]
                         : readLimited(responseStream, MAX_RESPONSE_BYTES);
@@ -92,6 +97,9 @@ final class ImageGenProxy {
                 payload.put("bodyBase64", Base64.encodeToString(responseBody, Base64.NO_WRAP));
                 deliver(web, requestId, payload.toString());
             } catch (Exception e) {
+                JSONObject diagnostic=new JSONObject();
+                try{diagnostic.put("method",safeMethod);diagnostic.put("exception",e.getClass().getSimpleName());diagnostic.put("elapsedMs",System.currentTimeMillis()-startedAt);}catch(Exception ignored){}
+                DiagnosticsLogger.event(appContext,"ERROR","imagegen_proxy","api_transport_error",diagnostic);
                 deliver(web, requestId, errorResponse(502, e.getMessage() == null
                         ? "ImageGen 서버에 연결하지 못했습니다." : e.getMessage()));
             } finally {

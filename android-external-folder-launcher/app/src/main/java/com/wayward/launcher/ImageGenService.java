@@ -15,12 +15,15 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.security.MessageDigest;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -34,6 +37,7 @@ public final class ImageGenService extends Service {
     public static final String ACTION_START = "com.wayward.launcher.imagegen.START";
     public static final String ACTION_STOP = "com.wayward.launcher.imagegen.STOP";
     public static final String EXTRA_BACKEND_ROOT = "backendRoot";
+    public static final String EXTRA_BACKEND_VERSION = "backendVersion";
     private static final String CHANNEL_ID = "wayward-imagegen";
     private static final int NOTIFICATION_ID = 8189;
     private static final String BUN_URL =
@@ -47,25 +51,32 @@ public final class ImageGenService extends Service {
     public static volatile String statusMessage = "서버가 실행되지 않았습니다.";
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final ScheduledExecutorService heartbeat = Executors.newSingleThreadScheduledExecutor();
     private volatile Process serverProcess;
     private volatile boolean stopping = false;
+    private volatile String backendVersion = "";
 
     @Override public void onCreate() {
         super.onCreate();
+        DiagnosticsLogger.event(this,"INFO","imagegen_service","service_created",null);
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager != null && Build.VERSION.SDK_INT >= 26) {
             manager.createNotificationChannel(new NotificationChannel(
                     CHANNEL_ID, "Wayward 이미지 생성 서버", NotificationManager.IMPORTANCE_LOW));
         }
+        heartbeat.scheduleAtFixedRate(this::persistState, 5, 5, TimeUnit.SECONDS);
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? ACTION_START : intent.getAction();
         if (ACTION_STOP.equals(action)) {
+            DiagnosticsLogger.event(this,"INFO","imagegen_service","stop_command_received",null);
             stopping = true;
+            serverReady = false;
             starting = false;
             statusMessage = "이미지 생성 서버가 중지되었습니다.";
             stopRuntime();
+            updateNotification(statusMessage);
             stopForeground(true);
             stopSelf(startId);
             return START_NOT_STICKY;
@@ -73,25 +84,36 @@ public final class ImageGenService extends Service {
 
         String backendPath = intent == null ? null : intent.getStringExtra(EXTRA_BACKEND_ROOT);
         if (backendPath == null || backendPath.isEmpty()) {
+            statusMessage = "ImageGen 백엔드 경로가 전달되지 않았습니다.";
+            starting = false;
+            serverReady = false;
+            updateNotification(statusMessage);
             stopSelf(startId);
             return START_NOT_STICKY;
         }
 
         if (serverReady || starting) return START_STICKY;
+        DiagnosticsLogger.event(this,"INFO","imagegen_service","start_command_received",null);
         stopping = false;
         starting = true;
         serverReady = false;
-        updateNotification("이미지 생성 서버 준비 중");
-        startAsForeground("이미지 생성 서버 준비 중");
-        worker.execute(() -> {
-            try {
-                startRuntime(new File(backendPath));
-            } catch (Exception e) {
-                serverReady = false;
-                starting = false;
-                updateNotification("시작 실패: " + shortMessage(e));
-            }
-        });
+        backendVersion = intent.getStringExtra(EXTRA_BACKEND_VERSION);
+        if (backendVersion == null) backendVersion = "";
+        try {
+            updateNotification("이미지 생성 서버 준비 중");
+            startAsForeground("이미지 생성 서버 준비 중");
+            worker.execute(() -> {
+                try {
+                    startRuntime(new File(backendPath));
+                } catch (Throwable error) {
+                    recordFailure(error);
+                }
+            });
+        } catch (Throwable error) {
+            recordFailure(error);
+            stopSelf(startId);
+            return START_NOT_STICKY;
+        }
         return START_NOT_STICKY;
     }
 
@@ -120,8 +142,48 @@ public final class ImageGenService extends Service {
 
     private void updateNotification(String text) {
         statusMessage = text;
+        persistState();
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager != null) manager.notify(NOTIFICATION_ID, buildNotification(text));
+    }
+
+    private void persistState() {
+        try {
+            ImageGenStatusStore.write(getFilesDir(), serverReady, starting, statusMessage, backendVersion);
+        } catch (Exception error) {
+            appendDiagnostic("상태 저장 실패: " + shortMessage(error));
+        }
+    }
+
+    private void recordFailure(Throwable error) {
+        DiagnosticsLogger.error(this,"imagegen_service","runtime_start_failed",error);
+        serverReady = false;
+        starting = false;
+        String message = shortMessage(error);
+        statusMessage = "서버 시작 실패: " + message;
+        appendDiagnostic(stackTrace(error));
+        updateNotification(statusMessage);
+    }
+
+    private void appendDiagnostic(String message) {
+        try {
+            File log = new File(getFilesDir(), "imagegen/startup.log");
+            File parent = log.getParentFile();
+            if (parent != null && !parent.exists()) parent.mkdirs();
+            try (FileOutputStream out = new FileOutputStream(log, true)) {
+                out.write((System.currentTimeMillis() + " " + message + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                out.flush();
+                out.getFD().sync();
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private static String stackTrace(Throwable error) {
+        if (error == null) return "Unknown error";
+        StringWriter text = new StringWriter();
+        error.printStackTrace(new PrintWriter(text));
+        String value = text.toString();
+        return value.length() > 24000 ? value.substring(0, 24000) : value;
     }
 
     private void startRuntime(File backendRoot) throws Exception {
@@ -163,6 +225,7 @@ public final class ImageGenService extends Service {
         builder.environment().put("TMPDIR", getCacheDir().getAbsolutePath());
         builder.environment().put("BUN_INSTALL", new File(getFilesDir(), "bun-install").getAbsolutePath());
         serverProcess = builder.start();
+        DiagnosticsLogger.event(this,"INFO","imagegen_service","bun_server_process_started",null);
 
         long deadline = System.currentTimeMillis() + 60000L;
         while (!stopping && System.currentTimeMillis() < deadline) {
@@ -336,16 +399,24 @@ public final class ImageGenService extends Service {
         return out.toString();
     }
 
-    private static String shortMessage(Exception e) {
+    private static String shortMessage(Throwable e) {
         String message = e == null ? null : e.getMessage();
         if (message == null || message.trim().isEmpty()) return "원인을 확인하지 못했습니다.";
         return message.length() > 160 ? message.substring(0, 157) + "..." : message;
     }
 
     @Override public void onDestroy() {
+        boolean unexpected = !stopping;
         stopping = true;
         starting = false;
         stopRuntime();
+        if (unexpected) {
+            DiagnosticsLogger.event(this,"ERROR","imagegen_service","service_destroyed_unexpectedly",null);
+            serverReady = false;
+            statusMessage = "이미지 생성 서비스가 예기치 않게 종료되었습니다. 시작 로그를 확인하세요.";
+        }
+        persistState();
+        heartbeat.shutdownNow();
         worker.shutdownNow();
         stopForeground(true);
         super.onDestroy();
