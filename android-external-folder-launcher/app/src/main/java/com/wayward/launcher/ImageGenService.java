@@ -46,6 +46,9 @@ public final class ImageGenService extends Service {
             "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-linux-aarch64-android.zip";
     private static final String BUN_SHA256 =
             "d72e42c60e895ccbc16144bb1e0e0ad7ee384841c35b5501a7ec28b4d6d759c9";
+    // Android blocks direct execve() of app-private binaries on modern releases.
+    // Launch the verified Bun ELF through the system dynamic linker instead.
+    private static final String ANDROID_LINKER_64 = "/system/bin/linker64";
     private static final long MAX_BUN_ZIP = 60L * 1024L * 1024L;
     private static final long MAX_BUN_UNPACKED = 180L * 1024L * 1024L;
     public static volatile boolean serverReady = false;
@@ -94,7 +97,7 @@ public final class ImageGenService extends Service {
             return START_NOT_STICKY;
         }
 
-        if (serverReady || starting) return START_STICKY;
+        if (serverReady || starting || (serverProcess != null && serverProcess.isAlive())) return START_STICKY;
         final String launchMode = intent == null ? "default" : intent.getStringExtra(EXTRA_LAUNCH_MODE);
         final String comfyUrl = intent == null ? "" : intent.getStringExtra(EXTRA_COMFY_URL);
         DiagnosticsLogger.event(this,"INFO","imagegen_service","start_command_received",null);
@@ -201,13 +204,6 @@ public final class ImageGenService extends Service {
             throw new IllegalStateException("런처 내장 wayward-imagegen/package.json 또는 src/cli.ts가 없습니다.");
         }
 
-        if (probeHealth()) {
-            serverReady = true;
-            starting = false;
-            updateNotification("이미지 생성 서버가 이미 실행 중입니다.");
-            return;
-        }
-
         File bun = ensureBun();
         File log = new File(getFilesDir(), "imagegen/server.log");
         File logParent = log.getParentFile();
@@ -221,22 +217,18 @@ public final class ImageGenService extends Service {
             throw new IllegalStateException("런처 ImageGen 실행 설정 파일을 만들지 못했습니다.");
         }
 
-        java.util.List<String> command = new java.util.ArrayList<>();
-        command.add(bun.getAbsolutePath());
-        command.add("src/cli.ts");
-        command.add("--config");
-        command.add(config.getAbsolutePath());
-        command.add("--no-webp");
+        ProcessBuilder builder = bunProcess(bun,
+                "src/cli.ts", "--config", config.getAbsolutePath(), "--no-webp")
+                .directory(project).redirectErrorStream(true)
+                .redirectOutput(ProcessBuilder.Redirect.appendTo(log));
         if ("comfy".equals(launchMode) && !comfyUrl.isEmpty()) {
-            command.add("--comfy-url");
-            command.add(comfyUrl);
+            builder.command().add("--comfy-url");
+            builder.command().add(comfyUrl);
         }
 
         updateNotification("comfy".equals(launchMode) && comfyUrl.isEmpty()
                 ? "ComfyUI 주소 대기 중 · 로컬 서버 시작"
                 : "이미지 생성 서버 시작 중 · 127.0.0.1:8189");
-        ProcessBuilder builder = new ProcessBuilder(command).directory(project).redirectErrorStream(true)
-                .redirectOutput(ProcessBuilder.Redirect.appendTo(log));
         builder.environment().put("HOME", getFilesDir().getAbsolutePath());
         builder.environment().put("TMPDIR", getCacheDir().getAbsolutePath());
         builder.environment().put("BUN_INSTALL", new File(getFilesDir(), "bun-install").getAbsolutePath());
@@ -256,25 +248,47 @@ public final class ImageGenService extends Service {
         serverProcess = startProcess(builder);
         DiagnosticsLogger.event(this,"INFO","imagegen_service","bun_server_process_started",null);
 
-        long deadline = System.currentTimeMillis() + 60000L;
-        while (!stopping && System.currentTimeMillis() < deadline) {
+        // A slow first boot must not be reported as a failure while Bun is alive.
+        // Wait for health indefinitely; terminate only when the child exits or the
+        // user presses Stop in the foreground notification.
+        long nextHealthNoticeAt = 0L;
+        while (!stopping) {
+            Process running = serverProcess;
+            if (running == null || !running.isAlive()) {
+                int exitCode = -1;
+                try { if (running != null) exitCode = running.exitValue(); } catch (Exception ignored) {}
+                throw new IllegalStateException("ImageGen 프로세스가 시작 직후 종료됐습니다(exitCode="
+                        + exitCode + "). 로그: " + log.getAbsolutePath());
+            }
             if (probeHealth()) {
                 serverReady = true;
                 starting = false;
-                updateNotification("comfy".equals(launchMode) && comfyUrl.isEmpty() ? "ComfyUI 주소 미설정 · 로컬 서버 대기 중 · 127.0.0.1:8189" : "연결됨 · 127.0.0.1:8189");
+                updateNotification("comfy".equals(launchMode) && comfyUrl.isEmpty()
+                        ? "ComfyUI 주소 미설정 · 로컬 서버 대기 중 · 127.0.0.1:8189"
+                        : "연결됨 · 127.0.0.1:8189");
                 break;
             }
-            if (!serverProcess.isAlive()) {
-                throw new IllegalStateException("ImageGen 프로세스가 시작 직후 종료됐습니다. 로그: " + log.getAbsolutePath());
+            serverReady = false;
+            starting = true;
+            long now = System.currentTimeMillis();
+            if (now >= nextHealthNoticeAt) {
+                updateNotification("서버 실행 중 · 초기화/헬스 응답 대기 · 127.0.0.1:8189");
+                nextHealthNoticeAt = now + 30000L;
             }
-            Thread.sleep(500);
+            Thread.sleep(1000);
         }
-        if (!serverReady) throw new IllegalStateException("60초 안에 /api/image/health 응답이 오지 않았습니다.");
+        if (stopping) return;
 
         Process running = serverProcess;
         while (!stopping && running != null && running.isAlive()) {
             if (!probeHealth()) {
+                serverReady = false;
+                starting = true;
                 updateNotification("서버 응답 대기 중 · 연결 상태 확인 필요");
+            } else if (!serverReady) {
+                serverReady = true;
+                starting = false;
+                updateNotification("연결됨 · 127.0.0.1:8189");
             }
             Thread.sleep(5000);
         }
@@ -291,8 +305,9 @@ public final class ImageGenService extends Service {
         File invalidBinary = null;
         if (binary.isFile()) {
             try {
+                prepareBunExecutable(binary);
                 int existingVersion = runCommand(
-                        new ProcessBuilder(binary.getAbsolutePath(), "--version"),
+                        bunProcess(binary, "--version"),
                         new File(getFilesDir(), "imagegen/bun-version.log"), 30, TimeUnit.SECONDS);
                 if (existingVersion == 0) {
                     DiagnosticsLogger.event(this,"INFO","imagegen_service","bun_existing_binary_validated",null);
@@ -355,6 +370,9 @@ public final class ImageGenService extends Service {
                     if (found) throw new SecurityException("Bun ZIP에 실행 파일이 중복되어 있습니다.");
                     File outFile = new File(staging, "bun");
                     try (FileOutputStream out = new FileOutputStream(outFile)) {
+                        if (!outFile.setReadOnly()) {
+                            throw new IllegalStateException("Bun 실행 파일을 추출 단계에서 읽기 전용으로 설정하지 못했습니다.");
+                        }
                         byte[] buffer = new byte[32768];
                         int count;
                         while ((count = zip.read(buffer)) >= 0) {
@@ -373,19 +391,52 @@ public final class ImageGenService extends Service {
         }
         if (!found) throw new IllegalStateException("Bun ZIP에서 실행 파일을 찾지 못했습니다.");
         File stagedBinary = new File(staging, "bun");
-        if (!stagedBinary.setExecutable(true, true)) throw new IllegalStateException("Bun 실행 권한을 설정하지 못했습니다.");
+        prepareBunExecutable(stagedBinary);
         if (!staging.renameTo(root)) {
             File finalBinary = new File(root, "bun");
             if (!stagedBinary.renameTo(finalBinary)) throw new IllegalStateException("Bun 실행 파일을 설치하지 못했습니다.");
             deleteTree(staging);
         }
         File installed = new File(root, "bun");
-        if (!installed.setExecutable(true, true)) throw new IllegalStateException("Bun 실행 권한을 확인하지 못했습니다.");
-        int version = runCommand(new ProcessBuilder(installed.getAbsolutePath(), "--version"), new File(getFilesDir(), "imagegen/bun-version.log"), 30, TimeUnit.SECONDS);
+        prepareBunExecutable(installed);
+        int version = runCommand(bunProcess(installed, "--version"),
+                new File(getFilesDir(), "imagegen/bun-version.log"), 30, TimeUnit.SECONDS);
         if (version != 0) throw new IllegalStateException("이 기기에서 Bun Android 실행 파일을 실행하지 못했습니다(exit " + version + "). " + executableDiagnostics(installed));
         if (invalidBinary != null) deleteTree(invalidBinary);
         DiagnosticsLogger.event(this,"INFO","imagegen_service","bun_fresh_install_validated",null);
         return installed;
+    }
+
+    private void prepareBunExecutable(File executable) throws java.io.IOException {
+        if (executable == null || !executable.isFile()) {
+            throw new java.io.IOException("Bun 실행 파일이 없습니다: "
+                    + (executable == null ? "" : executable.getAbsolutePath()));
+        }
+        if (!executable.setReadOnly()) {
+            throw new java.io.IOException("Bun 실행 파일을 읽기 전용으로 설정하지 못했습니다: "
+                    + executable.getAbsolutePath());
+        }
+        if (!executable.setExecutable(true, true)) {
+            throw new java.io.IOException("Bun 실행 권한을 설정하지 못했습니다: "
+                    + executable.getAbsolutePath());
+        }
+        if (!executable.canRead() || !executable.canExecute() || executable.canWrite()) {
+            throw new java.io.IOException("Bun 권한 검증 실패: " + executableDiagnostics(executable));
+        }
+    }
+
+    private ProcessBuilder bunProcess(File executable, String... arguments) throws java.io.IOException {
+        File linker = new File(ANDROID_LINKER_64);
+        if (!linker.isFile() || !linker.canExecute()) {
+            throw new java.io.IOException("Android 64비트 동적 링커를 사용할 수 없습니다: " + ANDROID_LINKER_64);
+        }
+        java.util.List<String> command = new java.util.ArrayList<>();
+        command.add(ANDROID_LINKER_64);
+        command.add(executable.getAbsolutePath());
+        if (arguments != null) {
+            for (String argument : arguments) command.add(argument);
+        }
+        return new ProcessBuilder(command);
     }
 
     private String executableDiagnostics(File executable) {
@@ -394,6 +445,7 @@ public final class ImageGenService extends Service {
                 + "; isFile=" + (executable != null && executable.isFile())
                 + "; canRead=" + (executable != null && executable.canRead())
                 + "; canExecute=" + (executable != null && executable.canExecute())
+                + "; canWrite=" + (executable != null && executable.canWrite())
                 + "; bytes=" + (executable != null && executable.isFile() ? executable.length() : -1)
                 + "; parentCanRead=" + (parent != null && parent.canRead())
                 + "; parentCanWrite=" + (parent != null && parent.canWrite())
@@ -406,15 +458,21 @@ public final class ImageGenService extends Service {
             return builder.start();
         } catch (java.io.IOException error) {
             java.util.List<String> command = builder.command();
-            File executable = command == null || command.isEmpty() ? null : new File(command.get(0));
-            String diagnostics = executableDiagnostics(executable);
+            boolean usesSystemLinker = command != null && command.size() > 1
+                    && ANDROID_LINKER_64.equals(command.get(0));
+            File executable = command == null || command.isEmpty() ? null
+                    : new File(usesSystemLinker ? command.get(1) : command.get(0));
+            String diagnostics = "usesSystemLinker=" + usesSystemLinker + "; "
+                    + executableDiagnostics(executable);
             org.json.JSONObject details = new org.json.JSONObject();
             try {
                 details.put("exception", error.toString());
+                details.put("usesSystemLinker", usesSystemLinker);
                 details.put("executable", executable == null ? "" : executable.getAbsolutePath());
                 details.put("isFile", executable != null && executable.isFile());
                 details.put("canRead", executable != null && executable.canRead());
                 details.put("canExecute", executable != null && executable.canExecute());
+                details.put("canWrite", executable != null && executable.canWrite());
                 details.put("bytes", executable != null && executable.isFile() ? executable.length() : -1);
                 details.put("sdk", Build.VERSION.SDK_INT);
                 details.put("supportedAbis", java.util.Arrays.toString(Build.SUPPORTED_ABIS));

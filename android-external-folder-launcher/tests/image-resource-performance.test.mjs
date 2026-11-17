@@ -27,6 +27,12 @@ const cdnFallbackRoute = source.indexOf("if(FolderHandler.isImageRequestPath(pat
 assert.ok(localOnlyRoute >= 0 && cdnFallbackRoute > localOnlyRoute,
   "generated character paths must be handled locally before the general CDN fallback");
 contains("InputStream openImage(String p)throws Exception");
+contains("new SafImageCache(MainActivity.this)");
+contains("imageCache.open(getContentResolver(),documentUri,n.id,n.size,n.lastModified)");
+contains("recordImageOpenTiming(p,resolveMs,accessMs,opened,n.size)");
+contains("recordDirectoryQueryTiming(waitMs,queryMs,loaded.size())");
+contains("DocumentsContract.Document.COLUMN_SIZE");
+contains("DocumentsContract.Document.COLUMN_LAST_MODIFIED");
 contains("isImageAssetPath(p)?tree.openImage(p):tree.open(p)");
 contains("isImageAssetPath(String path)");
 contains("private Node resolveImage(String path)");
@@ -53,4 +59,9 @@ contains("image_http_error");
 contains("isImageResourcePath(failedPath)");
 contains("zipMods.close()");
 
-console.log("Image resource cache, strict local-only generated characters, other-image CDN fallback and preconnect tests passed.");
+const cacheSource = fs.readFileSync(new URL("../app/src/main/java/com/wayward/launcher/SafImageCache.java", import.meta.url), "utf8");
+for (const value of ["MAX_CACHE_BYTES = 128L * 1024L * 1024L", "MAX_SINGLE_IMAGE_BYTES = 32L * 1024L * 1024L", "ConcurrentHashMap<String, CacheLoad>", "CompletableFuture<File>", "TeeInputStream", "recordSourceReadDuration", "cacheWriteNanos", "cacheFinalizeNanos", "cacheFinalizeMs", "if (copiedBytes != expectedSize)", "new File(context.getCacheDir(), \"wayward-saf-images\")", "public long skip(long requested)", "markSupported()"]) {
+  assert.ok(cacheSource.includes(value), "Missing bounded SAF image cache behavior: " + value);
+}
+assert.ok(cacheSource.includes("SHARED_LOAD_TIMEOUT_SECONDS = 60L"), "Shared cache loads must have a timeout.");
+console.log("SAF image stage timing, bounded streaming cache, duplicate-open coalescing, local-only generated characters and CDN fallback tests passed.");

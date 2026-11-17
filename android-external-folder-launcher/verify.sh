@@ -41,6 +41,17 @@ javac -d "$ZIP_TEST_BUILD" app/src/main/java/com/wayward/launcher/ImageGenStatus
 java -cp "$ZIP_TEST_BUILD" com.wayward.launcher.ImageGenStatusStoreTest
 javac -d "$ZIP_TEST_BUILD" app/src/main/java/com/wayward/launcher/ComfyEndpoint.java tests/ComfyEndpointTest.java
 java -cp "$ZIP_TEST_BUILD" com.wayward.launcher.ComfyEndpointTest
+SAF_TEST_CLASSES="$ZIP_TEST_BUILD/saf-image-cache"
+mkdir -p "$SAF_TEST_CLASSES"
+javac -d "$SAF_TEST_CLASSES" \
+  tests/saf-image-cache-stubs/android/net/Uri.java \
+  tests/saf-image-cache-stubs/android/content/Context.java \
+  tests/saf-image-cache-stubs/android/content/ContentResolver.java \
+  tests/saf-image-cache-stubs/org/json/JSONObject.java \
+  tests/saf-image-cache-stubs/com/wayward/launcher/ImagePipelineDiagnostics.java \
+  app/src/main/java/com/wayward/launcher/SafImageCache.java \
+  tests/SafImageCacheTest.java
+java -cp "$SAF_TEST_CLASSES" com.wayward.launcher.SafImageCacheTest
 test -s ../Wayward_WML_ko.html
 gradle --no-daemon assembleDebug
 test -s app/build/outputs/apk/debug/app-debug.apk
