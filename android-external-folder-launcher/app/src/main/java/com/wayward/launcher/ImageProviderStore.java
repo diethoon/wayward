@@ -86,6 +86,7 @@ final class ImageProviderStore {
         final ArrayList<Provider> providers = new ArrayList<>();
         final LinkedHashMap<String, String> defaults = new LinkedHashMap<>();
         final LinkedHashMap<String, String> fallbacks = new LinkedHashMap<>();
+        String novelAiToken = "";
     }
 
     private final File target;
@@ -132,6 +133,10 @@ final class ImageProviderStore {
         }
         readProfileMap(root.optJSONObject("defaults"), snapshot.defaults);
         readProfileMap(root.optJSONObject("fallbacks"), snapshot.fallbacks);
+        snapshot.novelAiToken = root.optString("novelAiToken", "");
+        if (snapshot.novelAiToken.length() > 4096) {
+            throw new IllegalStateException("NovelAI 토큰이 저장 길이 제한을 초과했습니다.");
+        }
         return snapshot;
     }
 
@@ -140,7 +145,11 @@ final class ImageProviderStore {
             throw new IllegalArgumentException("이미지 서비스는 최대 100개까지 등록할 수 있습니다.");
         }
         JSONObject root = new JSONObject();
+        if (snapshot.novelAiToken == null || snapshot.novelAiToken.length() > 4096) {
+            throw new IllegalArgumentException("NovelAI 토큰은 4096자 이하여야 합니다.");
+        }
         root.put("schemaVersion", 1);
+        root.put("novelAiToken", snapshot.novelAiToken);
         JSONArray providers = new JSONArray();
         for (Provider provider : snapshot.providers) {
             validateProvider(provider);
@@ -192,6 +201,11 @@ final class ImageProviderStore {
         } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
             Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
         }
+    }
+
+    static String readNovelAiToken(Context context) throws Exception {
+        Snapshot snapshot = new ImageProviderStore(context).load();
+        return snapshot.novelAiToken == null ? "" : snapshot.novelAiToken;
     }
 
     static String publicJson(Context context, String profileId) {

@@ -38,6 +38,8 @@ public final class ImageGenService extends Service {
     public static final String ACTION_STOP = "com.wayward.launcher.imagegen.STOP";
     public static final String EXTRA_BACKEND_ROOT = "backendRoot";
     public static final String EXTRA_BACKEND_VERSION = "backendVersion";
+    public static final String EXTRA_LAUNCH_MODE = "launchMode";
+    public static final String EXTRA_COMFY_URL = "comfyUrl";
     private static final String CHANNEL_ID = "wayward-imagegen";
     private static final int NOTIFICATION_ID = 8189;
     private static final String BUN_URL =
@@ -93,6 +95,8 @@ public final class ImageGenService extends Service {
         }
 
         if (serverReady || starting) return START_STICKY;
+        final String launchMode = intent == null ? "default" : intent.getStringExtra(EXTRA_LAUNCH_MODE);
+        final String comfyUrl = intent == null ? "" : intent.getStringExtra(EXTRA_COMFY_URL);
         DiagnosticsLogger.event(this,"INFO","imagegen_service","start_command_received",null);
         stopping = false;
         starting = true;
@@ -104,7 +108,7 @@ public final class ImageGenService extends Service {
             startAsForeground("이미지 생성 서버 준비 중");
             worker.execute(() -> {
                 try {
-                    startRuntime(new File(backendPath));
+                    startRuntime(new File(backendPath), launchMode == null ? "default" : launchMode, comfyUrl == null ? "" : comfyUrl);
                 } catch (Throwable error) {
                     recordFailure(error);
                 }
@@ -186,12 +190,15 @@ public final class ImageGenService extends Service {
         return value.length() > 24000 ? value.substring(0, 24000) : value;
     }
 
-    private void startRuntime(File backendRoot) throws Exception {
-        if (!backendRoot.isDirectory()) throw new IllegalStateException("Image Studio 백엔드 폴더를 찾지 못했습니다.");
+    private void startRuntime(File backendRoot,String launchMode,String requestedComfyUrl) throws Exception {
+        if (!backendRoot.isDirectory()) throw new IllegalStateException("런처 내장 ImageGen 백엔드 폴더가 없습니다.");
+        if (!"default".equals(launchMode) && !"novelai".equals(launchMode) && !"comfy".equals(launchMode)) {
+            throw new IllegalArgumentException("지원하지 않는 이미지 서버 실행 모드입니다.");
+        }
+        String comfyUrl = "comfy".equals(launchMode) ? ComfyEndpoint.normalizeOptional(requestedComfyUrl) : "";
         File project = new File(backendRoot, "wayward-imagegen");
-        if (!new File(project, "package.json").isFile()) project = backendRoot;
         if (!new File(project, "package.json").isFile() || !new File(project, "src/cli.ts").isFile()) {
-            throw new IllegalStateException("wayward-imagegen/package.json 또는 src/cli.ts가 없습니다.");
+            throw new IllegalStateException("런처 내장 wayward-imagegen/package.json 또는 src/cli.ts가 없습니다.");
         }
 
         if (probeHealth()) {
@@ -206,24 +213,40 @@ public final class ImageGenService extends Service {
         File logParent = log.getParentFile();
         if (logParent != null && !logParent.exists()) logParent.mkdirs();
 
-        File nodeModules = new File(project, "node_modules");
-        if (!nodeModules.isDirectory()) {
-            updateNotification("ImageGen 종속 패키지 설치 중");
-            int install = runCommand(new ProcessBuilder(bun.getAbsolutePath(), "install", "--production")
-                    .directory(project), log, 15, TimeUnit.MINUTES);
-            if (install != 0) throw new IllegalStateException("Bun 종속 패키지 설치 실패(exit " + install + "). 로그: " + log.getAbsolutePath());
+        // The pinned 0.8.4 package has only an optional sharp dependency for
+        // WebP conversion. Android runs with --no-webp and stores PNG, so no
+        // package-manager install or platform-specific native addon is needed.
+        File config = new File(project, "wayward-imagegen.config.json");
+        if (!config.isFile() || config.length() == 0) {
+            throw new IllegalStateException("런처 ImageGen 실행 설정 파일을 만들지 못했습니다.");
         }
 
         java.util.List<String> command = new java.util.ArrayList<>();
         command.add(bun.getAbsolutePath());
         command.add("src/cli.ts");
+        command.add("--config");
+        command.add(config.getAbsolutePath());
+        command.add("--no-webp");
+        if ("comfy".equals(launchMode) && !comfyUrl.isEmpty()) {
+            command.add("--comfy-url");
+            command.add(comfyUrl);
+        }
 
-        updateNotification("이미지 생성 서버 시작 중 · 127.0.0.1:8189");
+        updateNotification("comfy".equals(launchMode) && comfyUrl.isEmpty()
+                ? "ComfyUI 주소 대기 중 · 로컬 서버 시작"
+                : "이미지 생성 서버 시작 중 · 127.0.0.1:8189");
         ProcessBuilder builder = new ProcessBuilder(command).directory(project).redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.appendTo(log));
         builder.environment().put("HOME", getFilesDir().getAbsolutePath());
         builder.environment().put("TMPDIR", getCacheDir().getAbsolutePath());
         builder.environment().put("BUN_INSTALL", new File(getFilesDir(), "bun-install").getAbsolutePath());
+        if ("novelai".equals(launchMode)) {
+            String token = ImageProviderStore.readNovelAiToken(this);
+            if (token == null || token.trim().isEmpty()) {
+                throw new IllegalStateException("NovelAI API 토큰이 등록되지 않았습니다. 이미지 서비스 관리에서 토큰을 저장해 주세요.");
+            }
+            builder.environment().put("NAI_TOKEN", token);
+        }
         serverProcess = startProcess(builder);
         DiagnosticsLogger.event(this,"INFO","imagegen_service","bun_server_process_started",null);
 
@@ -232,7 +255,7 @@ public final class ImageGenService extends Service {
             if (probeHealth()) {
                 serverReady = true;
                 starting = false;
-                updateNotification("연결됨 · 127.0.0.1:8189");
+                updateNotification("comfy".equals(launchMode) && comfyUrl.isEmpty() ? "ComfyUI 주소 미설정 · 로컬 서버 대기 중 · 127.0.0.1:8189" : "연결됨 · 127.0.0.1:8189");
                 break;
             }
             if (!serverProcess.isAlive()) {
