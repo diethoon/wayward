@@ -497,8 +497,8 @@ public final class MainActivity extends Activity {
             }
             @Override public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest r){
                 Uri u=r.getUrl();WebResourceResponse local=loader.shouldInterceptRequest(u);if(local!=null)return local;
-                if(domain.equalsIgnoreCase(u.getHost())&&u.getPort()==originPort&&u.getPath()!=null&&u.getPath().startsWith("/images/"))return folderHandler.serveImagePath(u.getPath().substring(8));
-                if("art.sintention.com".equalsIgnoreCase(u.getHost())&&u.getPath()!=null&&u.getPath().startsWith("/images/"))return folderHandler.serve("images/"+u.getPath().substring(8));
+                if(domain.equalsIgnoreCase(u.getHost())&&u.getPort()==originPort&&FolderHandler.isImageRequestPath(u.getPath()))return folderHandler.serveImagePath(u.getPath().substring(8));
+                if("art.sintention.com".equalsIgnoreCase(u.getHost())&&FolderHandler.isImageRequestPath(u.getPath()))return folderHandler.serveExternalImagePath(u.getPath().substring(8));
                 return null;
             }
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){
@@ -783,15 +783,36 @@ public final class MainActivity extends Activity {
         private static final String CORE="wml/runtime/wml-core.js";private final SafTree tree;private final android.content.res.AssetManager assets;private final ZipModStore zipMods;private final String origin;
         FolderHandler(SafTree t,android.content.res.AssetManager a,ZipModStore z,String o){tree=t;assets=a;zipMods=z;origin=o;}
         @Override public WebResourceResponse handle(String p){return serve(p);}
+        static boolean isImageRequestPath(String path){
+            return path!=null&&path.regionMatches(true,0,"/images/",0,8);
+        }
+        static boolean isImageAssetPath(String path){
+            return path!=null&&path.regionMatches(true,0,"images/",0,7);
+        }
         WebResourceResponse serveImagePath(String relative){
+            WebResourceResponse result=serveLocalImage(relative);
+            return result!=null?result:response(404,"Not Found","text/plain","Local image not found");
+        }
+        WebResourceResponse serveExternalImagePath(String relative){
+            return serveLocalImage(relative);
+        }
+        private WebResourceResponse serveLocalImage(String relative){
             String path=normal(relative);
             if(path==null)return response(400,"Bad Request","text/plain","Invalid local image path");
-            WebResourceResponse result=serve("images/"+path);
-            return result!=null?result:response(404,"Not Found","text/plain","Local image not found");
+            String filePath="images/"+path;
+            try{
+                InputStream in=tree==null?null:tree.openImage(filePath);
+                if(in==null&&zipMods!=null)in=zipMods.open(filePath);
+                if(in==null)return null;
+                String m=mime(filePath);
+                return new WebResourceResponse(m,text(m)?"UTF-8":null,200,"OK",headers(filePath),in);
+            }catch(Exception e){
+                return response(500,"Read Error","text/plain","Image read error: "+e.getMessage());
+            }
         }
         WebResourceResponse serve(String raw){
             if(tree==null)return response(404,"Not Found","text/plain","Not found");
-            try{String p=normal(raw);if(p==null)return response(404,"Not Found","text/plain","Not found");InputStream in=tree==null?null:tree.open(p);if(in==null&&zipMods!=null)in=zipMods.open(p);if(in==null)return null;if(p.toLowerCase(Locale.ROOT).endsWith(".html")||p.toLowerCase(Locale.ROOT).endsWith(".htm"))in=mobileViewport(in);if(CORE.equals(p))in=new SequenceInputStream(assets.open("wml-folder-bootstrap.js"),in);String m=mime(p);return new WebResourceResponse(m,text(m)?"UTF-8":null,200,"OK",headers(p),in);}
+            try{String p=normal(raw);if(p==null)return response(404,"Not Found","text/plain","Not found");InputStream in=tree==null?null:(isImageAssetPath(p)?tree.openImage(p):tree.open(p));if(in==null&&zipMods!=null)in=zipMods.open(p);if(in==null)return null;if(p.toLowerCase(Locale.ROOT).endsWith(".html")||p.toLowerCase(Locale.ROOT).endsWith(".htm"))in=mobileViewport(in);if(CORE.equals(p))in=new SequenceInputStream(assets.open("wml-folder-bootstrap.js"),in);String m=mime(p);return new WebResourceResponse(m,text(m)?"UTF-8":null,200,"OK",headers(p),in);}
             catch(Exception e){return response(500,"Read Error","text/plain","Read error: "+e.getMessage());}
         }
         static InputStream mobileViewport(InputStream source)throws Exception{
@@ -819,8 +840,13 @@ public final class MainActivity extends Activity {
             int replaceStart,replaceEnd;
             if(viewport.find()){replaceStart=headStart+viewport.start();replaceEnd=headStart+viewport.end();}
             else{replaceStart=headTagEnd+1;replaceEnd=replaceStart;}
-            ByteArrayOutputStream patched=new ByteArrayOutputStream(original.length+meta.length+16);
+            String lowerHead=head.toLowerCase(Locale.ROOT);
+            byte[] imageServerHints=(lowerHead.contains("art.sintention.com")&&lowerHead.contains("preconnect"))
+                    ?new byte[0]
+                    :"<link rel=\"dns-prefetch\" href=\"//art.sintention.com\"><link rel=\"preconnect\" href=\"https://art.sintention.com\" crossorigin>".getBytes(StandardCharsets.US_ASCII);
+            ByteArrayOutputStream patched=new ByteArrayOutputStream(original.length+meta.length+imageServerHints.length+16);
             patched.write(original,0,replaceStart);
+            patched.write(imageServerHints);
             patched.write(meta);
             patched.write(original,replaceEnd,original.length-replaceEnd);
             return new SequenceInputStream(new ByteArrayInputStream(patched.toByteArray()),source);
@@ -875,6 +901,17 @@ public final class MainActivity extends Activity {
         }
         boolean exists(String p){try{Node n=resolve(p);return n!=null&&!n.dir;}catch(Exception e){return false;}}
         InputStream open(String p)throws Exception{Node n=resolve(p);if(n==null||n.dir)return null;return getContentResolver().openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree,n.id));}
+        InputStream openImage(String p)throws Exception{Node n=resolveImage(p);if(n==null||n.dir)return null;return getContentResolver().openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree,n.id));}
+        private Node resolveImage(String path)throws Exception{
+            String p=FolderHandler.normal(path);if(p==null)return null;
+            String parent=rootId;Node n=null;String[] parts=p.split("/");
+            for(int i=0;i<parts.length;i++){
+                n=findIgnoreCase(parent,parts[i]);if(n==null)return null;
+                if(i<parts.length-1){if(!n.dir)return null;parent=n.id;}
+            }
+            return n;
+        }
+
         boolean copyDirectory(String relativePath,File destination)throws Exception{
             Node source=resolve(relativePath);if(source==null||!source.dir)return false;
             deleteFileTree(destination);
@@ -960,6 +997,16 @@ public final class MainActivity extends Activity {
         }
         Node resolve(String path)throws Exception{String p=FolderHandler.normal(path);if(p==null)return null;String parent=rootId;Node n=null;String[] parts=p.split("/");for(int i=0;i<parts.length;i++){n=find(parent,parts[i]);if(n==null)return null;if(i<parts.length-1){if(!n.dir)return null;parent=n.id;}}return n;}
         Node find(String parent,String name)throws Exception{return childIndex(parent).get(name);}
+        private Node findIgnoreCase(String parent,String name)throws Exception{
+            java.util.Map<String,Node> index=childIndex(parent);
+            Node exact=index.get(name);if(exact!=null)return exact;
+            Node match=null;
+            for(Node candidate:index.values())if(candidate.name.equalsIgnoreCase(name)){
+                if(match!=null)return null;
+                match=candidate;
+            }
+            return match;
+        }
         List<Node> children(String parent)throws Exception{return new ArrayList<>(childIndex(parent).values());}
         java.util.Map<String,Node> childIndex(String parent)throws Exception{
             synchronized(directoryIndexLock){
