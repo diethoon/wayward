@@ -1,14 +1,18 @@
 package com.wayward.launcher;
 
-import android.app.Application;
 import android.content.Context;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.File;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Set;
@@ -28,10 +32,12 @@ final class DiagnosticsUploader {
 
     static void uploadPending(Context context) {
         final Context app = context.getApplicationContext();
-        if (!app.getPackageName().equals(Application.getProcessName())) return;
         if (!BUSY.compareAndSet(false, true)) return;
         WORKER.execute(() -> {
-            try {
+            try (UploadLock lock = tryAcquireUploadLock(app)) {
+                // The journal is shared by the launcher and :imagegen processes. A file lock
+                // prevents duplicate uploads while allowing either process to flush errors.
+                if (lock == null) return;
                 for (int pass = 0; pass < 6; pass++) {
                     JSONArray events = DiagnosticsLogger.readPending(app, 8);
                     if (events.length() == 0) break;
@@ -46,11 +52,52 @@ final class DiagnosticsUploader {
                     DiagnosticsLogger.acknowledge(app, ids);
                 }
             } catch (Exception ignored) {
-                // Keep all unacknowledged events locally and retry on the next activity/process resume.
+                // Keep unacknowledged events locally for the next process event or activity resume.
             } finally {
                 BUSY.set(false);
             }
         });
+    }
+
+    private static UploadLock tryAcquireUploadLock(Context app) throws Exception {
+        File directory = new File(app.getFilesDir(), "diagnostics");
+        if (!directory.exists() && !directory.mkdirs()) {
+            throw new IllegalStateException("diagnostics directory unavailable");
+        }
+        RandomAccessFile file = new RandomAccessFile(new File(directory, "uploader.lock"), "rw");
+        FileChannel channel = file.getChannel();
+        try {
+            FileLock lock = channel.tryLock();
+            if (lock == null) {
+                channel.close();
+                return null;
+            }
+            return new UploadLock(channel, lock);
+        } catch (OverlappingFileLockException busy) {
+            channel.close();
+            return null;
+        } catch (Exception error) {
+            channel.close();
+            throw error;
+        }
+    }
+
+    private static final class UploadLock implements AutoCloseable {
+        private final FileChannel channel;
+        private final FileLock lock;
+
+        UploadLock(FileChannel channel, FileLock lock) {
+            this.channel = channel;
+            this.lock = lock;
+        }
+
+        @Override public void close() throws java.io.IOException {
+            try {
+                if (lock.isValid()) lock.release();
+            } finally {
+                channel.close();
+            }
+        }
     }
 
     private static boolean post(String path, JSONObject body) {
