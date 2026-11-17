@@ -226,12 +226,14 @@ public final class ImageGenServiceRuntimeTest {
         String resultSummary = "state=not_started";
         WebView[] webHolder = new WebView[1];
         CountDownLatch pageFinished = new CountDownLatch(1);
+        CountDownLatch storageResetFinished = new CountDownLatch(1);
         AtomicReference<String> pageError = new AtomicReference<>("");
         AtomicBoolean imageStudioScriptServed = new AtomicBoolean(false);
         AtomicBoolean imageSearchScriptServed = new AtomicBoolean(false);
         AtomicBoolean wmlCoreScriptServed = new AtomicBoolean(false);
         AtomicBoolean wmlSymbolsScriptServed = new AtomicBoolean(false);
         AtomicBoolean wmlModsManifestServed = new AtomicBoolean(false);
+        AtomicBoolean wmlLocaleBundleMissing = new AtomicBoolean(false);
         ConcurrentLinkedQueue<String> moduleRequests = new ConcurrentLinkedQueue<>();
         File artifactDirectory = new File(context.getFilesDir(), "ci-artifacts");
         if (!artifactDirectory.isDirectory() && !artifactDirectory.mkdirs()) {
@@ -266,7 +268,7 @@ public final class ImageGenServiceRuntimeTest {
                     zipMods.listModIds().contains("imagestudio"));
             ByteArrayOutputStream realModSource = new ByteArrayOutputStream();
             try (InputStream input = zipMods.open("wml/mods/imagestudio/mod.js")) {
-                assertNotNull("The real Image Studio WML entrypoint was not served by ZipModStore.", input);
+                assertNotNull("The Image Studio WML entrypoint was not served by the production ZIP reader.", input);
                 byte[] buffer = new byte[8192];
                 int count;
                 while ((count = input.read(buffer)) >= 0) {
@@ -276,10 +278,34 @@ public final class ImageGenServiceRuntimeTest {
             byte[] realModBytes = realModSource.toByteArray();
             assertEquals("The installed release ZIP did not serve the full production mod.js.",
                     320_679, realModBytes.length);
+            byte[] moduleDigest = java.security.MessageDigest.getInstance("SHA-256").digest(realModBytes);
+            StringBuilder moduleSha256 = new StringBuilder();
+            for (byte value : moduleDigest) {
+                moduleSha256.append(String.format(java.util.Locale.ROOT, "%02x", value & 0xff));
+            }
+            assertEquals("The Image Studio 1.31.20 source differs from the exact pinned mods.zip entry.",
+                    "18e6851a03b27c4ccedb53e86465e6abcd6c09254cb881c9fa7abb16574890ef",
+                    moduleSha256.toString());
             String realModText = new String(realModBytes, StandardCharsets.UTF_8);
-            assertTrue("The served production mod.js no longer declares Image Studio.",
+            assertTrue("The served production mod.js no longer declares Image Studio 1.31.20.",
                     realModText.contains("imagestudio")
                             && realModText.contains("1.31.20"));
+            assertTrue("The WML 0.9.5 native settings API call was lost from the production module.",
+                    realModText.contains("return base.ui.pauseSettings("));
+
+            // The actual WebView ZIP-serving path must return the exact module
+            // bytes stored in the user's mods.zip, without a legacy API rewrite.
+            ByteArrayOutputStream servedModSource = new ByteArrayOutputStream();
+            try (InputStream input = zipMods.open("wml/mods/imagestudio/mod.js")) {
+                assertNotNull("The WebView Image Studio entrypoint was not served.", input);
+                byte[] buffer = new byte[8192];
+                int count;
+                while ((count = input.read(buffer)) >= 0) {
+                    if (count > 0) servedModSource.write(buffer, 0, count);
+                }
+            }
+            assertTrue("The launcher modified the pinned Image Studio 1.31.20 source before WebView delivery.",
+                    java.util.Arrays.equals(realModBytes, servedModSource.toByteArray()));
             Method detectImageStudio = MainActivity.class.getDeclaredMethod(
                     "imageStudioModId", Class.forName("com.wayward.launcher.MainActivity$SafTree"));
             detectImageStudio.setAccessible(true);
@@ -393,18 +419,22 @@ public final class ImageGenServiceRuntimeTest {
                             } else if (requestPath != null && requestPath.startsWith("/wml/")) {
                                 wmlRelative = requestPath.substring(1);
                             }
-                            if (wmlRelative != null && (wmlRelative.startsWith("wml/i18n/")
-                                    || "wml/mods/mods.js".equals(wmlRelative))) {
+                            if (wmlRelative != null && wmlRelative.startsWith("wml/i18n/ko/")) {
+                                // Wayward 11.2 ships the 0.9.5 core but not the optional
+                                // Korean translation sidecars. Return a subresource 404 so
+                                // the real core boots in its documented English fallback;
+                                // do not mistake this packaging omission for a core failure.
+                                wmlLocaleBundleMissing.set(true);
+                                return new WebResourceResponse("application/javascript", "UTF-8",
+                                        404, "Not Found", java.util.Collections.emptyMap(),
+                                        new java.io.ByteArrayInputStream(new byte[0]));
+                            }
+                            if ("wml/mods/mods.js".equals(wmlRelative)) {
                                 try {
                                     InputStream fixture = instrumentation.getContext().getAssets()
                                             .open("wml-runtime/" + wmlRelative);
-                                    if ("wml/mods/mods.js".equals(wmlRelative)) {
-                                        wmlModsManifestServed.set(true);
-                                    }
-                                    String mime = wmlRelative.endsWith(".js") ? "application/javascript"
-                                            : wmlRelative.endsWith(".json") ? "application/json"
-                                            : "application/octet-stream";
-                                    return new WebResourceResponse(mime, "UTF-8", 200, "OK",
+                                    wmlModsManifestServed.set(true);
+                                    return new WebResourceResponse("application/javascript", "UTF-8", 200, "OK",
                                             java.util.Collections.emptyMap(), fixture);
                                 } catch (Exception error) {
                                     pageError.set("WML runtime fixture " + wmlRelative + ": " + error.getMessage());
@@ -438,7 +468,11 @@ public final class ImageGenServiceRuntimeTest {
                             return super.shouldInterceptRequest(view, request);
                         }
                         @Override public void onPageFinished(WebView view, String url) {
-                            pageFinished.countDown();
+                            if (url != null && url.contains("__wayward_ci_storage_reset__")) {
+                                storageResetFinished.countDown();
+                            } else {
+                                pageFinished.countDown();
+                            }
                             super.onPageFinished(view, url);
                         }
                         @Override public void onReceivedError(WebView view,
@@ -477,20 +511,36 @@ public final class ImageGenServiceRuntimeTest {
                             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
                     gameWeb.setVisibility(View.VISIBLE);
                     webHolder[0] = gameWeb;
+                    // This test uses a fixed localhost origin. Clear browser-persisted
+                    // consent and WML toggles before loading the real game so a previous
+                    // CI session cannot silently hide the age gate or turn Image Studio off.
+                    String resetHtml = "<!doctype html><html><head><meta charset='utf-8'></head>"
+                            + "<body><script>localStorage.clear();sessionStorage.clear();</script></body></html>";
                     gameWeb.loadDataWithBaseURL(
-                            GAME_ORIGIN + "/game/Wayward_WML_ko.html",
-                            new String(gameHtml, StandardCharsets.UTF_8),
-                            "text/html", "UTF-8", null);
+                            GAME_ORIGIN + "/game/__wayward_ci_storage_reset__.html",
+                            resetHtml, "text/html", "UTF-8", null);
                 } catch (Throwable error) {
                     pageError.set(error.getClass().getSimpleName() + ": " + error.getMessage());
                     pageFinished.countDown();
                 }
             });
 
-            assertTrue("Pinned Wayward game page did not finish loading: " + pageError.get(),
-                    pageFinished.await(90, TimeUnit.SECONDS));
             WebView gameWeb = webHolder[0];
             assertNotNull("The launcher WebView was not created: " + pageError.get(), gameWeb);
+            assertTrue("Could not clear the isolated Wayward WebView origin.",
+                    storageResetFinished.await(10, TimeUnit.SECONDS));
+            String clearedStorage = awaitJsString(instrumentation, gameWeb,
+                    "JSON.stringify({local:localStorage.length,session:sessionStorage.length})",
+                    5_000L);
+            if (!"{\"local\":0,\"session\":0}".equals(clearedStorage)) {
+                throw new IllegalStateException("Wayward CI browser storage did not reset: " + clearedStorage);
+            }
+            instrumentation.runOnMainSync(() -> gameWeb.loadDataWithBaseURL(
+                    GAME_ORIGIN + "/game/Wayward_WML_ko.html",
+                    new String(gameHtml, StandardCharsets.UTF_8),
+                    "text/html", "UTF-8", null));
+            assertTrue("Pinned Wayward game page did not finish loading: " + pageError.get(),
+                    pageFinished.await(90, TimeUnit.SECONDS));
             dismissWaywardAgeConfirmation(instrumentation, gameWeb);
 
             // A newly opened HTML document starts at Wayward's title menu.
@@ -649,6 +699,14 @@ public final class ImageGenServiceRuntimeTest {
                             + "bridgeType:typeof bridge,bridgeIsNull:bridge===null,bridgeKeys:bridge?Object.keys(bridge):[],"
                             + "charactersType:bridge?typeof bridge.characters:'missing',"
                             + "studioType:typeof window.WW_ImageStudio,"
+                            + "wmlVersion:window.WML?window.WML.VERSION:null,"
+                            + "localeBundleMissing:" + wmlLocaleBundleMissing.get() + ","
+                            + "officialSymbols:status&&status.symbols&&status.symbols.symbols?{"
+                            + "setScene:status.symbols.symbols.setScene&&status.symbols.symbols.setScene.name,"
+                            + "heroineDriveCalc:status.symbols.symbols.heroineDriveCalc&&status.symbols.symbols.heroineDriveCalc.name,"
+                            + "imageLookup:status.symbols.symbols.imageLookup&&status.symbols.symbols.imageLookup.name,"
+                            + "imageEntryUrl:status.symbols.symbols.imageEntryUrl&&status.symbols.symbols.imageEntryUrl.name,"
+                            + "imageUsagePortraitPanel:status.symbols.symbols.imageUsagePortraitPanel&&status.symbols.symbols.imageUsagePortraitPanel.name}:null,"
                             + "wml:status?{game:status.game,booted:status.booted,listed:status.listed,"
                             + "loaded:status.loaded,failed:status.failed,warnings:status.warnings,missing:status.missing,"
                             + "symbolsGame:status.symbols&&status.symbols.game,modSymbolIds:Object.keys(status.modSymbols||{})}:null,"
@@ -671,6 +729,25 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("WML did not complete a game boot before Image Studio was inspected: "
                             + wmlBridgeDiagnostics,
                     wmlState.optBoolean("booted", false));
+            assertEquals("The launcher did not load the exact WML 0.9.5 core from Wayward 11.2. "
+                            + wmlBridgeDiagnostics,
+                    "0.9.5", wmlBridgeState.optString("wmlVersion", ""));
+            assertTrue("The test must record the package's omitted Korean WML translation sidecars. "
+                            + wmlBridgeDiagnostics,
+                    wmlBridgeState.optBoolean("localeBundleMissing", false));
+            JSONObject officialSymbols = wmlBridgeState.optJSONObject("officialSymbols");
+            assertNotNull("The launcher did not register the merged 2026-11-01 symbol table. "
+                            + wmlBridgeDiagnostics, officialSymbols);
+            assertEquals("Official WML 0.9.5 setScene mapping is wrong.", "aie",
+                    officialSymbols.optString("setScene", ""));
+            assertEquals("Official WML 0.9.5 heroineDriveCalc mapping is wrong.", "il",
+                    officialSymbols.optString("heroineDriveCalc", ""));
+            assertEquals("Image Studio imageLookup hook mapping is missing.", "vy",
+                    officialSymbols.optString("imageLookup", ""));
+            assertEquals("Image Studio imageEntryUrl hook mapping is missing.", "o_",
+                    officialSymbols.optString("imageEntryUrl", ""));
+            assertEquals("Image Studio portrait panel hook mapping is missing.", "rv",
+                    officialSymbols.optString("imageUsagePortraitPanel", ""));
             assertEquals("The bundled 2026-11-01 semantic symbol table was not registered: "
                             + wmlBridgeDiagnostics,
                     "2026-11-01", wmlState.optString("symbolsGame", ""));
@@ -683,13 +760,17 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("WML did not load image-search-customize after registering the shared symbols: "
                             + wmlBridgeDiagnostics,
                     containsJsonString(wmlState.optJSONArray("loaded"), "image-search-customize"));
+            // The settings launcher button is rendered inside the Image Studio panel.
+            // openGenerationSettings() opens that panel first, so observe clicks at the
+            // document level instead of requiring the panel button before it exists.
             String observeSettingsButton = "(function(){"
-                    + "var button=document.getElementById('wwis-generation-settings');"
-                    + "if(!button)return 'missing';"
                     + "window.__waywardCiSettingsClicks=0;"
-                    + "button.addEventListener('click',function(){window.__waywardCiSettingsClicks++;},true);"
+                    + "document.addEventListener('click',function(event){"
+                    + "var target=event.target&&event.target.closest?event.target.closest('#wwis-generation-settings'):null;"
+                    + "if(target)window.__waywardCiSettingsClicks++;"
+                    + "},true);"
                     + "return 'observing';})()";
-            assertEquals("The actual Image Studio WML UI did not render its settings button.",
+            assertEquals("The Android test could not install the settings-button click observer.",
                     "observing", awaitJsString(instrumentation, gameWeb, observeSettingsButton, 10_000L));
 
             String settingsDispatch = "(function(){"
@@ -931,10 +1012,28 @@ public final class ImageGenServiceRuntimeTest {
                 Thread.sleep(450L);
                 continue;
             }
-            if ("no_visible_age_gate".equals(result)) break;
+            // DOMContentLoaded/onPageFinished can precede the game's async
+            // save/settings hydration. A blank first probe is not proof that the
+            // age gate is absent; keep observing until the dialog appears or the
+            // bounded readiness window expires.
+            if ("no_visible_age_gate".equals(result)) {
+                Thread.sleep(200L);
+                continue;
+            }
             Thread.sleep(150L);
         }
-        assertTrue("The Android test never observed Wayward's age/consent gate.", sawGate);
+        if (!sawGate) {
+            String readiness = awaitJsString(instrumentation, gameWeb,
+                    "(function(){var root=document.getElementById('root');var state=null;"
+                            + "try{var raw=localStorage.getItem('tavern-settings');state=raw?JSON.parse(raw):null;}catch(e){state='parse_error:'+String(e);}"
+                            + "var status=null;try{status=window.WML&&window.WML.status?window.WML.status():null;}catch(e){status='status_error:'+String(e);}"
+                            + "return JSON.stringify({title:document.title,body:String(document.body&&document.body.innerText||'').slice(0,1200),"
+                            + "rootText:String(root&&root.innerText||'').slice(0,1200),settings:state,"
+                            + "wmlVersion:window.WML&&window.WML.VERSION||null,wmlStatus:status});})()",
+                    5_000L);
+            fail("The Android test never observed Wayward's age/consent gate after waiting for page hydration. "
+                    + "DOM/WML diagnostics: " + readiness + "; lastGateProbe=" + result);
+        }
         String visibleGate = awaitJsString(instrumentation, gameWeb,
                 "(function(){var labels=['연령 확인','성인 콘텐츠 안내'];"
                         + "return String(Array.from(document.querySelectorAll('body *')).some(function(e){"

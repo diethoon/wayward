@@ -199,6 +199,9 @@ jobs:
             ${{ runner.temp }}/imagestudio-source-index.txt
             ${{ runner.temp }}/mods-wml-entrypoints-index.txt
             ${{ runner.temp }}/wml-runtime-module-zips-index.txt
+            ${{ runner.temp }}/wml-runtime-version.txt
+            ${{ runner.temp }}/mods-zip-layout.txt
+            android-external-folder-launcher/app/src/androidTest/assets/wml-runtime
             android-external-folder-launcher/app/src/androidTest/assets/imagestudio-source
           if-no-files-found: warn
           retention-days: 14
@@ -210,7 +213,6 @@ jobs:
           GAME_PATH="Wayward_WML_ko.html"
           EXPECTED_BLOB="d198eacfc127c55dc44bd5d1b8e29ff2bb7d08e6"
           EXPECTED_BYTES="4373978"
-          WML_COMMIT="5e5c78c4e32198e460ba040256e920d37ed1711c"
           GAME_DIR="$RUNNER_TEMP/wayward-game-fixture"
           TEST_ASSETS="$GITHUB_WORKSPACE/android-external-folder-launcher/app/src/androidTest/assets"
           mkdir -p "$GAME_DIR" "$TEST_ASSETS"
@@ -230,6 +232,7 @@ jobs:
               raise SystemExit(f"Wayward WML HTML size mismatch: {size} != {expected_bytes}")
 
           sha256 = hashlib.sha256()
+          md5 = hashlib.md5()
           git_blob = hashlib.sha1()
           git_blob.update(f"blob {size}\0".encode("ascii"))
           chunk_manifest = os.path.join(out_dir, "game-html-chunks.sha256.jsonl")
@@ -240,6 +243,12 @@ jobs:
               b"generateimagewithprovider",
               b"imagegen",
               b"novelai",
+              b"0.9.5",
+              b"0.7.0",
+              b"wml-core.js",
+              b"wml/runtime",
+              b"pausesettings",
+              b"wml_version",
           ]
           hits = {needle.decode("ascii"): [] for needle in needles}
           overlap = b""
@@ -258,6 +267,7 @@ jobs:
                       "sha256": chunk_hash
                   }, separators=(",", ":")) + "\n")
                   sha256.update(chunk)
+                  md5.update(chunk)
                   git_blob.update(chunk)
                   scan = overlap + chunk
                   scan_offset = offset - len(overlap)
@@ -287,6 +297,8 @@ jobs:
               f"bytes={size}",
               f"git_blob_sha1={actual_blob}",
               f"sha256={sha256.hexdigest()}",
+              f"md5={md5.hexdigest()}",
+              f"matches_user_md5={md5.hexdigest() == 'd75797d4101f4a1312b3ae0571d77f68'}",
               f"chunk_size=4096",
               f"chunk_count={chunk_count}",
           ]
@@ -308,57 +320,269 @@ jobs:
           PY
           cp "$GAME_HTML" "$TEST_ASSETS/Wayward_WML_ko.html"
           test "$(wc -c < "$TEST_ASSETS/Wayward_WML_ko.html" | tr -d ' ')" = "$EXPECTED_BYTES"
+      - name: Upload exact WML HTML and byte-level forensics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wayward-WML-2026-11-01-exact-html-forensics
+          path: |
+            ${{ runner.temp }}/wayward-game-fixture/Wayward_WML_ko.html
+            ${{ runner.temp }}/wayward-game-fixture/game-html-forensics.txt
+            ${{ runner.temp }}/wayward-game-fixture/game-html-chunks.sha256.jsonl
+          if-no-files-found: warn
+          retention-days: 14
 
-          # The launcher serves the actual WML runtime tree alongside the
-          # HTML. Preserve the pinned files that the game requests at startup;
-          # the Android test will prepend the same folder bootstrap as
-          # MainActivity.FolderHandler before returning wml-core.js.
-          WML_SOURCE_ROOT="https://raw.githubusercontent.com/diethoon/3.36/$WML_COMMIT/Wayward_MOD_v4.0_WML_%EA%B2%80%EC%88%98%EC%99%84%EB%A3%8C/wml"
-          WML_TEST_ROOT="$TEST_ASSETS/wml-runtime/wml"
-          mkdir -p "$WML_TEST_ROOT/i18n/ko" "$WML_TEST_ROOT/runtime" "$WML_TEST_ROOT/mods"
-          while IFS=' ' read -r relative expected_bytes expected_blob; do
-            [ -n "$relative" ] || continue
-            destination="$WML_TEST_ROOT/$relative"
-            mkdir -p "$(dirname "$destination")"
-            curl --fail --silent --show-error "$WML_SOURCE_ROOT/$relative" -o "$destination"
-            python3 - "$destination" "$expected_bytes" "$expected_blob" "$GAME_COMMIT" "$relative" <<'PY'
+      - name: Extract and verify the WML runtime shipped with Wayward 11.2
+        id: wml095
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_COMMIT="26d6c32e0b0abbb886e3029efd548b7ca6774401"
+          EXPECTED_BYTES="4017867"
+          EXPECTED_BLOB="5c563bdc7c0d19bd40f44c5c61c91d450dbfc4ff"
+          ARCHIVE="$RUNNER_TEMP/wayward-11.2.zip"
+          ASSETS="$GITHUB_WORKSPACE/android-external-folder-launcher/app/src/androidTest/assets"
+          mkdir -p "$ASSETS/wml-runtime"
+          git fetch --no-tags origin main
+          git cat-file -e "${SOURCE_COMMIT}:wayward 11.2.zip"
+          git show "${SOURCE_COMMIT}:wayward 11.2.zip" > "$ARCHIVE"
+          python3 - "$ARCHIVE" "$EXPECTED_BYTES" "$EXPECTED_BLOB" "$ASSETS/wml-runtime" "$RUNNER_TEMP/wayward-11.2-wml-index.json" "$RUNNER_TEMP/wayward-11.2-wml-report.txt" "$GITHUB_WORKSPACE/android-external-folder-launcher/app/src/main/assets/wml/symbols/2026-11-01.js" <<'PY'
           import hashlib
+          import io
           import json
-          import os
+          from pathlib import Path, PurePosixPath
+          import re
           import sys
-          path, expected_bytes, expected_blob, commit, relative = sys.argv[1:]
-          size = os.path.getsize(path)
-          if size != int(expected_bytes):
-              raise SystemExit(f"WML fixture size mismatch for {relative}: {size} != {expected_bytes}")
-          sha = hashlib.sha256()
-          git_blob = hashlib.sha1()
-          git_blob.update(f"blob {size}\0".encode("ascii"))
-          manifest = path + ".chunks.sha256.jsonl"
-          offset = 0
-          with open(path, "rb") as source, open(manifest, "w", encoding="utf-8") as chunks:
+          import zipfile
+
+          archive_path, expected_bytes, expected_blob, output_root, index_path, report_path, bundled_symbols_path = sys.argv[1:]
+          expected_bytes = int(expected_bytes)
+          archive_hash = hashlib.sha1()
+          archive_sha256 = hashlib.sha256()
+          archive_hash.update(f"blob {expected_bytes}\0".encode("ascii"))
+          actual_bytes = 0
+          with open(archive_path, "rb") as source:
               while True:
-                  data = source.read(4096)
-                  if not data:
+                  chunk = source.read(4096)
+                  if not chunk:
                       break
-                  digest = hashlib.sha256(data).hexdigest()
-                  chunks.write(json.dumps({"offset": offset, "length": len(data), "sha256": digest},
-                                          separators=(",", ":")) + "\n")
-                  sha.update(data)
-                  git_blob.update(data)
-                  offset += len(data)
-          actual_blob = git_blob.hexdigest()
-          if actual_blob != expected_blob:
-              raise SystemExit(f"WML fixture Git blob mismatch for {relative}: {actual_blob} != {expected_blob}")
-          print(f"WML fixture {relative}: bytes={size} git_blob={actual_blob} sha256={sha.hexdigest()}")
+                  actual_bytes += len(chunk)
+                  archive_hash.update(chunk)
+                  archive_sha256.update(chunk)
+          if actual_bytes != expected_bytes or archive_hash.hexdigest() != expected_blob:
+              raise SystemExit(
+                  f"Wayward 11.2 archive mismatch: bytes={actual_bytes} blob={archive_hash.hexdigest()}"
+              )
+
+          html_md5 = "d75797d4101f4a1312b3ae0571d77f68"
+          core_suffix = "wml/runtime/wml-core.js"
+          required = (
+              "wml/runtime/wml-core.js",
+              "wml/mods/mods.js",
+              "wml/symbols/2026-11-01.js",
+          )
+          archives = []
+          core_candidates = []
+          exact_html = []
+          relevant_paths = []
+          nested_archives = []
+
+          def walk(zf, label, depth=0):
+              archives.append(zf)
+              for entry in zf.infolist():
+                  name = entry.filename.replace("\\", "/")
+                  if entry.is_dir():
+                      continue
+                  lowered = name.lower()
+                  suffix = PurePosixPath(lowered).suffix
+                  if any(token in lowered for token in ("wml", "runtime", "core", "mods")) or suffix == ".zip":
+                      relevant_paths.append({"archive": label, "path": name, "bytes": entry.file_size})
+                  if lowered.endswith("wayward_wml_ko.html"):
+                      md5 = hashlib.md5()
+                      size = 0
+                      with zf.open(entry) as stream:
+                          while True:
+                              chunk = stream.read(4096)
+                              if not chunk:
+                                  break
+                              size += len(chunk)
+                              md5.update(chunk)
+                      exact_html.append({
+                          "archive": label, "path": name, "bytes": size,
+                          "md5": md5.hexdigest(), "matches_user_file": (
+                              size == 4373978 and md5.hexdigest() == html_md5
+                          )
+                      })
+                  if lowered.endswith(core_suffix):
+                      core_candidates.append((zf, entry, label, name))
+                  if suffix == ".zip" and depth < 2 and entry.file_size <= 64_000_000:
+                      try:
+                          data = zf.read(entry)
+                          nested = zipfile.ZipFile(io.BytesIO(data))
+                          nested_label = label + "::" + name
+                          nested_archives.append({
+                              "archive": label, "path": name,
+                              "bytes": entry.file_size, "entries": len(nested.infolist())
+                          })
+                          walk(nested, nested_label, depth + 1)
+                      except zipfile.BadZipFile:
+                          continue
+
+          top = zipfile.ZipFile(archive_path)
+          walk(top, "wayward 11.2.zip")
+
+          core_versions = []
+          for zf, entry, label, name in core_candidates:
+              versions = set()
+              overlap = b""
+              offset = 0
+              with zf.open(entry) as stream:
+                  while True:
+                      chunk = stream.read(4096)
+                      if not chunk:
+                          break
+                      scan = overlap + chunk
+                      patterns = (
+                          rb"\b(?:const|let|var)\s+VERSION\s*=\s*['\"]([^'\"]+)['\"]",
+                          rb"\bVERSION\s*=\s*['\"]([^'\"]+)['\"]",
+                          rb"\bversion\s*:\s*['\"]([^'\"]+)['\"]",
+                      )
+                      for pattern in patterns:
+                          for value in re.findall(pattern, scan):
+                              versions.add(value.decode("ascii", "replace"))
+                      overlap = scan[-512:]
+                      offset += len(chunk)
+              core_versions.append({
+                  "archive": label, "path": name, "versions": sorted(versions)
+              })
+
+          matches = [
+              item for item in core_candidates
+              if any(x["archive"] == item[2] and x["path"] == item[3] and "0.9.5" in x["versions"]
+                     for x in core_versions)
+          ]
+          report = {
+              "source_commit": "26d6c32e0b0abbb886e3029efd548b7ca6774401",
+              "archive_bytes": actual_bytes,
+              "archive_git_blob_sha1": archive_hash.hexdigest(),
+              "archive_sha256": archive_sha256.hexdigest(),
+              "exact_html": exact_html,
+              "nested_archives": nested_archives,
+              "core_candidates": core_versions,
+              "relevant_paths": relevant_paths,
+              "selected_core": None,
+              "extracted_files": [],
+          }
+          if not any(x["matches_user_file"] for x in exact_html):
+              raise SystemExit("Wayward 11.2 package does not contain the exact user-supplied HTML MD5 and byte size.")
+          if len(matches) != 1:
+              report["failure"] = (
+                  "Expected exactly one WML 0.9.5 core in Wayward 11.2 package; "
+                  f"found {len(matches)}; candidates={core_versions!r}"
+              )
+              Path(report_path).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+              raise SystemExit(report["failure"])
+
+          zf, core_entry, label, core_name = matches[0]
+          prefix = core_name[:-len(core_suffix)]
+          report["selected_core"] = {"archive": label, "path": core_name}
+          output_root = Path(output_root)
+          for relative in required:
+              entry_name = prefix + relative
+              try:
+                  entry = zf.getinfo(entry_name)
+              except KeyError:
+                  relevant = [x for x in relevant_paths if x["archive"] == label]
+                  report["failure"] = f"Required WML runtime file missing: {entry_name}; available={relevant!r}"
+                  Path(report_path).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                  raise SystemExit(report["failure"])
+              output = PurePosixPath(relative)
+              if output.is_absolute() or any(part in ("", ".", "..") for part in output.parts):
+                  raise SystemExit("Unsafe WML output path: " + relative)
+              target = output_root.joinpath(*output.parts)
+              target.parent.mkdir(parents=True, exist_ok=True)
+              sha256 = hashlib.sha256()
+              git_blob = hashlib.sha1()
+              git_blob.update(f"blob {entry.file_size}\0".encode("ascii"))
+              written = 0
+              with zf.open(entry) as source, target.open("wb") as destination:
+                  while True:
+                      chunk = source.read(4096)
+                      if not chunk:
+                          break
+                      destination.write(chunk)
+                      sha256.update(chunk)
+                      git_blob.update(chunk)
+                      written += len(chunk)
+              if written != entry.file_size:
+                  raise SystemExit("WML runtime extraction size mismatch: " + relative)
+              report["extracted_files"].append({
+                  "path": relative, "bytes": written,
+                  "git_blob_sha1": git_blob.hexdigest(), "sha256": sha256.hexdigest()
+              })
+          # Compare every official game mapping from Wayward 11.2 with the launcher's
+          # richer fallback table. The fallback may add mod-specific entries, but it
+          # must never point an official game symbol at a different minified name.
+          def read_symbols(path):
+              source = Path(path).read_text(encoding="utf-8")
+              start = source.find("WML.symbols(")
+              end = source.rfind(");")
+              if start < 0 or end < start:
+                  raise SystemExit("Invalid WML.symbols wrapper: " + str(path))
+              return json.loads(source[start + len("WML.symbols("):end])
+
+          official_table = read_symbols(output_root / "wml/symbols/2026-11-01.js")
+          bundled_table = read_symbols(bundled_symbols_path)
+          if official_table.get("game") != "2026-11-01":
+              raise SystemExit("Official WML symbol table game version mismatch.")
+          official_symbols = official_table.get("symbols", {})
+          bundled_symbols = bundled_table.get("symbols", {})
+          mapping_mismatches = {
+              name: {"official": value.get("name"), "bundled": bundled_symbols.get(name, {}).get("name")}
+              for name, value in official_symbols.items()
+              if bundled_symbols.get(name, {}).get("name") != value.get("name")
+          }
+          if mapping_mismatches:
+              raise SystemExit(
+                  "Bundled WML symbol table disagrees with the exact Wayward 11.2 game: "
+                  + json.dumps(mapping_mismatches, ensure_ascii=False, sort_keys=True)
+              )
+          required_image_symbols = ("imageLookup", "imageEntryUrl", "imageUsagePortraitPanel")
+          missing_image_symbols = [name for name in required_image_symbols if name not in bundled_symbols]
+          if missing_image_symbols:
+              raise SystemExit("Bundled Image Studio hook symbols missing: " + repr(missing_image_symbols))
+          report["symbol_validation"] = {
+              "game": official_table.get("game"),
+              "official_symbol_count": len(official_symbols),
+              "bundled_symbol_count": len(bundled_symbols),
+              "official_mapping_mismatches": 0,
+              "image_studio_extra_symbols": list(required_image_symbols),
+          }
+          Path(index_path).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          Path(report_path).write_text(
+              "source=diethoon/wayward@26d6c32e0b0abbb886e3029efd548b7ca6774401\n"
+              f"archive_bytes={actual_bytes}\narchive_sha256={archive_sha256.hexdigest()}\n"
+              f"matching_html={exact_html!r}\ncore={core_name}\ncore_versions={core_versions!r}\n"
+              + "\n".join(
+                  f"{x['path']} bytes={x['bytes']} sha256={x['sha256']}"
+                  for x in report["extracted_files"]
+              ) + "\n",
+              encoding="utf-8"
+          )
+          print(Path(report_path).read_text(encoding="utf-8"), end="")
           PY
-          done <<'WML_FIXTURES'
-          i18n/ko/finals.js 1219 5ee71baf69e1c0ee7a2e52591aa6a5634a757490
-          i18n/ko/display.js 105762 066b82bee117219741e985a46eeb0e02e4ff1746
-          i18n/ko/voice.js 439915 7abf2ede3f5b358ecfc8f93b694ddec944840386
-          i18n/ko/runtime.js 16121 f5373186d8d0d4906156714c6fe06ba5fe84c588
-          runtime/wml-core.js 116652 21d4efd8a2d4e959c81c3edbc89a3cb6c7333f2f
-          mods/mods.js 79 aa4355cb5ee0c644f0798cba904670222a1d39c1
-          WML_FIXTURES
+      - name: Upload matching Wayward 11.2 WML runtime fixture
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wayward-2026-11-01-WML-0.9.5-package-runtime
+          path: |
+            ${{ runner.temp }}/wayward-11.2.zip
+            ${{ runner.temp }}/wayward-11.2-wml-index.json
+            ${{ runner.temp }}/wayward-11.2-wml-report.txt
+            android-external-folder-launcher/app/src/androidTest/assets/wml-runtime
+          if-no-files-found: warn
+          retention-days: 14
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: '1.4.0'
@@ -463,18 +687,48 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/flux-smoke"
-          curl --fail --silent --show-error --max-time 240 \
+          set +e
+          HTTP_STATUS="$(curl --silent --show-error --max-time 240 \
             -H 'content-type: application/json' \
             --data '{"prompt":"An original cozy fantasy shopkeeper in a small woodland general store, polished anime illustration, warm afternoon sunlight, full body, detailed but clean composition, no text"}' \
             'https://wayward-image-worker.trpgengine.workers.dev' \
-            -o "$RUNNER_TEMP/flux-smoke/response.json"
+            -w '%{http_code}' -o "$RUNNER_TEMP/flux-smoke/response.json")"
+          CURL_EXIT=$?
+          set -e
+          printf '%s\n' "$HTTP_STATUS" > "$RUNNER_TEMP/flux-smoke/http-status.txt"
+          printf '%s\n' "$CURL_EXIT" > "$RUNNER_TEMP/flux-smoke/curl-exit.txt"
           node --input-type=module <<'JS'
           import fs from 'node:fs';
           import crypto from 'node:crypto';
           const root = process.env.RUNNER_TEMP + '/flux-smoke';
-          const response = JSON.parse(fs.readFileSync(root + '/response.json', 'utf8'));
+          const httpStatus = (fs.readFileSync(root + '/http-status.txt', 'utf8') || '').trim();
+          const curlExit = Number((fs.readFileSync(root + '/curl-exit.txt', 'utf8') || '').trim());
+          const raw = fs.existsSync(root + '/response.json') ? fs.readFileSync(root + '/response.json', 'utf8') : '';
+          const safeBody = raw
+            .replace(/(authorization|token|api[_-]?key|bearer)(\s*[:=]\s*)[^\s,"}]+/gi, '$1$2[redacted]')
+            .slice(0, 1200);
+          if (curlExit !== 0 || !/^2[0-9]{2}$/.test(httpStatus)) {
+            const report = 'provider=Cloudflare FLUX Worker\nhttp=' + (httpStatus || 'no-response') +
+              '\ncurlExit=' + curlExit + '\nbody=' + safeBody + '\n';
+            fs.writeFileSync(root + '/result.txt', report);
+            console.error(report);
+            process.exit(1);
+          }
+          let response;
+          try { response = JSON.parse(raw); }
+          catch {
+            const report = 'provider=Cloudflare FLUX Worker\nhttp=' + httpStatus +
+              '\nerror=invalid-json\nbody=' + safeBody + '\n';
+            fs.writeFileSync(root + '/result.txt', report);
+            console.error(report);
+            process.exit(1);
+          }
           if (response.success !== true || typeof response.image !== 'string' || !response.image.length) {
-            throw new Error('Cloudflare Worker did not return success=true and a base64 image.');
+            const report = 'provider=Cloudflare FLUX Worker\nhttp=' + httpStatus +
+              '\nerror=missing-success-image\nbody=' + safeBody + '\n';
+            fs.writeFileSync(root + '/result.txt', report);
+            console.error(report);
+            process.exit(1);
           }
           const bytes = Buffer.from(response.image, 'base64');
           const mime = String(response.mimeType || 'image/jpeg').toLowerCase();
@@ -566,6 +820,14 @@ jobs:
           path: |
             ${{ runner.temp }}/imagegen-runtime-smoke/result.txt
             ${{ runner.temp }}/imagegen-runtime-smoke/server.log
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload Cloudflare FLUX failure diagnostics
+        if: steps.flux_smoke.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wayward-Cloudflare-FLUX-failure
+          path: ${{ runner.temp }}/flux-smoke/result.txt
           if-no-files-found: warn
           retention-days: 7
       - name: Upload real FLUX smoke image
