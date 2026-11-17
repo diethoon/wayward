@@ -23,6 +23,8 @@ final class WebFileChooser extends WebChromeClient {
     static final int REQUEST_CODE = 4103;
 
     private final Activity activity;
+    private final java.util.concurrent.atomic.AtomicInteger consoleErrorSamples =
+            new java.util.concurrent.atomic.AtomicInteger();
     private ValueCallback<Uri[]> pendingCallback;
     private boolean allowMultiple;
 
@@ -32,9 +34,20 @@ final class WebFileChooser extends WebChromeClient {
 
     @Override
     public boolean onConsoleMessage(ConsoleMessage message) {
-        if (message != null && message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+        if (message != null && message.messageLevel() == ConsoleMessage.MessageLevel.ERROR
+                && consoleErrorSamples.getAndIncrement() < 16) {
             org.json.JSONObject details = new org.json.JSONObject();
-            try { details.put("line", message.lineNumber()); } catch (Exception ignored) {}
+            try {
+                String source = message.sourceId();
+                Uri sourceUri = source == null ? null : Uri.parse(source);
+                String sourcePath = sourceUri == null ? "" : sourceUri.getPath();
+                if (sourcePath == null || sourcePath.isEmpty()) sourcePath = source == null ? "" : source;
+                if (sourcePath.length() > 240) sourcePath = sourcePath.substring(0, 240);
+                details.put("sourcePath", sourcePath);
+                details.put("line", message.lineNumber());
+                details.put("level", message.messageLevel().name());
+            } catch (Exception ignored) {}
+            // Deliberately omit message text: it can contain game content or user data.
             DiagnosticsLogger.event(activity, "ERROR", "webview", "javascript_console_error", details);
         }
         return super.onConsoleMessage(message);

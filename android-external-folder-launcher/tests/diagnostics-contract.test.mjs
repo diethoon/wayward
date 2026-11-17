@@ -36,6 +36,10 @@ assert.match(main, /folder_permission_failed/);
 assert.match(main, /game_session_open_requested/);
 assert.match(service, /runtime_start_failed/);
 assert.match(chooser, /javascript_console_error/);
+assert.match(chooser, /sourcePath/);
+assert.match(chooser, /consoleErrorSamples\.getAndIncrement\(\) < 16/);
+assert.doesNotMatch(chooser, /details\.put\(["']message["']/);
+
 assert.match(proxy, /api_response/);
 assert.match(readApi, /adminAuthorized/);
 assert.match(readApi, /access: "private"/);
