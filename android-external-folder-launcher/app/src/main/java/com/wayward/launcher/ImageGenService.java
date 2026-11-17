@@ -231,9 +231,10 @@ public final class ImageGenService extends Service {
         File nodeModules = new File(project, "node_modules");
         if (!nodeModules.isDirectory()) {
             updateNotification("ImageGen 종속 패키지 설치 중");
+            File installLog = new File(getFilesDir(), "imagegen/install.log");
             int install = runCommand(bunProcess(bun, "install", "--production")
-                    .directory(project), log, 15, TimeUnit.MINUTES);
-            if (install != 0) throw new IllegalStateException("Bun 종속 패키지 설치 실패(exit " + install + "). 로그: " + log.getAbsolutePath());
+                    .directory(project), installLog, 15, TimeUnit.MINUTES);
+            if (install != 0) throw new IllegalStateException("Bun 종속 패키지 설치 실패(exit " + install + "). 진단 로그 공유에서 설치 로그를 확인하세요.");
         }
 
         updateNotification("이미지 생성 서버 시작 중 · 127.0.0.1:8189");

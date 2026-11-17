@@ -136,8 +136,55 @@ final class DiagnosticsLogger {
         File imageGen = new File(app.getFilesDir(), "imagegen");
         appendLogTail(report, new File(imageGen, "startup.log"), 32 * 1024, "ImageGen startup.log");
         appendLogTail(report, new File(imageGen, "bun-version.log"), 4 * 1024, "Bun version probe");
-        report.append("\n[Privacy] server.log is intentionally excluded because it may contain generated prompts or request data.\n");
+        appendFilteredLogTail(report, new File(imageGen, "install.log"), 8 * 1024,
+                "ImageGen dependency install.log", true);
+        appendFilteredLogTail(report, new File(imageGen, "server.log"), 8 * 1024,
+                "ImageGen server.log (filtered)", false);
+        report.append("\n[Privacy] server/install logs are limited to diagnostic lines; prompt, request/body, authorization, cookie and image payload lines are omitted.\n");
         return report.toString();
+    }
+
+    private static void appendFilteredLogTail(StringBuilder report, File file, int maxBytes,
+                                               String title, boolean installLog) {
+        report.append("\n[").append(title).append("]\n");
+        if (file == null || !file.isFile()) {
+            report.append("(not present)\n");
+            return;
+        }
+        try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
+            long length = input.length();
+            long offset = Math.max(0L, length - maxBytes);
+            int count = (int) Math.min(length - offset, maxBytes);
+            byte[] bytes = new byte[count];
+            input.seek(offset);
+            input.readFully(bytes);
+            String raw = new String(bytes, StandardCharsets.UTF_8);
+            StringBuilder selected = new StringBuilder();
+            String[] lines = raw.split("\\r?\\n");
+            int included = 0;
+            for (int i = Math.max(0, lines.length - 160); i < lines.length; i++) {
+                String line = lines[i];
+                if (line.isEmpty()) continue;
+                String lower = line.toLowerCase(java.util.Locale.ROOT);
+                // Never export lines that can carry generated prompts, request bodies or credentials.
+                if (lower.matches(".*(prompt|authorization|cookie|request[_ -]?body|response[_ -]?body|data:image|base64|bearer\\s|api[_-]?key|access[_-]?token).*")) {
+                    continue;
+                }
+                boolean diagnostic = lower.matches(".*(error|exception|fatal|panic|eaddrinuse|address already in use|cannot find|failed|failure|err_[a-z0-9_]+|warn|stack trace).*");
+                boolean installProgress = installLog && lower.matches(".*(bun install|resolved [0-9]+|installed [0-9]+|downloaded [0-9]+|saved lockfile|packages? installed|fetching|extracting|cache).*");
+                if (!diagnostic && !installProgress) continue;
+                String safe = redact(line);
+                if (selected.length() + safe.length() + 1 > maxBytes) break;
+                selected.append(safe).append('\n');
+                included++;
+            }
+            if (offset > 0) report.append("[older content truncated]\n");
+            if (included == 0) report.append("(no safe diagnostic lines found)\n");
+            else report.append(selected);
+            report.append("[filtered lines=").append(included).append("]\n");
+        } catch (Exception error) {
+            report.append("[read failed] ").append(redact(error.toString())).append('\n');
+        }
     }
 
     private static void appendLogTail(StringBuilder report, File file, int maxBytes, String title) {

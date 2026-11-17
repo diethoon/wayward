@@ -42,8 +42,14 @@ assert.match(main, /Intent\.ACTION_SEND/);
 assert.match(logger, /static String exportText\(Context context\)/);
 assert.match(logger, /startup\.log/);
 assert.match(logger, /bun-version\.log/);
-assert.doesNotMatch(logger, /new File\(imageGen, "server\.log"\)/,
-  "manual diagnostics must not include server logs that may contain prompts or request data");
+assert.match(logger, /new File\(imageGen, "server\.log"\)/,
+  "manual diagnostics must include a filtered tail of the runtime log");
+assert.match(logger, /appendFilteredLogTail/);
+assert.ok(logger.includes("request[_ -]?body"), "filtered export must exclude request-body lines");
+assert.match(logger, /data:image/);
+assert.match(logger, /new File\(imageGen, "install\.log"\)/);
+assert.match(service, /new File\(getFilesDir\(\), "imagegen\/install\.log"\)/);
+assert.match(service, /진단 로그 공유에서 설치 로그를 확인하세요/);
 assert.doesNotMatch(ingestApi, /authorized\(/);
 assert.match(ingestApi, /parseBody\(req\)/);
 assert.match(common, /MAX_IP_BATCHES_PER_MINUTE/);
