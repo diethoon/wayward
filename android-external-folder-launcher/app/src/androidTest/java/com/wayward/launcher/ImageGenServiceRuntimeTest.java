@@ -208,6 +208,19 @@ public final class ImageGenServiceRuntimeTest {
     private static final String FLUX_ENDPOINT = "https://wayward-image-worker.trpgengine.workers.dev";
     private static final String GAME_ORIGIN = "https://localhost:38123";
 
+    private static WebResourceResponse serveBundledWmlResource(
+            MainActivity activity, ZipModStore zipMods, String relative, String origin) throws Exception {
+        Class<?> safTreeClass = Class.forName(MainActivity.class.getName() + "$SafTree");
+        Class<?> handlerClass = Class.forName(MainActivity.class.getName() + "$FolderHandler");
+        java.lang.reflect.Constructor<?> constructor = handlerClass.getDeclaredConstructor(
+                safTreeClass, android.content.res.AssetManager.class, ZipModStore.class, String.class);
+        constructor.setAccessible(true);
+        Object handler = constructor.newInstance(null, activity.getAssets(), zipMods, origin);
+        Method serve = handlerClass.getDeclaredMethod("serveGamePath", String.class);
+        serve.setAccessible(true);
+        return (WebResourceResponse) serve.invoke(handler, relative);
+    }
+
     private static void runCloudflareGamePageSmoke(
             Instrumentation instrumentation, Context context, Activity activity) throws Exception {
         String resultSummary = "state=not_started";
@@ -217,6 +230,7 @@ public final class ImageGenServiceRuntimeTest {
         AtomicBoolean imageStudioScriptServed = new AtomicBoolean(false);
         AtomicBoolean imageSearchScriptServed = new AtomicBoolean(false);
         AtomicBoolean wmlCoreScriptServed = new AtomicBoolean(false);
+        AtomicBoolean wmlSymbolsScriptServed = new AtomicBoolean(false);
         AtomicBoolean wmlModsManifestServed = new AtomicBoolean(false);
         ConcurrentLinkedQueue<String> moduleRequests = new ConcurrentLinkedQueue<>();
         File artifactDirectory = new File(context.getFilesDir(), "ci-artifacts");
@@ -396,6 +410,19 @@ public final class ImageGenServiceRuntimeTest {
                                     pageError.set("WML runtime fixture " + wmlRelative + ": " + error.getMessage());
                                 }
                             }
+                            if ("wml/symbols/2026-11-01.js".equals(wmlRelative)) {
+                                try {
+                                    WebResourceResponse symbolTable = serveBundledWmlResource(
+                                            main, zipMods, wmlRelative, GAME_ORIGIN);
+                                    if (symbolTable != null && symbolTable.getStatusCode() == 200) {
+                                        wmlSymbolsScriptServed.set(true);
+                                        return symbolTable;
+                                    }
+                                    pageError.set("Bundled WML symbol table was not served: " + wmlRelative);
+                                } catch (Exception error) {
+                                    pageError.set("Bundled WML symbol table: " + error.getMessage());
+                                }
+                            }
                             if ("wml/runtime/wml-core.js".equals(wmlRelative)) {
                                 try {
                                     InputStream bootstrap = main.getAssets().open("wml-folder-bootstrap.js");
@@ -527,13 +554,16 @@ public final class ImageGenServiceRuntimeTest {
 
             long moduleLoadDeadline = System.currentTimeMillis() + 45_000L;
             while (System.currentTimeMillis() < moduleLoadDeadline
-                    && (!imageStudioScriptServed.get() || !imageSearchScriptServed.get())) {
+                    && (!imageStudioScriptServed.get() || !imageSearchScriptServed.get()
+                            || !wmlSymbolsScriptServed.get())) {
                 Thread.sleep(150L);
             }
             assertTrue("The real pinned WML core was not served with the launcher folder bootstrap. "
                     + "page=" + pageError.get(), wmlCoreScriptServed.get());
             assertTrue("The real pinned WML mods.js manifest was not served. page=" + pageError.get(),
                     wmlModsManifestServed.get());
+            assertTrue("The launcher did not serve the bundled 2026-11-01 WML symbol table. page="
+                    + pageError.get() + " requests=" + moduleRequests, wmlSymbolsScriptServed.get());
             assertTrue("The game WML loader did not request the real Image Studio module. "
                     + "served=" + imageStudioScriptServed.get() + " page=" + pageError.get()
                     + " requests=" + moduleRequests,
@@ -641,9 +671,18 @@ public final class ImageGenServiceRuntimeTest {
             assertTrue("WML did not complete a game boot before Image Studio was inspected: "
                             + wmlBridgeDiagnostics,
                     wmlState.optBoolean("booted", false));
+            assertEquals("The bundled 2026-11-01 semantic symbol table was not registered: "
+                            + wmlBridgeDiagnostics,
+                    "2026-11-01", wmlState.optString("symbolsGame", ""));
             assertTrue("WML did not load the pinned imagestudio module: " + wmlBridgeDiagnostics,
                     wmlState.optJSONArray("loaded") != null
                             && containsJsonString(wmlState.optJSONArray("loaded"), "imagestudio"));
+            assertTrue("WML did not load attention-image-prompt after registering the shared symbols: "
+                            + wmlBridgeDiagnostics,
+                    containsJsonString(wmlState.optJSONArray("loaded"), "attention-image-prompt"));
+            assertTrue("WML did not load image-search-customize after registering the shared symbols: "
+                            + wmlBridgeDiagnostics,
+                    containsJsonString(wmlState.optJSONArray("loaded"), "image-search-customize"));
             String observeSettingsButton = "(function(){"
                     + "var button=document.getElementById('wwis-generation-settings');"
                     + "if(!button)return 'missing';"
