@@ -71,6 +71,7 @@ public final class MainActivity extends Activity {
     private Button imageGenStartButton, imageGenRestartButton, imageGenStopButton;
     private String imageGenSessionMessage = "";
     private static volatile boolean imageGenCopying = false;
+    private long imageGenPreparationGeneration = 0L;
     private final Handler imageGenHandler = new Handler(Looper.getMainLooper());
     private final List<Runnable> imageGenReadyCallbacks = new ArrayList<>();
     private Runnable imageGenPollRunnable;
@@ -591,6 +592,7 @@ public final class MainActivity extends Activity {
             return;
         }
 
+        final long generation;
         synchronized (IMAGEGEN_LOCK) {
             shared = ImageGenStatusStore.read(getFilesDir());
             if (shared.isReady() || shared.isStarting()) {
@@ -608,6 +610,7 @@ public final class MainActivity extends Activity {
                 return;
             }
             imageGenCopying = true;
+            generation = ++imageGenPreparationGeneration;
         }
 
         imageGenSessionMessage = "현재 세션의 Image Studio 백엔드를 확인하고 런처 서버에 연결하는 중입니다…";
@@ -626,6 +629,7 @@ public final class MainActivity extends Activity {
             }
             final String failure = problem;
             runOnUiThread(() -> {
+                if (generation != imageGenPreparationGeneration) return;
                 imageGenCopying = false;
                 if (failure != null) {
                     imageGenSessionMessage = "Image Studio 백엔드 준비 실패: " + failure;
@@ -704,6 +708,22 @@ public final class MainActivity extends Activity {
     }
 
     private void startImageGenServerManually() {
+        ImageGenStatusStore.State current = ImageGenStatusStore.read(getFilesDir());
+        if (current.isStarting() || current.isReady() || imageGenCopying || imageGenHealthResponding) {
+            imageGenSessionMessage = current.isReady()
+                    ? "이미 이미지 생성 서버가 실행 중입니다. 재시작 또는 중지를 선택하세요."
+                    : "이미 이미지 생성 서버가 시작/헬스 응답을 기다리는 중입니다. 재시작 또는 중지를 선택하세요.";
+            Toast.makeText(this, imageGenSessionMessage, Toast.LENGTH_LONG).show();
+            DiagnosticsLogger.event(this,"INFO","imagegen","start_button_already_active",null);
+            refreshImageGenStatus();
+            return;
+        }
+        if ((current.ready || current.starting) && !current.isFresh()
+                && hasImageGenProject(imageGenBackendRoot())) {
+            restartImageGenServerManually();
+            return;
+        }
+        DiagnosticsLogger.event(this,"INFO","imagegen","start_button_tapped",null);
         if (profiles.isEmpty()) {
             imageGenSessionMessage = "먼저 게임 폴더를 등록해야 Image Studio 서버를 시작할 수 있습니다.";
             refreshImageGenStatus();
@@ -763,10 +783,12 @@ public final class MainActivity extends Activity {
     }
 
     private void restartImageGenServerManually() {
+        DiagnosticsLogger.event(this,"INFO","imagegen","restart_button_tapped",null);
         ImageGenStatusStore.State state = ImageGenStatusStore.read(getFilesDir());
-        if (state.isStarting()) {
-            Toast.makeText(this, "서버 시작이 끝난 뒤 재시작할 수 있습니다.", Toast.LENGTH_SHORT).show();
-            return;
+        if (imageGenCopying) {
+            imageGenPreparationGeneration++;
+            imageGenCopying = false;
+            finishImageGenCallbacks();
         }
         File backend = imageGenBackendRoot();
         if (!hasImageGenProject(backend)) {
@@ -780,7 +802,8 @@ public final class MainActivity extends Activity {
         try {
             if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
             else startService(intent);
-            imageGenSessionMessage = "이미지 생성 서버 재시작을 요청했습니다.";
+            imageGenSessionMessage = "이미지 생성 서버 재시작을 요청했습니다. 현재 서버 작업을 취소한 뒤 다시 시작합니다.";
+            Toast.makeText(this, imageGenSessionMessage, Toast.LENGTH_LONG).show();
             refreshImageGenStatus();
         } catch (Throwable error) {
             imageGenSessionMessage = "서버 재시작 요청 실패: " + msg(error);
@@ -789,14 +812,22 @@ public final class MainActivity extends Activity {
     }
 
     private void stopImageGenServer() {
-        DiagnosticsLogger.event(this,"INFO","imagegen","stop_requested",null);
+        DiagnosticsLogger.event(this,"INFO","imagegen","stop_button_tapped",null);
+        imageGenPreparationGeneration++;
+        imageGenCopying = false;
+        finishImageGenCallbacks();
         Intent intent = new Intent(this, ImageGenService.class).setAction(ImageGenService.ACTION_STOP);
         try {
             startService(intent);
-        } catch (Exception ignored) {
-            stopService(new Intent(this, ImageGenService.class));
+            imageGenSessionMessage = "이미지 생성 서버 중지 명령을 전달했습니다.";
+        } catch (Exception error) {
+            DiagnosticsLogger.error(this,"imagegen","stop_request_failed",error);
+            boolean stopped = stopService(new Intent(this, ImageGenService.class));
+            imageGenSessionMessage = stopped
+                    ? "이미지 생성 서비스 종료를 요청했습니다."
+                    : "중지 요청 전달 실패: " + msg(error);
         }
-        imageGenSessionMessage = "이미지 생성 서버 중지 요청을 보냈습니다.";
+        Toast.makeText(this, imageGenSessionMessage, Toast.LENGTH_LONG).show();
         refreshImageGenStatus();
     }
 
@@ -898,18 +929,11 @@ public final class MainActivity extends Activity {
         }
         imageGenStatus.setText(label);
 
-        boolean stale = (state.ready || state.starting) && !state.isFresh();
-        boolean active = state.isReady() || state.isStarting()
-                || imageGenCopying || imageGenHealthResponding;
-        boolean cachedBackend = hasImageGenProject(imageGenBackendRoot());
-        // If the shared heartbeat is stale but we have a cached backend, prefer Restart.
-        // Keep Start available when no cached backend exists so the user can select a session again.
-        if (imageGenStartButton != null) imageGenStartButton.setEnabled(!active && (!stale || !cachedBackend));
-        if (imageGenRestartButton != null) {
-            imageGenRestartButton.setEnabled(!starting && cachedBackend
-                    && (state.ready || state.starting || imageGenHealthResponding || stale));
-        }
-        if (imageGenStopButton != null) imageGenStopButton.setEnabled(active || stale);
+        // Keep every control tappable while starting or waiting for health.
+        // The handlers provide explicit feedback and the service serializes commands.
+        if (imageGenStartButton != null) imageGenStartButton.setEnabled(true);
+        if (imageGenRestartButton != null) imageGenRestartButton.setEnabled(true);
+        if (imageGenStopButton != null) imageGenStopButton.setEnabled(true);
     }
 
     private static void deleteFileTree(File file) {
