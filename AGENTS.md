@@ -32,3 +32,7 @@
 Before reporting completion, verify the final repository state, commit/result identifiers, actual test outcomes, and deliverable paths/links. State exactly what remains blocked and why.
 
 **NON-NEGOTIABLE:** Do not abandon, park, or hand routine workflow management to the user. Track every asynchronous step, inspect evidence, resolve what can be resolved, continue independent work, and deliver the most complete verified result possible.
+
+
+## Mandatory project-wide Gateway
+Before every task, read and follow [Workflow Gateway](docs/WORKFLOW_GATEWAY.md), [Execution Policy](docs/WORKFLOW_EXECUTION_POLICY.md), and [Forensic and Verification Policy](docs/FORENSIC_AND_VERIFICATION_POLICY.md). Do not send progress-only updates and wait; own routine execution, CI/log/artifact inspection, and independent verification through completion. Preserve all existing project-specific rules and ownership boundaries.
