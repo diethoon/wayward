@@ -1,4 +1,4 @@
-# Wayward CloudSave — Google Drive WML v0.7.0
+# Wayward CloudSave — Google Drive WML v0.7.1
 
 **상태:** 정적 인증 + 페이지 소유 Drive 브리지 최종 후보(실계정·실기기 검증 전)
 
@@ -10,11 +10,18 @@ Google Drive `appDataFolder`에 개인 세이브를 저장하는 WML 모드입�
 - Google OAuth: 기존 공개 Web Client ID + Google Identity Services Token Model
 - Drive API: 페이지의 `drive.js`가 `https://www.googleapis.com`으로 직접 요청합니다.
 - 게임↔페이지 통신: HTTPS 페이지 origin, 실제 팝업 WindowProxy, 192-bit nonce, 페이지가 생성한 session ID, 192-bit request ID, 메시지 버전, 허용된 command 및 데이터 schema를 확인하는 `postMessage` 프로토콜입니다.
-- `file://`의 origin `null`을 그대로 유지합니다. 페이지→게임 메시지에만 opaque origin 때문에 `targetOrigin='*'`를 사용하며, 게임 수신부는 인증 페이지의 정확한 HTTPS origin과 실제 팝업 창을 검사합니다. 임의 파일의 `null` origin만으로 신뢰하지 않습니다.
+- `file://` 직접 실행을 지원합니다. 브라우저별 opaque-origin 표기를 `null`로 정규화하고, 인증 페이지는 실제 opener 창과 일회성 nonce를 함께 검증합니다. 페이지→게임 메시지에만 opaque origin 때문에 `targetOrigin='*'`를 사용하며, 게임 수신부는 인증 페이지의 정확한 HTTPS origin과 실제 팝업 창을 검사합니다. 임의 파일의 `null` origin만으로 신뢰하지 않습니다.
 - `localhost`, `127.0.0.1`, `0.0.0.0`, 일반 HTTP, HTTPS는 각각 실제 `location.origin`을 사용합니다. 주소를 서로 별칭 처리하지 않습니다.
 - 액세스 토큰은 정적 HTTPS 페이지의 JavaScript 메모리 안에만 존재합니다. 게임 메모리·localStorage·sessionStorage·IndexedDB·URL·로그·postMessage 응답에 토큰을 기록하거나 전달하지 않습니다.
 - 인증 창이 닫히거나 게임 창이 사라지거나 세션 handshake timeout이 발생하면 세션을 닫고 pending 요청을 거부합니다. 토큰은 팝업 메모리에서 제거됩니다. 외부 브라우저로 분리되어 opener 연결이 사라진 경우 수동 토큰 복사 방식을 제공하지 않으며, 게임에서 새 팝업을 다시 시작해야 합니다.
 - 명시적 로그아웃은 이 페이지의 메모리 토큰만 지우고 Google 동의 자체는 철회하지 않습니다. 권한 철회는 GIS revoke 성공 응답이 확인된 경우에만 성공으로 표시합니다.
+
+## `file://` 직접 실행
+
+- 게임 HTML을 `file:///...` 주소로 직접 열어도 정적 HTTPS 인증 팝업을 사용할 수 있습니다.
+- 인증 페이지는 `origin=null`을 file URL로 판별하고, opener의 실제 WindowProxy와 nonce를 확인한 뒤 연결합니다.
+- opaque origin은 특정 targetOrigin으로 지정할 수 없으므로 인증 페이지에서 게임으로 보내는 응답에만 `targetOrigin='*'`를 사용합니다. 게임은 반대로 인증 페이지의 고정 HTTPS origin과 실제 팝업 창을 검사합니다.
+- 브라우저 또는 WebView가 사용자 클릭으로 연 팝업을 차단하면 해당 환경의 팝업 허용이 필요합니다. 이는 `file://` 인증 자체를 금지하는 조건이 아니라 브라우저 팝업 정책입니다.
 
 ## Google Token Model 정책
 
