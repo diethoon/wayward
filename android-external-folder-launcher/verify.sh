@@ -12,6 +12,7 @@ python3 -c "compile(open('scripts/embed_imagegen_backend.py', encoding='utf-8').
 test -s app/src/main/assets/imagegen-backend/launcher-bundle.json
 test -s app/src/main/assets/imagegen-backend/wayward-imagegen/src/cli.ts
 test -s app/src/main/assets/imagegen-backend/wayward-imagegen/src/nai/client.ts
+test -s app/src/main/java/com/wayward/launcher/ImageGenLocalProviderServer.java
 node --check app/src/main/assets/wml-folder-bootstrap.js
 node --check app/src/main/assets/imagegen-proxy.js
 node --check app/src/main/assets/image-provider-bridge.js
@@ -70,8 +71,13 @@ with zipfile.ZipFile(apk) as bundle:
     nai_path = root + "wayward-imagegen/src/nai/client.ts"
     cli_path = root + "wayward-imagegen/src/cli.ts"
     settings_path = root + "wayward-imagegen/src/routes/generationSettings.ts"
+    queue_path = root + "wayward-imagegen/src/batch/queue.ts"
+    runner_path = root + "wayward-imagegen/src/comfy/jobRunner.ts"
+    config_path = root + "wayward-imagegen/src/config.ts"
+    catalogue_path = root + "wayward-imagegen/src/routes/catalogue.ts"
     ui_path = root + "wayward-imagegen/ui/index.html"
-    for path in (manifest_path, package_path, nai_path, cli_path, settings_path, ui_path):
+    for path in (manifest_path, package_path, nai_path, cli_path, settings_path,
+                 queue_path, runner_path, config_path, catalogue_path, ui_path):
         assert path in names, "APK is missing embedded server file: " + path
     manifest = json.loads(bundle.read(manifest_path))
     package = json.loads(bundle.read(package_path))
@@ -81,11 +87,29 @@ with zipfile.ZipFile(apk) as bundle:
     assert manifest.get("sourceArchiveSha256") == "dfd25e050dd0b98ec1c99c09634bd92b509efac428788273f84884e713e2c553"
     assert "persist-discovered-character-filter" in manifest.get("launcherPatches", [])
     assert "redact-persisted-novelai-token" in manifest.get("launcherPatches", [])
+    for patch in (
+        "add-launcher-provider-config",
+        "load-launcher-provider-config",
+        "route-launcher-provider-through-serialized-nai-job-queue",
+        "serialize-launcher-provider-image-requests",
+        "add-guarded-loopback-provider-job-adapter",
+        "save-launcher-provider-image-through-normal-finalize-cache-path",
+        "probe-native-provider-adapter-for-imagegen-health",
+    ):
+        assert patch in manifest.get("launcherPatches", []), "APK is missing Image Studio native-provider patch: " + patch
     settings_source = bundle.read(settings_path).decode("utf-8")
+    queue_source = bundle.read(queue_path).decode("utf-8")
+    runner_source = bundle.read(runner_path).decode("utf-8")
+    config_source = bundle.read(config_path).decode("utf-8")
+    catalogue_source = bundle.read(catalogue_path).decode("utf-8")
     ui_source = bundle.read(ui_path).decode("utf-8")
     assert "discoveredCharacterDirs" in settings_source
     assert "const persistedSettings = { ...settings, naiToken: '' }" in settings_source
+    assert "config.imageProvider === 'launcher'" in runner_source
+    assert "launcherGenerate(config, args, job.promptId)" in runner_source
+    assert "launcherProviderToken" in config_source
+    assert "launcher-provider-v1" in catalogue_source
     assert "token missing" in ui_source
-print("APK embedded ImageGen assets verified.")
+print("APK embedded ImageGen and native-provider pipeline assets verified.")
 PY
 "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk

@@ -49,10 +49,16 @@ final class ImageProviderClient {
 
     static Result generate(ImageProviderStore.Provider provider, String prompt,
                            int width, int height) throws Exception {
-        return generate(provider, prompt, width, height, null, "");
+        return generate(provider, prompt, "", width, height, null, "");
     }
 
     static Result generate(ImageProviderStore.Provider provider, String prompt,
+                           int width, int height, Context diagnosticContext,
+                           String diagnosticRequestId) throws Exception {
+        return generate(provider, prompt, "", width, height, diagnosticContext, diagnosticRequestId);
+    }
+
+    static Result generate(ImageProviderStore.Provider provider, String prompt, String negativePrompt,
                            int width, int height, Context diagnosticContext,
                            String diagnosticRequestId) throws Exception {
         ImageProviderStore.validateProvider(provider);
@@ -67,6 +73,7 @@ final class ImageProviderClient {
         if ("cloudflare-worker".equals(provider.type)) {
             endpoint = provider.endpoint.trim();
             body.put("prompt", prompt);
+            if (negativePrompt != null && !negativePrompt.trim().isEmpty()) body.put("negativePrompt", negativePrompt.trim());
             if (provider.model != null && !provider.model.trim().isEmpty()) body.put("model", provider.model.trim());
         } else if ("openai-compatible".equals(provider.type)) {
             endpoint = openAiEndpoint(provider.endpoint);
@@ -75,6 +82,7 @@ final class ImageProviderClient {
             }
             body.put("model", provider.model.trim());
             body.put("prompt", prompt);
+            if (negativePrompt != null && !negativePrompt.trim().isEmpty()) body.put("negative_prompt", negativePrompt.trim());
             body.put("n", 1);
             body.put("size", size);
         } else if ("custom-json".equals(provider.type)) {
@@ -83,6 +91,7 @@ final class ImageProviderClient {
             if (template.isEmpty()) throw new IllegalArgumentException("사용자 지정 요청 JSON을 입력해 주세요.");
             String expanded = template
                     .replace("{{prompt}}", escapeJsonValue(prompt))
+                    .replace("{{negativePrompt}}", escapeJsonValue(negativePrompt == null ? "" : negativePrompt))
                     .replace("{{model}}", escapeJsonValue(provider.model == null ? "" : provider.model))
                     .replace("{{width}}", Integer.toString(safeWidth))
                     .replace("{{height}}", Integer.toString(safeHeight))

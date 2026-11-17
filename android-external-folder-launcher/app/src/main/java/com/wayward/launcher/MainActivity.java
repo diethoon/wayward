@@ -149,6 +149,7 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams imageTitleParams=new LinearLayout.LayoutParams(-1,-2);imageTitleParams.topMargin=dp(24);imageTitleParams.bottomMargin=dp(7);page.addView(imageTitle,imageTitleParams);
         TextView imageDesc=new TextView(this);imageDesc.setText("Wayward ImageGen 0.8.4 서버를 런처 APK에 내장했습니다. 게임 폴더나 ZIP에서 서버를 찾지 않으며, NovelAI와 PC ComfyUI를 같은 내장 서버로 실행합니다.");imageDesc.setTextColor(Color.rgb(174,194,181));imageDesc.setTextSize(12);imageDesc.setLineSpacing(dp(2),1f);page.addView(imageDesc);
         page.addView(button("이미지 서비스 관리 · 등록 / 테스트",true,()->startActivity(new Intent(MainActivity.this,ImageProviderActivity.class))),buttonParams());
+        page.addView(button("Image Studio 연결 · 런처 등록 서비스 사용",true,this::startLauncherProviderServer),buttonParams());
         page.addView(button("이미지 전달 진단 · 로그 보기",false,()->startActivity(new Intent(MainActivity.this,ImageDiagnosticsActivity.class))),buttonParams());
         TextView runtimeHint=new TextView(this);runtimeHint.setText("이미지 서버 자체는 인증정보 없이 먼저 실행됩니다. NovelAI 인증정보는 NovelAI 생성 경로에만 사용하며 Cloudflare FLUX는 별도 Worker 서비스의 자체 인증 설정만 사용합니다. ComfyUI 원격 연결도 독립 설정입니다. NovelAI 토큰을 서버 실행 후 변경했다면 새 토큰 적용을 위해 서버를 중지하고 다시 시작하세요.");runtimeHint.setTextColor(Color.rgb(174,194,181));runtimeHint.setTextSize(12);runtimeHint.setLineSpacing(dp(2),1f);LinearLayout.LayoutParams runtimeHintParams=new LinearLayout.LayoutParams(-1,-2);runtimeHintParams.topMargin=dp(10);page.addView(runtimeHint,runtimeHintParams);
         comfyUrlInput=new EditText(this);comfyUrlInput.setSingleLine(true);comfyUrlInput.setTextSize(14);comfyUrlInput.setTextColor(Color.WHITE);comfyUrlInput.setHintTextColor(Color.rgb(142,160,148));comfyUrlInput.setHint("http://PC의-LAN-IP:8188 또는 https://PC의-Tailscale-주소:8188");comfyUrlInput.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);comfyUrlInput.setPadding(dp(12),dp(9),dp(12),dp(9));comfyUrlInput.setText(getSharedPreferences(PREFS,MODE_PRIVATE).getString(KEY_COMFY_URL,""));LinearLayout.LayoutParams comfyInputParams=new LinearLayout.LayoutParams(-1,dp(52));comfyInputParams.topMargin=dp(8);comfyInputParams.bottomMargin=dp(7);page.addView(comfyUrlInput,comfyInputParams);
@@ -680,6 +681,9 @@ public final class MainActivity extends Activity {
             return;
         }
 
+        final String providerMode;
+        final String providerProfileId;
+        final String providerId;
         final String version;
         try {
             String detected = imageStudioModId(sessionTree);
@@ -689,11 +693,26 @@ public final class MainActivity extends Activity {
                 finishImageGenCallbacks();
                 return;
             }
-            // Start the local EasyGen/NovelAI-compatible server independently
-            // of credentials. The provider is configured after the panel opens.
-            version = "launcher-imagegen:" + ImageGenBackendInstaller.VERSION + ":novelai";
+            String selectedMode = "novelai";
+            String selectedProfile = "";
+            String selectedProvider = "";
+            if (activeProfileId != null && activeProfileId.matches("[a-f0-9]{32}")) {
+                ImageProviderStore.Snapshot providers = new ImageProviderStore(this).load();
+                String defaultId = providers.defaults.get(activeProfileId);
+                ImageProviderStore.Provider selected = ImageProviderStore.find(providers, defaultId);
+                if (selected != null && selected.enabled && selected.allowInGame) {
+                    selectedMode = "launcher";
+                    selectedProfile = activeProfileId;
+                    selectedProvider = selected.id;
+                }
+            }
+            providerMode = selectedMode;
+            providerProfileId = selectedProfile;
+            providerId = selectedProvider;
+            version = "launcher-imagegen:" + ImageGenBackendInstaller.VERSION + ":" + providerMode
+                    + ("launcher".equals(providerMode) ? ":" + providerProfileId + ":" + providerId : "");
         } catch (Exception e) {
-            imageGenSessionMessage = "현재 세션의 Image Studio 모드 검사 실패: " + msg(e);
+            imageGenSessionMessage = "현재 세션의 Image Studio / 이미지 서비스 확인 실패: " + msg(e);
             refreshImageGenStatus();
             finishImageGenCallbacks();
             return;
@@ -743,7 +762,7 @@ public final class MainActivity extends Activity {
                         throw new IllegalStateException("현재 런처 APK에 포함된 ImageGen 서버 자산을 찾지 못했습니다.");
                     }
                 }
-                writeImageGenRuntimeConfig(backend, "novelai", "");
+                writeImageGenRuntimeConfig(backend, providerMode, "", providerProfileId, providerId);
             } catch (Throwable error) {
                 problem = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
             }
@@ -756,7 +775,7 @@ public final class MainActivity extends Activity {
                     finishImageGenCallbacks();
                     return;
                 }
-                startImageGenService(backend, version, "novelai", "");
+                startImageGenService(backend, version, providerMode, "", providerProfileId, providerId);
                 waitForImageGenReady();
             });
         }, "wayward-imagegen-session-prepare").start();
@@ -764,8 +783,8 @@ public final class MainActivity extends Activity {
 
     private static boolean sameImageGenVersion(String running, String requested) {
         if(running==null||requested==null||running.isEmpty()||requested.isEmpty())return false;
-        // The engine mode is part of the version identity: NovelAI and ComfyUI
-        // share code but have different active provider configuration.
+        // The engine mode and, for native providers, profile provider ID are
+        // part of the identity so sessions cannot silently share another profile's service.
         return running.equals(requested);
     }
 
@@ -806,6 +825,27 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void startLauncherProviderServer(){
+        if(activeProfileId==null||!activeProfileId.matches("[a-f0-9]{32}")){
+            Toast.makeText(this,"게임 프로필을 먼저 열어 주세요.",Toast.LENGTH_LONG).show();
+            return;
+        }
+        try{
+            ImageProviderStore.Snapshot snapshot=new ImageProviderStore(this).load();
+            String providerId=snapshot.defaults.get(activeProfileId);
+            ImageProviderStore.Provider provider=ImageProviderStore.find(snapshot,providerId);
+            if(provider==null||!provider.enabled||!provider.allowInGame){
+                Toast.makeText(this,"이 게임 프로필의 기본 이미지 서비스를 지정하고 '게임에서 사용 허용'을 켜 주세요.",Toast.LENGTH_LONG).show();
+                return;
+            }
+            startOrSwitchManagedImageGenServer("launcher","");
+        }catch(Exception error){
+            imageGenSessionMessage="등록 이미지 서비스 확인 실패: "+msg(error);
+            refreshImageGenStatus();
+            Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void startNovelAiServer(){
         startOrSwitchManagedImageGenServer("novelai","");
     }
@@ -825,7 +865,7 @@ public final class MainActivity extends Activity {
         ImageGenStatusStore.State running=ImageGenStatusStore.read(getFilesDir());
         String storedEndpoint=getSharedPreferences(PREFS,MODE_PRIVATE).getString(KEY_COMFY_URL,"");
         boolean endpointChanged="comfy".equals(mode)&&!endpoint.equals(storedEndpoint==null?"":storedEndpoint);
-        boolean sameMode=running.backendVersion!=null&&running.backendVersion.endsWith(":"+mode);
+        boolean sameMode=!"launcher".equals(mode)&&running.backendVersion!=null&&running.backendVersion.endsWith(":"+mode);
         if(running.isStarting()){
             imageGenSessionMessage="이미 이미지 서버를 시작하고 있습니다. 준비가 끝난 뒤 다시 시도해 주세요.";
             refreshImageGenStatus();
@@ -903,7 +943,7 @@ public final class MainActivity extends Activity {
     }
 
     private void startManagedImageGenServer(String mode,String comfyUrl){
-        if (!"novelai".equals(mode) && !"comfy".equals(mode)) {
+        if (!"novelai".equals(mode) && !"comfy".equals(mode) && !"launcher".equals(mode)) {
             imageGenSessionMessage = "지원하지 않는 이미지 생성 서버 모드입니다.";
             refreshImageGenStatus();
             return;
@@ -929,7 +969,24 @@ public final class MainActivity extends Activity {
 
         final File backend=imageGenBackendRoot();
         final String requestedUrl=comfyUrl==null?"":comfyUrl.trim();
-        imageGenSessionMessage=("novelai".equals(mode)?"NovelAI":"ComfyUI 연결")+" 런처 내장 서버를 준비하고 있습니다…";
+        final String launcherProfileId="launcher".equals(mode)?activeProfileId:"";
+        final String launcherProviderId;
+        try{
+            if("launcher".equals(mode)){
+                if(launcherProfileId==null||!launcherProfileId.matches("[a-f0-9]{32}"))throw new IllegalStateException("현재 게임 프로필이 없습니다.");
+                ImageProviderStore.Snapshot providers=new ImageProviderStore(this).load();
+                launcherProviderId=providers.defaults.get(launcherProfileId);
+                ImageProviderStore.Provider selected=ImageProviderStore.find(providers,launcherProviderId);
+                if(selected==null||!selected.enabled||!selected.allowInGame)throw new IllegalStateException("기본 이미지 서비스가 없거나 게임 사용이 허용되지 않았습니다.");
+            }else launcherProviderId="";
+        }catch(Exception error){
+            manualImageGenPreparing=false;
+            imageGenSessionMessage="등록 이미지 서비스 확인 실패: "+msg(error);
+            refreshImageGenStatus();
+            Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
+            return;
+        }
+        imageGenSessionMessage=("novelai".equals(mode)?"NovelAI":"launcher".equals(mode)?"등록 이미지 서비스":"ComfyUI 연결")+" 런처 내장 서버를 준비하고 있습니다…";
         refreshImageGenStatus();
         new Thread(()->{
             String failure=null;
@@ -938,7 +995,7 @@ public final class MainActivity extends Activity {
                 // Server availability is independent of provider credentials.
                 // NovelAI credentials are supplied only to the NovelAI runtime;
                 // Cloudflare FLUX uses its own ImageProviderStore provider record.
-                writeImageGenRuntimeConfig(backend,mode,requestedUrl);
+                writeImageGenRuntimeConfig(backend,mode,requestedUrl,launcherProfileId,launcherProviderId);
             }catch(Throwable error){
                 failure=error.getMessage()==null?error.getClass().getSimpleName():error.getMessage();
             }
@@ -953,7 +1010,8 @@ public final class MainActivity extends Activity {
                     Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
                     return;
                 }
-                String launchVersion="launcher-imagegen:"+ImageGenBackendInstaller.VERSION+":"+mode;
+                String launchVersion="launcher-imagegen:"+ImageGenBackendInstaller.VERSION+":"+mode
+                        +("launcher".equals(mode)?":"+launcherProfileId+":"+launcherProviderId:"");
                 try {
                     ImageGenStatusStore.write(getFilesDir(),false,true,"런처 내장 ImageGen 서버 시작 중…",launchVersion);
                 } catch (Exception error) {
@@ -967,7 +1025,7 @@ public final class MainActivity extends Activity {
                     if(!state.isReady())imageGenSessionMessage=state.message;
                     refreshImageGenStatus();
                 });
-                startImageGenService(backend,launchVersion,mode,requestedUrl);
+                startImageGenService(backend,launchVersion,mode,requestedUrl,launcherProfileId,launcherProviderId);
                 manualImageGenPreparing=false;
                 refreshImageGenStatus();
                 waitForImageGenReady();
@@ -975,7 +1033,8 @@ public final class MainActivity extends Activity {
         },"wayward-imagegen-bundled-prepare").start();
     }
 
-    private void writeImageGenRuntimeConfig(File backend,String mode,String comfyUrl)throws Exception{
+    private void writeImageGenRuntimeConfig(File backend,String mode,String comfyUrl,
+                                             String launcherProfileId,String launcherProviderId)throws Exception{
         File project=new File(backend,"wayward-imagegen");
         if(!new File(project,"src/cli.ts").isFile())throw new IllegalStateException("내장 wayward-imagegen/src/cli.ts가 없습니다.");
         JSONObject config=new JSONObject();
@@ -984,7 +1043,12 @@ public final class MainActivity extends Activity {
         config.put("imagesDir",new File(getFilesDir(),"imagegen/images").getAbsolutePath());
         config.put("stateDir",new File(getFilesDir(),"imagegen/state").getAbsolutePath());
         config.put("comfyUrl",comfyUrl==null||comfyUrl.isEmpty()?"http://127.0.0.1:8188":comfyUrl);
-        config.put("imageProvider","novelai".equals(mode)?"nai":"sdxl");
+        config.put("imageProvider","launcher".equals(mode)?"launcher":"novelai".equals(mode)?"nai":"sdxl");
+        config.put("launcherProviderUrl","launcher".equals(mode)?"http://127.0.0.1:8190/generate":"");
+        config.put("launcherProfileId",launcherProfileId==null?"":launcherProfileId);
+        config.put("launcherProviderId",launcherProviderId==null?"":launcherProviderId);
+        config.put("launcherProviderSignature","launcher".equals(mode)?launcherProfileId+":"+launcherProviderId:"");
+        config.put("launcherProviderToken","");
         config.put("naiModel","nai-diffusion-4-5-full");
         // Android has no bundled sharp binary; PNG is the supported no-dependency path.
         config.put("webp",false);
@@ -993,6 +1057,7 @@ public final class MainActivity extends Activity {
         File state=new File(getFilesDir(),"imagegen/state");
         if(!images.isDirectory()&&!images.mkdirs()&&!images.isDirectory())throw new IllegalStateException("이미지 저장 폴더를 만들지 못했습니다.");
         if(!state.isDirectory()&&!state.mkdirs()&&!state.isDirectory())throw new IllegalStateException("이미지 상태 폴더를 만들지 못했습니다.");
+        synchronizeImageGenProviderSetting(state,mode);
         File output=new File(project,"wayward-imagegen.config.json");
         File temporary=new File(project,"wayward-imagegen.config.json.tmp");
         try(FileOutputStream stream=new FileOutputStream(temporary)){
@@ -1010,17 +1075,52 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void synchronizeImageGenProviderSetting(File stateDirectory,String mode)throws Exception{
+        File settingsFile=new File(stateDirectory,"anima-settings.json");
+        if(!settingsFile.isFile())return;
+        if(settingsFile.length()<=0||settingsFile.length()>2*1024*1024)throw new IllegalStateException("기존 Image Studio 설정 파일 크기가 올바르지 않습니다.");
+        byte[] bytes=java.nio.file.Files.readAllBytes(settingsFile.toPath());
+        org.json.JSONObject settings=new org.json.JSONObject(new String(bytes,StandardCharsets.UTF_8));
+        String provider="launcher".equals(mode)?"launcher":"novelai".equals(mode)?"nai":"sdxl";
+        settings.put("imageProvider",provider);
+        // Credentials are supplied by Android Keystore, never persisted here.
+        settings.put("naiToken","");
+        File temporary=new File(stateDirectory,"anima-settings.json.tmp");
+        try(FileOutputStream output=new FileOutputStream(temporary,false)){
+            output.write((settings.toString()+"\n").getBytes(StandardCharsets.UTF_8));
+            output.flush();
+            output.getFD().sync();
+        }
+        try{
+            java.nio.file.Files.move(temporary.toPath(),settingsFile.toPath(),
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }catch(java.nio.file.AtomicMoveNotSupportedException error){
+            java.nio.file.Files.move(temporary.toPath(),settingsFile.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }finally{
+            if(temporary.exists())temporary.delete();
+        }
+    }
+
     private void startImageGenService(File backend, String version) {
         startImageGenService(backend,version,"default","");
     }
 
     private void startImageGenService(File backend,String version,String launchMode,String comfyUrl){
+        startImageGenService(backend,version,launchMode,comfyUrl,"","");
+    }
+
+    private void startImageGenService(File backend,String version,String launchMode,String comfyUrl,
+                                      String launcherProfileId,String launcherProviderId){
         Intent intent = new Intent(this, ImageGenService.class);
         intent.setAction(ImageGenService.ACTION_START);
         intent.putExtra(ImageGenService.EXTRA_BACKEND_ROOT, backend.getAbsolutePath());
         intent.putExtra(ImageGenService.EXTRA_BACKEND_VERSION, version);
         intent.putExtra(ImageGenService.EXTRA_LAUNCH_MODE, launchMode);
         intent.putExtra(ImageGenService.EXTRA_COMFY_URL, comfyUrl==null?"":comfyUrl);
+        intent.putExtra(ImageGenService.EXTRA_LAUNCHER_PROFILE_ID, launcherProfileId==null?"":launcherProfileId);
+        intent.putExtra(ImageGenService.EXTRA_LAUNCHER_PROVIDER_ID, launcherProviderId==null?"":launcherProviderId);
         try {
             if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
             else startService(intent);

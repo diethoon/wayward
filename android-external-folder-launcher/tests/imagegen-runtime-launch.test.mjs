@@ -20,11 +20,15 @@ assert.match(main, /startNovelAiServer/);
 assert.match(main, /startOrSwitchManagedImageGenServer/);
 assert.match(main, /waitForImageGenStopThenStart/);
 assert.match(main, /ImageGenBackendInstaller\.install\(this,backend\)/);
-assert.match(main, /writeImageGenRuntimeConfig\(backend,mode,requestedUrl\)/);
+assert.match(main, /writeImageGenRuntimeConfig\(backend,mode,requestedUrl,launcherProfileId,launcherProviderId\)/);
 assert.match(main, /zipMods\.open\("wml\/mods\/imagestudio\/mod\.js"\)/,
   "auto-start must detect an Image Studio adapter installed as a WML ZIP mod");
-assert.match(main, /launcher-imagegen:" \+ ImageGenBackendInstaller\.VERSION \+ ":novelai"/,
-  "auto-start must launch the NovelAI-compatible EasyGen panel, not hardcode ComfyUI");
+assert.match(main, /String selectedMode = "novelai"/,
+  "auto-start retains NovelAI as a fallback when no launcher provider is configured");
+assert.match(main, /selectedMode = "launcher"/,
+  "auto-start selects the active profile's registered launcher provider when permitted");
+assert.match(main, /selected\.allowInGame/,
+  "auto-start respects the provider's in-game permission");
 assert.match(main, /PC 주소 미설정 · 연결 대기 중/);
 assert.match(main, /런처 내장 ImageGen /);
 
@@ -128,8 +132,8 @@ assert.match(endpoint, /100 && ip\[1\] >= 64 && ip\[1\] <= 127/,
 assert.match(endpoint, /endsWith\("\.ts\.net"\)/);
 assert.match(endpoint, /normalizeOptional/);
 
-assert.ok(instrumentation.includes('MainActivity.class.getDeclaredMethod("startNovelAiServer")'),
-  "instrumentation must invoke the same launcher action used by the NovelAI server Start button");
+assert.ok(instrumentation.includes('MainActivity.class.getDeclaredMethod("startLauncherProviderServer")'),
+  "instrumentation must invoke the launcher provider action used by the Image Studio pipeline smoke test");
 assert.ok(instrumentation.includes("import android.service.notification.StatusBarNotification;"),
   "notification inventory must use the Android framework StatusBarNotification class");
 assert.ok(instrumentation.includes("imagegen/bun-version.log"),
