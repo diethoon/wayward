@@ -7,15 +7,15 @@ android {
         applicationId 'com.wayward.launcher'
         minSdk 29
         targetSdk 35
-        versionCode 7
-        versionName '0.3.2'
+        versionCode 8
+        versionName '0.3.3'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
     buildTypes {
-        debug { applicationIdSuffix '.imagegen032'; versionNameSuffix '-imagegen-debug' }
+        debug { applicationIdSuffix '.imagegen033'; versionNameSuffix '-imagegen-debug' }
         release { minifyEnabled false }
     }
 }

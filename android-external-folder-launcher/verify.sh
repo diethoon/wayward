@@ -14,6 +14,7 @@ node tests/imagegen-proxy.test.mjs
 node tests/wml-folder-bootstrap.test.mjs
 node tests/web-file-chooser-contract.test.mjs
 node tests/imagegen-session-contract.test.mjs
+node tests/image-resource-performance.test.mjs
 node tests/diagnostics-contract.test.mjs
 node diagnostics-server/server.test.mjs
 node diagnostics-vercel/test.mjs
