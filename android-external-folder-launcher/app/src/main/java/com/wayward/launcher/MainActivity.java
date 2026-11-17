@@ -143,12 +143,13 @@ public final class MainActivity extends Activity {
         zipSummary=new TextView(this);zipSummary.setTextColor(Color.rgb(160,180,166));zipSummary.setTextSize(12);LinearLayout.LayoutParams zsl=new LinearLayout.LayoutParams(-1,-2);zsl.topMargin=dp(7);page.addView(zipSummary,zsl);
         zipModList=new LinearLayout(this);zipModList.setOrientation(LinearLayout.VERTICAL);LinearLayout.LayoutParams zpl=new LinearLayout.LayoutParams(-1,-2);zpl.topMargin=dp(6);page.addView(zipModList,zpl);
 
-        TextView imageTitle=new TextView(this);imageTitle.setText("이미지 생성 · Image Studio");imageTitle.setTextColor(Color.WHITE);imageTitle.setTextSize(16);imageTitle.setTypeface(null,1);
+        TextView imageTitle=new TextView(this);imageTitle.setText("이미지 생성 서비스");imageTitle.setTextColor(Color.WHITE);imageTitle.setTextSize(16);imageTitle.setTypeface(null,1);
         LinearLayout.LayoutParams imageTitleParams=new LinearLayout.LayoutParams(-1,-2);imageTitleParams.topMargin=dp(24);imageTitleParams.bottomMargin=dp(7);page.addView(imageTitle,imageTitleParams);
-        TextView imageDesc=new TextView(this);imageDesc.setText("각 게임 세션의 wml/mods 안에 설치된 Image Studio 모드를 자동 감지합니다. 백엔드는 런처 공통 서버로 실행되어 같은 버전의 여러 세션이 함께 사용할 수 있습니다.");imageDesc.setTextColor(Color.rgb(174,194,181));imageDesc.setTextSize(12);imageDesc.setLineSpacing(dp(2),1f);page.addView(imageDesc);
+        TextView imageDesc=new TextView(this);imageDesc.setText("Cloudflare FLUX, OpenAI 호환 API, 사용자 지정 REST 서비스를 등록하고 Wayward/Faith별 기본 생성 엔진을 선택합니다.");imageDesc.setTextColor(Color.rgb(174,194,181));imageDesc.setTextSize(12);imageDesc.setLineSpacing(dp(2),1f);page.addView(imageDesc);
+        page.addView(button("이미지 서비스 관리 · 등록 / 테스트",true,()->startActivity(new Intent(MainActivity.this,ImageProviderActivity.class))),buttonParams());
         imageGenStatus=new TextView(this);imageGenStatus.setTextColor(Color.rgb(245,210,130));imageGenStatus.setTextSize(12);imageGenStatus.setPadding(dp(10),dp(9),dp(10),dp(9));imageGenStatus.setBackgroundColor(Color.rgb(35,48,40));
         LinearLayout.LayoutParams imageStatusParams=new LinearLayout.LayoutParams(-1,-2);imageStatusParams.topMargin=dp(8);imageStatusParams.bottomMargin=dp(7);page.addView(imageGenStatus,imageStatusParams);
-        page.addView(button("이미지 생성 서버 중지",false,this::stopImageGenServer),buttonParams());
+        page.addView(button("Image Studio 로컬 서버 중지",false,this::stopImageGenServer),buttonParams());
 
         TextView help=new TextView(this);help.setText("ZIP 설치 위치: 이 앱의 비공개 files 저장소\n게임 폴더에는 ZIP이나 압축 해제 파일을 쓰지 않습니다. 설치한 모드는 등록된 게임 세션에서 공통으로 사용할 수 있으며, 모드 활성화/순서는 각 게임 세션의 브라우저 저장소에 따로 보관됩니다.");
         help.setTextColor(Color.rgb(151,171,158));help.setTextSize(12);help.setLineSpacing(dp(3),1f);LinearLayout.LayoutParams hl=new LinearLayout.LayoutParams(-1,-2);hl.topMargin=dp(18);page.addView(help,hl);
@@ -539,19 +540,23 @@ public final class MainActivity extends Activity {
             if (imageGenStatus != null) imageGenStatus.setText("이 Android System WebView는 이미지 서버 연결 스크립트를 지원하지 않습니다. WebView 업데이트가 필요합니다.");
             return;
         }
-        try (InputStream in = getAssets().open("imagegen-proxy.js")) {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            byte[] buffer = new byte[8192];
-            int count;
-            while ((count = in.read(buffer)) >= 0) {
-                if (count > 0) out.write(buffer, 0, count);
-                if (out.size() > 64 * 1024) throw new IllegalStateException("ImageGen 연결 스크립트가 너무 큽니다.");
+        try {
+            for (String assetName : new String[] {"imagegen-proxy.js", "image-provider-bridge.js"}) {
+                try (InputStream in = getAssets().open(assetName)) {
+                    ByteArrayOutputStream out = new ByteArrayOutputStream();
+                    byte[] buffer = new byte[8192];
+                    int count;
+                    while ((count = in.read(buffer)) >= 0) {
+                        if (count > 0) out.write(buffer, 0, count);
+                        if (out.size() > 64 * 1024) throw new IllegalStateException(assetName + " 파일이 너무 큽니다.");
+                    }
+                    String source = new String(out.toByteArray(), StandardCharsets.UTF_8);
+                    WebViewCompat.addDocumentStartJavaScript(
+                            web, source, Collections.singleton(origin));
+                }
             }
-            String source = new String(out.toByteArray(), StandardCharsets.UTF_8);
-            WebViewCompat.addDocumentStartJavaScript(
-                    web, source, Collections.singleton(origin));
         } catch (Exception e) {
-            if (imageGenStatus != null) imageGenStatus.setText("ImageGen 연결 스크립트를 준비하지 못했습니다: " + msg(e));
+            if (imageGenStatus != null) imageGenStatus.setText("이미지 생성 연결 스크립트를 준비하지 못했습니다: " + msg(e));
         }
     }
 
@@ -788,6 +793,12 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public String version(){return "0.3.2";}
         @JavascriptInterface public void imageGenProxyFetch(String requestId,String method,String path,String headersJson,String bodyBase64){
             ImageGenProxy.dispatch(web,requestId,method,path,headersJson,bodyBase64);
+        }
+        @JavascriptInterface public String listImageProviders(){
+            return ImageProviderBridge.list(MainActivity.this,activeProfileId);
+        }
+        @JavascriptInterface public void generateImageWithProvider(String requestId,String providerId,String prompt,int width,int height){
+            ImageProviderBridge.generate(MainActivity.this,web,activeProfileId,requestId,providerId,prompt,width,height);
         }
         @JavascriptInterface public String listModIds(){
             try{JSONObject r=new JSONObject();JSONArray a=new JSONArray();for(String id:allModIds())a.put(id);r.put("ok",true);r.put("ids",a);return r.toString();}
