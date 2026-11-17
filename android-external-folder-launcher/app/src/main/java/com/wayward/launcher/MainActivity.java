@@ -700,7 +700,7 @@ public final class MainActivity extends Activity {
         }
 
         ImageGenStatusStore.State shared = ImageGenStatusStore.read(getFilesDir());
-        if (shared.isReady() || shared.isStarting()) {
+        if (shared.isAvailable() || shared.isStarting()) {
             if (!sameImageGenVersion(shared.backendVersion, version)) {
                 imageGenSessionMessage = "현재 세션 Image Studio 버전(" + version + ")이 실행 중 서버 버전("
                         + safeVersion(shared.backendVersion) + ")과 달라 공유하지 않았습니다. 실행 중인 서버를 중지한 뒤 세션을 다시 열어 주세요.";
@@ -715,7 +715,7 @@ public final class MainActivity extends Activity {
 
         synchronized (IMAGEGEN_LOCK) {
             shared = ImageGenStatusStore.read(getFilesDir());
-            if (shared.isReady() || shared.isStarting()) {
+            if (shared.isAvailable() || shared.isStarting()) {
                 if (!sameImageGenVersion(shared.backendVersion, version)) {
                     imageGenSessionMessage = "다른 세션에서 다른 Image Studio 버전의 서버가 실행 중입니다. 현재 서버를 중지한 뒤 다시 시도해 주세요.";
                     refreshImageGenStatus();
@@ -779,7 +779,7 @@ public final class MainActivity extends Activity {
         imageGenPollRunnable = new Runnable() {
             @Override public void run() {
                 ImageGenStatusStore.State state = ImageGenStatusStore.read(getFilesDir());
-                boolean finished = state.isReady()
+                boolean finished = state.isReady() || state.isAvailable()
                         || (!state.isStarting() && !imageGenCopying)
                         || System.currentTimeMillis() >= deadline;
                 if (finished) {
@@ -831,8 +831,10 @@ public final class MainActivity extends Activity {
             refreshImageGenStatus();
             return;
         }
-        if(running.isReady()&&sameMode&&!endpointChanged){
-            imageGenSessionMessage="런처 내장 "+("comfy".equals(mode)?"ComfyUI 중계":"NovelAI")+" 서버가 이미 실행 중입니다.";
+        if(running.isAvailable()&&sameMode&&!endpointChanged){
+            imageGenSessionMessage=running.isReady()
+                    ? "런처 내장 "+("comfy".equals(mode)?"ComfyUI 중계":"NovelAI")+" 서버가 이미 실행 중입니다."
+                    : (running.message.isEmpty() ? "이미지 서버 응답은 확인됐지만 공급자 설정이 아직 준비되지 않았습니다." : running.message);
             refreshImageGenStatus();
             Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_SHORT).show();
             return;
@@ -840,7 +842,7 @@ public final class MainActivity extends Activity {
         if("comfy".equals(mode)){
             getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString(KEY_COMFY_URL,endpoint).apply();
         }
-        if(running.isReady()){
+        if(running.isAvailable()){
             imageGenSessionMessage="서버 설정 변경을 적용하기 위해 내장 이미지 서버를 재시작합니다…";
             refreshImageGenStatus();
             stopImageGenServer();
@@ -852,7 +854,7 @@ public final class MainActivity extends Activity {
 
     private void waitForImageGenStopThenStart(String mode,String endpoint,int attempt){
         ImageGenStatusStore.State state=ImageGenStatusStore.read(getFilesDir());
-        if(!state.isReady()&&!state.isStarting()){
+        if(!state.isAvailable()&&!state.isStarting()){
             startManagedImageGenServer(mode,endpoint);
             return;
         }
@@ -866,7 +868,7 @@ public final class MainActivity extends Activity {
 
     private void openImageGenPanel(){
         ImageGenStatusStore.State state=ImageGenStatusStore.read(getFilesDir());
-        if(!state.isReady()){
+        if(!state.isAvailable()){
             Toast.makeText(this,"먼저 NovelAI 또는 ComfyUI 연결 서버를 실행해 주세요.",Toast.LENGTH_LONG).show();
             return;
         }
@@ -883,8 +885,10 @@ public final class MainActivity extends Activity {
         }
         synchronized(IMAGEGEN_LOCK){
             ImageGenStatusStore.State running=ImageGenStatusStore.read(getFilesDir());
-            if(running.isReady()||running.isStarting()){
-                imageGenSessionMessage="이미 런처 내장 이미지 서버가 실행 중입니다. ComfyUI 주소를 바꾸려면 주소를 입력한 뒤 연결 버튼을 누르세요.";
+            if(running.isAvailable()||running.isStarting()){
+                imageGenSessionMessage=running.isReady()
+                        ? "이미 런처 내장 이미지 서버가 실행 중입니다. ComfyUI 주소를 바꾸려면 주소를 입력한 뒤 연결 버튼을 누르세요."
+                        : (running.message.isEmpty() ? "이미지 서버 응답은 확인됐지만 공급자 설정이 아직 준비되지 않았습니다." : running.message);
                 refreshImageGenStatus();
                 Toast.makeText(this,imageGenSessionMessage,Toast.LENGTH_LONG).show();
                 return;
@@ -1032,6 +1036,8 @@ public final class MainActivity extends Activity {
                 imageGenStatus.setText("런처 내장 ImageGen " + ImageGenBackendInstaller.VERSION + " 실행 중 · 127.0.0.1:8189");
             }
         }
+        else if (state.isAvailable()) imageGenStatus.setText(state.message.isEmpty()
+                ? "이미지 서버 응답 확인됨 · 공급자 설정을 확인해 주세요." : state.message);
         else if (state.isStarting()) imageGenStatus.setText(state.message.isEmpty() ? "이미지 생성 서버 시작 중…" : state.message);
         else if (imageGenCopying || manualImageGenPreparing) imageGenStatus.setText("이미지 생성 백엔드 준비 중…");
         else if (state.ready && !state.isFresh()) imageGenStatus.setText("이미지 생성 서비스 heartbeat가 끊겼습니다. 현재 세션을 다시 열면 서버를 재시작합니다.");

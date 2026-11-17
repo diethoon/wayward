@@ -31,6 +31,111 @@ jobs:
           git cat-file -e "${SOURCE_COMMIT}:mods.zip"
           git show "${SOURCE_COMMIT}:mods.zip" > "$RUNNER_TEMP/wayward-mods.zip"
           python3 android-external-folder-launcher/scripts/embed_imagegen_backend.py "$RUNNER_TEMP/wayward-mods.zip"
+      - name: Fetch and byte-scan pinned Wayward WML game page
+        shell: bash
+        run: |
+          set -euo pipefail
+          GAME_COMMIT="5e5c78c4e32198e460ba040256e920d37ed1711c"
+          GAME_PATH="Wayward_WML_ko.html"
+          EXPECTED_BLOB="8d998b50e82febe18b5c1d1159b16663b9169775"
+          EXPECTED_BYTES="4383674"
+          GAME_DIR="$RUNNER_TEMP/wayward-game-fixture"
+          TEST_ASSETS="$GITHUB_WORKSPACE/android-external-folder-launcher/app/src/androidTest/assets"
+          mkdir -p "$GAME_DIR" "$TEST_ASSETS"
+          GAME_HTML="$GAME_DIR/Wayward_WML_ko.html"
+          curl --fail --silent --show-error \
+            "https://raw.githubusercontent.com/diethoon/3.36/$GAME_COMMIT/$GAME_PATH" \
+            -o "$GAME_HTML"
+          python3 - "$GAME_HTML" "$GAME_DIR" "$EXPECTED_BLOB" "$EXPECTED_BYTES" "$GAME_COMMIT" "$GAME_PATH" <<'PY'
+          import hashlib
+          import json
+          import os
+          import sys
+
+          path, out_dir, expected_blob, expected_bytes, game_commit, game_path = sys.argv[1:]
+          size = os.path.getsize(path)
+          if size != int(expected_bytes):
+              raise SystemExit(f"Wayward WML HTML size mismatch: {size} != {expected_bytes}")
+
+          sha256 = hashlib.sha256()
+          git_blob = hashlib.sha1()
+          git_blob.update(f"blob {size}\0".encode("ascii"))
+          chunk_manifest = os.path.join(out_dir, "game-html-chunks.sha256.jsonl")
+          needles = [
+              b"waywardimageproviders",
+              b"imagestudio",
+              b"image studio",
+              b"generateimagewithprovider",
+              b"imagegen",
+              b"novelai",
+          ]
+          hits = {needle.decode("ascii"): [] for needle in needles}
+          overlap = b""
+          offset = 0
+          chunk_count = 0
+
+          with open(path, "rb") as source, open(chunk_manifest, "w", encoding="utf-8") as manifest:
+              while True:
+                  chunk = source.read(4096)
+                  if not chunk:
+                      break
+                  chunk_hash = hashlib.sha256(chunk).hexdigest()
+                  manifest.write(json.dumps({
+                      "offset": offset,
+                      "length": len(chunk),
+                      "sha256": chunk_hash
+                  }, separators=(",", ":")) + "\n")
+                  sha256.update(chunk)
+                  git_blob.update(chunk)
+                  scan = overlap + chunk
+                  scan_offset = offset - len(overlap)
+                  folded = scan.lower()
+                  for needle in needles:
+                      cursor = 0
+                      while True:
+                          found = folded.find(needle, cursor)
+                          if found < 0:
+                              break
+                          absolute = scan_offset + found
+                          if absolute >= 0 and (not hits[needle.decode("ascii")]
+                                                  or hits[needle.decode("ascii")][-1] != absolute):
+                              hits[needle.decode("ascii")].append(absolute)
+                          cursor = found + 1
+                  overlap = scan[-512:]
+                  offset += len(chunk)
+                  chunk_count += 1
+
+          actual_blob = git_blob.hexdigest()
+          if actual_blob != expected_blob:
+              raise SystemExit(f"Wayward WML Git blob SHA mismatch: {actual_blob} != {expected_blob}")
+
+          report = [
+              f"source_commit={game_commit}",
+              f"source_path={game_path}",
+              f"bytes={size}",
+              f"git_blob_sha1={actual_blob}",
+              f"sha256={sha256.hexdigest()}",
+              f"chunk_size=4096",
+              f"chunk_count={chunk_count}",
+          ]
+          with open(path, "rb") as source:
+              for needle, offsets in hits.items():
+                  report.append(f"search[{needle}]={len(offsets)}")
+                  for absolute in offsets[:20]:
+                      source.seek(max(0, absolute - 256))
+                      context = source.read(768)
+                      report.append(
+                          f"  offset={absolute} context={context.decode('utf-8', errors='replace')!r}"
+                      )
+
+          report_path = os.path.join(out_dir, "game-html-forensics.txt")
+          with open(report_path, "w", encoding="utf-8") as output:
+              output.write("\n".join(report) + "\n")
+          print("\n".join(report[:32]))
+          print(f"Chunk hashes: {chunk_manifest}")
+          PY
+          cp "$GAME_HTML" "$TEST_ASSETS/Wayward_WML_ko.html"
+          test "$(wc -c < "$TEST_ASSETS/Wayward_WML_ko.html" | tr -d ' ')" = "$EXPECTED_BYTES"
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: '1.4.0'
