@@ -10,9 +10,15 @@ contains("FolderHandler.isGameRequestPath(path)");
 contains("WebResourceResponse handle(String p){return serveGamePath(p);}");
 contains("folderHandler.serveGamePath(path.substring(6))");
 contains("web.loadUrl(gameUrl);");
-contains("// Prepare the Image Studio runtime before allowing its first request.");
-contains("pendingGameLoad = true;");
-assert.equal(source.includes("web.loadUrl(gameUrl);\n            ensureImageGenServer"), false);
+contains("// The game itself must never wait for ImageGen health readiness.");
+contains("imageGenHandler.post(() -> {");
+contains("ensureImageGenServer(sessionTree, null)");
+assert.equal(source.includes("pendingGameLoad"), false,
+  "game entry must not retain a startup readiness gate");
+const gameLoadIndex = source.indexOf("web.loadUrl(gameUrl);");
+const imageGenPrepareIndex = source.indexOf("imageGenHandler.post(() -> {", gameLoadIndex);
+assert.ok(gameLoadIndex >= 0 && imageGenPrepareIndex > gameLoadIndex,
+  "ImageGen preparation must be scheduled only after game navigation is issued");
 assert.equal(source.includes("WebSettings.LOAD_NO_CACHE"), false);
 contains('h.put("Cache-Control","private, max-age=86400")');
 contains("static boolean cacheableMedia(String path)");
