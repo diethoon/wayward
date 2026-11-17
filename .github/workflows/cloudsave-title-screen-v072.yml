@@ -1,0 +1,44 @@
+name: CloudSave v0.7.2 title-screen restore
+
+on:
+  push:
+    branches:
+      - feat/cloudsave-title-screen-restore-v072-20261114
+  pull_request:
+    branches:
+      - fix/cloudsave-file-origin-20261114
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check JavaScript syntax
+        run: |
+          node --check cloud-save/mod.js
+          node --check cloud-save/crypto.js
+          node --check scripts/inspect-cloudsave-title-menu.cjs
+      - name: Inspect pinned title-screen source DOM anchors
+        run: node scripts/inspect-cloudsave-title-menu.cjs
+      - name: Run CloudSave regression tests
+        run: node --test tests/cloudsave-file-origin.test.cjs tests/cloudsave-title-screen.test.cjs
+      - name: Check patch whitespace
+        run: git diff --check HEAD^1 HEAD
+      - name: Package CloudSave v0.7.2
+        run: |
+          mkdir -p dist
+          zip -r dist/Wayward_Google_Drive_CloudSave_v0.7.2.zip cloud-save
+          sha256sum dist/Wayward_Google_Drive_CloudSave_v0.7.2.zip | tee dist/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Wayward_Google_Drive_CloudSave_v0.7.2
+          path: dist/
+          if-no-files-found: error

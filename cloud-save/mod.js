@@ -7,7 +7,7 @@
 WML.define({
   id: 'cloud-save',
   name: '클라우드세이브 (Google Drive)',
-  version: '0.7.1',
+  version: '0.7.2',
   description: '정적 HTTPS 인증 페이지가 Google Drive를 직접 처리하고 게임은 암호화된 세이브 데이터만 주고받습니다.',
   symbols: {
     "pauseMenu": {
@@ -564,9 +564,21 @@ WML.define({
       await refreshSlots();
     }
 
+    function hasStartedGame() {
+      const state = api.store.game();
+      if (!state || typeof state !== 'object' || Array.isArray(state)) return false;
+      if (typeof api.store.get === 'function') {
+        try {
+          const current = api.store.get();
+          if (current && typeof current.started === 'boolean') return current.started === true;
+        } catch (_) { /* fall back to the game-state selector */ }
+      }
+      return true;
+    }
+
     function buildSnapshot() {
       const state = api.store.game();
-      if (!state || typeof state !== 'object' || Array.isArray(state)) {
+      if (!hasStartedGame() || !state || typeof state !== 'object' || Array.isArray(state)) {
         throw new Error('게임이 시작된 뒤에 저장할 수 있습니다.');
       }
       // Prefer the game's native serializer when WML resolves it. Some newer
@@ -637,7 +649,7 @@ WML.define({
       return Number.isFinite(day) && day > 0 ? 'Day ' + day : 'Wayward 세이브';
     }
 
-    function applySnapshot(snapshot) {
+    function restoredStateFromSnapshot(snapshot) {
       if (!snapshot || snapshot.schema !== 'wayward-cloud-save' || snapshot.version !== 1 ||
           snapshot.nativeFormat !== 1 || !snapshot.state ||
           typeof snapshot.state !== 'object' || Array.isArray(snapshot.state)) {
@@ -655,7 +667,11 @@ WML.define({
       }
       const savedMods = snapshot.state.mods && typeof snapshot.state.mods === 'object' &&
         !Array.isArray(snapshot.state.mods) ? snapshot.state.mods : {};
-      const restored = { ...snapshot.state, mods: { ...savedMods, ...modData } };
+      return { ...snapshot.state, mods: { ...savedMods, ...modData } };
+    }
+
+    function applySnapshot(snapshot) {
+      const restored = restoredStateFromSnapshot(snapshot);
       // Set both the saved game state and the game-start flag so title-screen loads
       // transition into the playable screen instead of remaining on the title screen.
       if (typeof api.store.set === 'function') api.store.set(current => ({ ...current, state: restored, started: true }));
@@ -804,6 +820,9 @@ WML.define({
         const passphrase = String(fields.passphrase && fields.passphrase.value || '');
         if (!passphrase) throw new Error('이전 세이브의 암호화 비밀번호를 입력해 주세요.');
         snapshot = await globalThis.WMLGoogleDriveCrypto.decryptSnapshot(envelope, passphrase);
+        // Validate before rewriting the legacy cloud envelope. Invalid data must not
+        // replace the existing Drive file when a restore cannot be applied.
+        restoredStateFromSnapshot(snapshot);
         await writeSlotEnvelope(slot, await globalThis.WMLGoogleDriveCrypto.encryptSnapshotEmbedded(snapshot));
       }
       applySnapshot(snapshot); if (win) win.close(); message = '';
@@ -885,12 +904,17 @@ WML.define({
 
     function renderSlots(root) {
       addTitle(root, 'Google Drive 저장 슬롯');
-
+      const canSave = hasStartedGame();
       const bySlot = new Map(driveSlots.map(file => [Number(file.name.match(/([0-9]+)\.json$/)[1]), file]));
       const used = new Set(bySlot.keys()); let nextSlot = 1; while (used.has(nextSlot)) nextSlot++;
-      const slots = Array.from(bySlot.keys()).sort((a,b) => a-b); if (!used.has(nextSlot)) slots.push(nextSlot);
+      const slots = Array.from(bySlot.keys()).sort((a,b) => a-b);
+      if (canSave && !used.has(nextSlot)) slots.push(nextSlot);
+      if (!slots.length) {
+        addText(root, 'Google Drive에 저장된 세이브가 없습니다.', 'wml-gd-small');
+        return;
+      }
       for (const slot of slots) {
-        const file = bySlot.get(slot), row = h('div', { class: 'wml-gd-slot' });
+        const file = currentFile(slot), row = h('div', { class: 'wml-gd-slot' });
         const head = h('div', { class: 'wml-gd-slot-head' }), line = h('div', { class: 'wml-gd-slot-line' });
         line.append(h('div', { class: 'wml-gd-slot-title' }, '저장 슬롯 ' + slot));
         if (file && file.memo) {
@@ -903,7 +927,9 @@ WML.define({
         if (file && file.summary) row.append(h('div', { class: 'wml-gd-summary', title: file.summary }, file.summary));
         else if (file && file.unreadable) row.append(h('div', { class: 'wml-gd-small' }, '세이브 정보를 읽을 수 없음 (이전 암호화 형식일 수 있음)'));
         const actions = h('div', { class: 'wml-gd-actions' });
-        actions.append(button(file ? '덮어쓰기' : '저장', () => show({ page: 'save', slot }), { primary: true }));
+        if (canSave) {
+          actions.append(button(file ? '덮어쓰기' : '저장', () => show({ page: 'save', slot }), { primary: true }));
+        }
         if (file) {
           actions.append(button('불러오기', () => runAction(() => prepareLoadSlot(slot))));
           actions.append(button('삭제', () => show({ page: 'delete', slot })));
@@ -1049,30 +1075,54 @@ WML.define({
     }
     function syncTitleCloudButton() {
       const marker = '[data-wml-cloud-drive-title-load="true"]';
-      const existing = document.querySelector(marker);
+      const existingButtons = Array.from(document.querySelectorAll(marker));
+      const existing = existingButtons.shift() || null;
+      for (const duplicate of existingButtons) duplicate.remove();
+
+      // New Game is the primary title-menu anchor. Local Load is only an optional
+      // placement hint and is never required for the CloudSave entry to appear.
       const newGame = findVisibleMenuControl(TITLE_NEW_GAME_LABELS);
-      const nativeLoad = findVisibleMenuControl(TITLE_LOAD_LABELS);
-      if (!newGame || !nativeLoad || !hasNearbyMenu(newGame, nativeLoad)) {
+      if (!newGame) {
         if (existing) existing.remove();
         return;
       }
-      if (existing && existing.isConnected && existing.parentElement === nativeLoad.parentElement) {
+      const nativeLoad = findVisibleMenuControl(TITLE_LOAD_LABELS);
+      const anchor = nativeLoad && hasNearbyMenu(newGame, nativeLoad) ? nativeLoad : newGame;
+      const label = '클라우드세이브 (Google Drive)';
+
+      if (existing && existing.isConnected) {
         if ('disabled' in existing) existing.disabled = false;
         existing.removeAttribute('disabled');
         existing.removeAttribute('aria-disabled');
+        existing.setAttribute('title', label);
+        existing.setAttribute('aria-label', label);
+        existing.setAttribute('role', 'button');
+        existing.setAttribute('aria-keyshortcuts', 'Enter Space');
+        if (existing.parentElement !== anchor.parentElement ||
+            existing.previousElementSibling !== anchor) {
+          anchor.insertAdjacentElement('afterend', existing);
+        }
+        if (existing.tagName === 'INPUT') {
+          if (existing.value !== label) existing.value = label;
+        } else if (existing.textContent !== label) existing.textContent = label;
         return;
       }
       if (existing) existing.remove();
-      const cloudLoad = nativeLoad.cloneNode(false);
+
+      // Copy presentation only from New Game. cloneNode(false) does not copy event listeners.
+      const cloudLoad = newGame.cloneNode(false);
       cloudLoad.removeAttribute('id');
+      cloudLoad.removeAttribute('href');
       cloudLoad.removeAttribute('disabled');
       cloudLoad.removeAttribute('aria-disabled');
+      if ('disabled' in cloudLoad) cloudLoad.disabled = false;
       cloudLoad.setAttribute('data-wml-cloud-drive-title-load', 'true');
       cloudLoad.setAttribute('data-wml-ui', 'true');
-      cloudLoad.setAttribute('title', '클라우드 불러오기');
-      cloudLoad.setAttribute('aria-label', '클라우드 불러오기');
-      cloudLoad.setAttribute('role', cloudLoad.getAttribute('role') || 'button');
-      if (cloudLoad.tagName === 'BUTTON') cloudLoad.type = 'button';
+      cloudLoad.setAttribute('title', label);
+      cloudLoad.setAttribute('aria-label', label);
+      cloudLoad.setAttribute('role', 'button');
+      cloudLoad.setAttribute('aria-keyshortcuts', 'Enter Space');
+      if (cloudLoad.tagName === 'BUTTON' || cloudLoad.tagName === 'INPUT') cloudLoad.type = 'button';
       else if (!cloudLoad.hasAttribute('tabindex')) cloudLoad.tabIndex = 0;
       for (const name of [...cloudLoad.classList]) {
         if (/disabled|cursor-not-allowed|pointer-events-none/i.test(name) ||
@@ -1081,27 +1131,32 @@ WML.define({
       cloudLoad.style.removeProperty('opacity');
       cloudLoad.style.removeProperty('pointer-events');
       cloudLoad.style.removeProperty('cursor');
-      cloudLoad.textContent = '클라우드 불러오기';
+      if (cloudLoad.tagName === 'INPUT') cloudLoad.value = label;
+      else cloudLoad.textContent = label;
       const activate = event => {
-        event.preventDefault();
-        event.stopPropagation();
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
         open();
       };
       cloudLoad.addEventListener('click', activate);
-      cloudLoad.addEventListener('keydown', event => {
-        if (event.key === 'Enter' || event.key === ' ') activate(event);
-      });
-      nativeLoad.insertAdjacentElement('afterend', cloudLoad);
+      if (cloudLoad.tagName !== 'BUTTON' && cloudLoad.tagName !== 'INPUT') {
+        cloudLoad.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') activate(event);
+        });
+      }
+      anchor.insertAdjacentElement('afterend', cloudLoad);
     }
     function treeHasTitleMenuLabel(node) {
-      if (!node || node.nodeType !== 1) return false;
+      if (!node) return false;
+      const element = node.nodeType === 1 ? node : node.parentElement;
+      if (!element) return false;
       const labels = TITLE_NEW_GAME_LABELS.concat(TITLE_LOAD_LABELS).map(label => label.toLocaleLowerCase());
-      if (node.matches && node.matches('[data-wml-cloud-drive-title-load="true"]')) return true;
-      if (labels.includes(normalizedMenuText(node))) return true;
+      if (element.matches && element.matches('[data-wml-cloud-drive-title-load="true"]')) return true;
+      if (labels.includes(normalizedMenuText(element))) return true;
       // Restrict descendant scans to interactive controls inside inserted fragments.
-      // Broad div/li/span scans on every mutation may stall mobile browsers.
-      if (node.querySelectorAll) {
-        for (const candidate of node.querySelectorAll('button,[role="button"],a,[tabindex],input[type="button"],input[type="submit"]')) {
+      // Observe text-node replacements too, without polling or per-render listeners.
+      if (element.querySelectorAll) {
+        for (const candidate of element.querySelectorAll('button,[role="button"],a,[tabindex],input[type="button"],input[type="submit"]')) {
           if (labels.includes(normalizedMenuText(candidate))) return true;
         }
       }
@@ -1123,11 +1178,12 @@ WML.define({
       const start = () => {
         if (!document.body || titleMenuObserver) return;
         titleMenuObserver = new MutationObserver(records => {
-          if (records.some(record => [...record.addedNodes, ...record.removedNodes].some(treeHasTitleMenuLabel))) {
+          if (records.some(record => treeHasTitleMenuLabel(record.target) ||
+              [...record.addedNodes, ...record.removedNodes].some(treeHasTitleMenuLabel))) {
             scheduleTitleSync();
           }
         });
-        titleMenuObserver.observe(document.body, { childList: true, subtree: true });
+        titleMenuObserver.observe(document.body, { childList: true, characterData: true, subtree: true });
         syncTitleCloudButton();
       };
       if (document.body) start();
