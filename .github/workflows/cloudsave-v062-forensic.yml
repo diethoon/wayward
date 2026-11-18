@@ -1,0 +1,49 @@
+name: CloudSave v0.6.2 forensic unpack
+on:
+  push:
+    branches:
+      - forensic/cloudsave-v062-unpack-20261119
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify and extract original package
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="Wayward_CloudSave_v0.6.2_INSTALL.zip"
+          test -s "$ZIP"
+          echo "ZIP_BYTES=$(wc -c < "$ZIP")"
+          echo "ZIP_SHA256=$(sha256sum "$ZIP" | cut -d' ' -f1)"
+          unzip -t "$ZIP"
+          mkdir -p forensic-output/unpacked
+          unzip -q "$ZIP" -d forensic-output/unpacked
+          find forensic-output/unpacked -type f -printf '%P\t%s bytes\n' | sort
+          node <<'NODE'
+          const fs=require('fs'),path=require('path'),crypto=require('crypto');
+          const root='forensic-output/unpacked';
+          const files=[];
+          function walk(d){for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,e.name);if(e.isDirectory())walk(p);else files.push(p)}}
+          walk(root);
+          const terms=['game connection','게임 연결','연결 확인','connection check','isGameConnected','gameConnected','WMLHost','cloudSave','CloudSave','save','load','session','bridge','timeout'];
+          const report={zip:{bytes:fs.statSync('Wayward_CloudSave_v0.6.2_INSTALL.zip').size,sha256:crypto.createHash('sha256').update(fs.readFileSync('Wayward_CloudSave_v0.6.2_INSTALL.zip')).digest('hex')},files:[]};
+          for(const file of files){
+            const fd=fs.openSync(file,'r'),buf=Buffer.alloc(4096),whole=crypto.createHash('sha256'),chunks=[],hits={};let offset=0,carry=Buffer.alloc(0);
+            for(const t of terms)hits[t]=[];
+            while(true){const n=fs.readSync(fd,buf,0,buf.length,null);if(!n)break;const c=Buffer.from(buf.subarray(0,n));whole.update(c);chunks.push({offset,length:n,sha256:crypto.createHash('sha256').update(c).digest('hex')});const scan=Buffer.concat([carry,c]),base=offset-carry.length;for(const t of terms){const q=Buffer.from(t);let i=-1;while((i=scan.indexOf(q,i+1))!==-1){const at=base+i;if(at>=offset-carry.length&&hits[t].length<50&&!hits[t].includes(at))hits[t].push(at)}}carry=scan.subarray(Math.max(0,scan.length-1024));offset+=n}
+            fs.closeSync(fd);report.files.push({path:file.slice(root.length+1),bytes:offset,sha256:whole.digest('hex'),chunks,terms:hits});
+          }
+          fs.writeFileSync('forensic-output/scan-report.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify({files:report.files.map(f=>({path:f.path,bytes:f.bytes,sha256:f.sha256,chunks:f.chunks.length}))},null,2));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cloudsave-v062-unpacked-forensic
+          path: forensic-output/
+          if-no-files-found: error
+          retention-days: 7
