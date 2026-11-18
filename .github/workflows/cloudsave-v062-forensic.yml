@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - forensic/cloudsave-v062-unpack-20261119
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 permissions:
   contents: read
