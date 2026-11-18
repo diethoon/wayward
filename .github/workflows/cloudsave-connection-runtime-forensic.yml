@@ -37,7 +37,7 @@ jobs:
                   start=i+1
           out={'path':str(target),'size':len(data),'sha256':hashlib.sha256(data).hexdigest(),'chunks':records,'matches':matches}
           Path('/tmp/wml-scan.json').write_text(json.dumps(out,ensure_ascii=False,indent=2))
-          z=zipfile.ZipFile(root/'Wayward_CloudSave_v0.6.2_INSTALL.zip')
+          import shutil\n          shutil.copy2(target, '/tmp/Wayward_WML_ko.html')\n          shutil.copy2(root/'Wayward_CloudSave_v0.6.2_INSTALL.zip', '/tmp/Wayward_CloudSave_v0.6.2_INSTALL.zip')\n          z=zipfile.ZipFile(root/'Wayward_CloudSave_v0.6.2_INSTALL.zip')
           z.extractall('/tmp/cloudsave')
           files=[]
           for p in Path('/tmp/cloudsave').rglob('*'):
@@ -53,4 +53,6 @@ jobs:
           path: |
             /tmp/wml-scan.json
             /tmp/cloudsave-files.json
+            /tmp/Wayward_WML_ko.html
+            /tmp/Wayward_CloudSave_v0.6.2_INSTALL.zip
           if-no-files-found: error
