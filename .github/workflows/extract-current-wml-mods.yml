@@ -26,38 +26,56 @@ jobs:
           test -s mods.zip
           test -s Wayward_WML_ko.html
           test -s Wayward_CloudSave_v0.6.2_INSTALL.zip
+          test -s "wayward 11.2.zip"
           python3 - <<'PY'
           from pathlib import Path
-          import hashlib, json, zipfile
+          import hashlib, json, os, zipfile
           root = Path(".")
+          out = Path("forensic-package")
+          out.mkdir(exist_ok=True)
           def digest(path):
               h = hashlib.sha256()
               with path.open("rb") as f:
                   for block in iter(lambda: f.read(1024 * 1024), b""):
                       h.update(block)
               return h.hexdigest()
-          p = root / "mods.zip"
-          with zipfile.ZipFile(p) as z:
+          archive = root / "wayward 11.2.zip"
+          with zipfile.ZipFile(archive) as z:
               entries = [{"path": x.filename, "size": x.file_size, "crc": f"{x.CRC:08x}"} for x in z.infolist()]
-              relevant = [x for x in entries if any(k in x["path"].lower() for k in ("wml-core", "wml/runtime", "cloud-save", "cloudsave", "mods.js", "manifest"))]
               bad = z.testzip()
-          report = {
-              "commit": __import__("os").environ.get("GITHUB_SHA"),
-              "mods_zip": {"path": str(p), "size": p.stat().st_size, "sha256": digest(p), "entries": len(entries), "testzip": bad, "relevant_entries": relevant},
-              "game_html": {"path": "Wayward_WML_ko.html", "size": (root/"Wayward_WML_ko.html").stat().st_size, "sha256": digest(root/"Wayward_WML_ko.html")},
-              "cloudsave_package": {"path": "Wayward_CloudSave_v0.6.2_INSTALL.zip", "size": (root/"Wayward_CloudSave_v0.6.2_INSTALL.zip").stat().st_size, "sha256": digest(root/"Wayward_CloudSave_v0.6.2_INSTALL.zip")}
+              core_candidates = [x for x in z.namelist() if x.lower().endswith("/wml/runtime/wml-core.js") or x.lower() == "wml/runtime/wml-core.js"]
+              if len(core_candidates) != 1:
+                  raise SystemExit(f"Expected exactly one WML core, found: {core_candidates}")
+              core_name = core_candidates[0]
+              core_bytes = z.read(core_name)
+          core_path = out / "wml/runtime/wml-core.js"
+          core_path.parent.mkdir(parents=True, exist_ok=True)
+          core_path.write_bytes(core_bytes)
+          chunks = []
+          for offset in range(0, len(core_bytes), 4096):
+              block = core_bytes[offset:offset+4096]
+              chunks.append({"offset": offset, "length": len(block), "sha256": hashlib.sha256(block).hexdigest()})
+          ledger = {
+              "source_commit": os.environ.get("GITHUB_SHA"),
+              "archive": {"path": str(archive), "size": archive.stat().st_size, "sha256": digest(archive), "entries": len(entries), "testzip": bad},
+              "runtime": {"archive_path": core_name, "extracted_path": str(core_path), "size": len(core_bytes), "sha256": hashlib.sha256(core_bytes).hexdigest(), "chunk_size": 4096, "chunks": chunks},
+              "archive_entries": entries
           }
-          Path("current-wml-package-inventory.json").write_text(json.dumps(report, ensure_ascii=False, indent=2))
-          print(json.dumps(report, ensure_ascii=False, indent=2))
+          (out / "wml-core-chunk-ledger.json").write_text(json.dumps(ledger, ensure_ascii=False, indent=2))
+          for name in ["mods.zip", "Wayward_WML_ko.html", "Wayward_CloudSave_v0.6.2_INSTALL.zip", "wayward 11.2.zip"]:
+              src = root / name
+              (out / name).write_bytes(src.read_bytes())
+          for name in ["mods.zip", "Wayward_WML_ko.html", "Wayward_CloudSave_v0.6.2_INSTALL.zip"]:
+              src = root / name
+              print(name, src.stat().st_size, digest(src))
+          print(json.dumps({k: ledger[k] for k in ["source_commit", "archive", "runtime"]}, ensure_ascii=False, indent=2))
           if bad is not None:
-              raise SystemExit(f"Corrupt mods.zip member: {bad}")
+              raise SystemExit(f"Corrupt runtime archive member: {bad}")
           PY
-          mkdir -p forensic-package
-          cp mods.zip Wayward_WML_ko.html Wayward_CloudSave_v0.6.2_INSTALL.zip current-wml-package-inventory.json forensic-package/
-      - name: Upload exact current package sources
+      - name: Upload exact current package and WML runtime source
         uses: actions/upload-artifact@v4
         with:
-          name: current-wml-package-sources
+          name: current-wml-package-and-runtime-source
           path: forensic-package/
           if-no-files-found: error
           retention-days: 30
